@@ -1,0 +1,31 @@
+{
+  "OrderSide": ["purchase", "sale"],
+  "OrderStatus": ["pending", "partial", "completed", "cancelled"],
+  "DeliveryType": ["period", "ready"],
+  "OrderCompletionType": ["delivered", "cash_settled", "carried_forward", "short_closed"],
+  "LiftStatus": ["pending", "delivered"],
+  "BalanceSettlementMethod": ["cash", "carried_forward"],
+  "CompanyType": ["seller", "buyer", "both"],
+  "BrokerageMode": ["percent", "perTon"],
+  "ContractStatus": ["draft", "pending", "confirmed", "active", "completed", "cancelled"],
+  "PaymentStatus": ["outstanding", "advance", "partial", "completed"],
+  "DeliveryStatus": ["upcoming", "in_transit", "delivered", "delayed"],
+  "ActivityType": [
+    "contract_created",
+    "payment_received",
+    "goods_dispatched",
+    "stock_allocated",
+    "inventory_sold",
+    "delivery_completed",
+    "lift_recorded",
+    "po_created",
+    "so_created",
+    "order_deleted",
+    "order_updated",
+    "order_deletion_scheduled",
+    "po_buy_back",
+    "balance_cash_settled",
+    "order_closed_carried",
+    "order_short_closed"
+  ]
+}

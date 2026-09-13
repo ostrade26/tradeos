@@ -1,0 +1,39 @@
+---
+description: Caption card UI — grey attached footer below a main card. Apply when user says "caption card".
+alwaysApply: true
+---
+
+# Caption card
+
+When the user asks for a **caption card**, use this composite layout: a primary white card body plus an optional grey caption strip attached below (one visual unit).
+
+## Structure
+
+```tsx
+<div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
+  {/* Main content — keep prominent */}
+  <div className="p-6">
+    {children}
+  </div>
+
+  {/* Caption — secondary info only; render when there is content to show */}
+  {caption && (
+    <div className="border-t border-gray-200 bg-gray-100/90 px-6 py-4 dark:border-gray-700 dark:bg-gray-800/50">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="text-sm font-semibold tabular-nums text-heading mt-1">{value}</p>
+      {detail && (
+        <p className="text-xs text-muted mt-1.5 leading-relaxed">{detail}</p>
+      )}
+    </div>
+  )}
+</div>
+```
+
+## Rules
+
+- Do **not** use a separate `Card` for the caption — attach it to the parent block.
+- Main fields stay in the white `p-6` section; hints, balances, and meta belong in the grey strip.
+- Caption typography: label (uppercase muted xs) → value (semibold sm heading) → detail (muted xs).
+- Use `tabular-nums` on numeric values.
+- Do not use loud borders, accent fills, or `AvailableQtyHint` for caption-card content.
+- Reference: seller remaining balance on PO entry (`OrderEntryPage` → Seller & Item block).

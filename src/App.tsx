@@ -1,0 +1,150 @@
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
+import { lazy, Suspense, type ReactNode } from 'react'
+import { TableSkeleton } from './components/ui/DataTable'
+import { ThemeProvider } from './hooks/useTheme'
+import { TableDensityProvider } from './hooks/useTableDensity'
+import { AuthProvider } from './hooks/useAuth'
+import { UserProvider } from './hooks/useUser'
+import { ToastProvider } from './hooks/useToast'
+import { TradeProvider } from './store/TradeStore'
+import { AppShell } from './components/layout/AppShell'
+import { RequireAuth } from './components/auth/RequireAuth'
+import { RequireEditOrders } from './components/auth/RequireEditOrders'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ContractsPage } from './pages/ContractsPage'
+import { CreateContractPage } from './pages/CreateContractPage'
+import { ContractDetailsPage } from './pages/ContractDetailsPage'
+import { InventoryPage } from './pages/InventoryPage'
+import { LotDetailsPage } from './pages/LotDetailsPage'
+import { SellInventoryPage } from './pages/SellInventoryPage'
+import { DirectoryPage } from './pages/DirectoryPage'
+import { ReportsDashboardPage } from './pages/ReportsDashboardPage'
+import { ReportViewPage } from './pages/ReportViewPage'
+import { AnalyticsPage } from './pages/AnalyticsPage'
+import { ActivityPage } from './pages/ActivityPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { SettingsPage } from './pages/SettingsPage'
+import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
+import { SalesOrdersPage } from './pages/SalesOrdersPage'
+import { LiftRegisterPage } from './pages/LiftRegisterPage'
+import { PartyPage } from './pages/PartyPage'
+import { OrderFlowPage, OrderTimelinePage } from './pages/OrderTimelinePage'
+
+const POEntryPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.POEntryPage })))
+const POEditPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.POEditPage })))
+const SOEntryPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.SOEntryPage })))
+const SOEditPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.SOEditPage })))
+const LiftEntryPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.LiftEntryPage })))
+const LiftEditPage = lazy(() => import('./pages/OrderEntryPage').then(m => ({ default: m.LiftEditPage })))
+
+function PageLoader() {
+  return (
+    <div className="animate-fade-in space-y-4">
+      <div className="skeleton h-8 w-48 rounded" />
+      <div className="skeleton h-4 w-72 rounded" />
+      <TableSkeleton rows={8} cols={6} />
+    </div>
+  )
+}
+
+function withSuspense(page: ReactNode) {
+  return <Suspense fallback={<PageLoader />}>{page}</Suspense>
+}
+
+function AppLayout() {
+  return (
+    <UserProvider>
+      <TradeProvider>
+        <AppShell />
+      </TradeProvider>
+    </UserProvider>
+  )
+}
+
+/** App-wide providers must live inside the router tree (createBrowserRouter). */
+function RootProviders() {
+  return (
+    <ThemeProvider>
+      <TableDensityProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <Outlet />
+          </ToastProvider>
+        </AuthProvider>
+      </TableDensityProvider>
+    </ThemeProvider>
+  )
+}
+
+const router = createBrowserRouter([
+  {
+    element: <RootProviders />,
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      {
+        element: <RequireAuth />,
+        children: [
+          {
+            element: <AppLayout />,
+            children: [
+              { index: true, element: <DashboardPage /> },
+
+          { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
+          { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },
+          { path: 'purchase-orders/register', element: <Navigate to="/purchase-orders?view=completed" replace /> },
+          { path: 'purchase-orders/new', element: withSuspense(<POEntryPage />) },
+          { path: 'purchase-orders/:ref/flow', element: <OrderFlowPage /> },
+          { path: 'purchase-orders/:ref/timeline', element: <OrderTimelinePage /> },
+          {
+            path: 'purchase-orders/:ref/edit',
+            element: withSuspense(<RequireEditOrders><POEditPage /></RequireEditOrders>),
+          },
+          { path: 'sales-orders', element: <SalesOrdersPage /> },
+          { path: 'sales-orders/pending', element: <Navigate to="/sales-orders" replace /> },
+          { path: 'sales-orders/register', element: <Navigate to="/sales-orders?view=completed" replace /> },
+          { path: 'sales-orders/new', element: withSuspense(<SOEntryPage />) },
+          { path: 'sales-orders/:ref/flow', element: <OrderFlowPage /> },
+          { path: 'sales-orders/:ref/timeline', element: <OrderTimelinePage /> },
+          {
+            path: 'sales-orders/:ref/edit',
+            element: withSuspense(<RequireEditOrders><SOEditPage /></RequireEditOrders>),
+          },
+          { path: 'lifts', element: <LiftRegisterPage /> },
+          { path: 'lifts/register', element: <Navigate to="/lifts?view=completed" replace /> },
+          { path: 'lifts/new', element: withSuspense(<LiftEntryPage />) },
+          { path: 'lifts/:liftRef/edit', element: withSuspense(<LiftEditPage />) },
+
+          { path: 'contracts', element: <ContractsPage /> },
+          { path: 'contracts/new', element: <CreateContractPage /> },
+          { path: 'contracts/:id', element: <ContractDetailsPage /> },
+          { path: 'inventory', element: <InventoryPage /> },
+          { path: 'inventory/:lotId/sell', element: <SellInventoryPage /> },
+          { path: 'inventory/:lotId', element: <LotDetailsPage /> },
+          { path: 'deliveries', element: <Navigate to="/lifts" replace /> },
+          { path: 'directory', element: <DirectoryPage /> },
+          { path: 'party', element: <PartyPage /> },
+          { path: 'brokers', element: <Navigate to="/directory?tab=brokers" replace /> },
+          { path: 'producers', element: <Navigate to="/directory?tab=parties" replace /> },
+          { path: 'retailers', element: <Navigate to="/directory?tab=parties" replace /> },
+          { path: 'payments', element: <Navigate to="/" replace /> },
+          { path: 'reports', element: <ReportsDashboardPage /> },
+          { path: 'reports/:reportId', element: <ReportViewPage /> },
+          { path: 'analytics', element: <AnalyticsPage /> },
+          { path: 'market-news', element: <Navigate to="/" replace /> },
+          { path: 'activity', element: <ActivityPage /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'settings', element: <SettingsPage /> },
+
+              { path: '*', element: <Navigate to="/" replace /> },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+])
+
+export default function App() {
+  return <RouterProvider router={router} />
+}

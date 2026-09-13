@@ -1,0 +1,510 @@
+import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { CheckCircle2, Plus, Scale, X } from 'lucide-react'
+import { PageHeader } from '../components/ui/CommandPalette'
+import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
+import { Button } from '../components/ui/Button'
+import { DataTable } from '../components/ui/DataTable'
+import { VerifiedPeriod } from '../components/ui/GroupedDataTable'
+import { Badge } from '../components/ui/Badge'
+import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDeliveredModal'
+import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
+import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
+import { formatDate, formatDeliveryPeriodRange, formatMt, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
+import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
+import { formatLiftRef } from '../lib/tradeRefs'
+import { exportToCSV } from '../lib/export'
+import { type Lift } from '../data/mockData'
+import { formatLiftPoRefs, formatLiftSoRefs, formatLiftOrderSummary, liftHasCrossPoAllocations } from '../lib/liftAllocations'
+import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
+import { formatLiftTankerSummary, getLiftTankers } from '../lib/liftTankers'
+import { getLiftBalanceQty } from '../lib/liftBalance'
+import {
+  applyLiftFilters,
+  emptyLiftFilters,
+  hasActiveLiftFilters,
+  liftFilterOptions,
+  type LiftFilterState,
+} from '../lib/liftFilters'
+import { useTradeStore } from '../store/TradeStore'
+import { useToast } from '../hooks/useToast'
+import { useLargeScreen } from '../hooks/useMediaQuery'
+import { loadOrderPanelDocked, saveOrderPanelDocked } from '../lib/orderPanelDock'
+import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../lib/registerSort'
+import { LiftRowActions } from '../components/registers/LiftRowActions'
+
+export type LiftListMode = 'pending' | 'completed'
+
+function parseMode(view: string | null): LiftListMode {
+  if (view === 'completed' || view === 'register') return 'completed'
+  return 'pending'
+}
+
+export function LiftRegisterPage() {
+  const store = useTradeStore()
+  const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const mode = parseMode(searchParams.get('view'))
+  const registerId = `lift-${mode}`
+  const [search, setSearch] = useState('')
+  const [filters, setFilters] = useState<LiftFilterState>(emptyLiftFilters)
+  const [sort, setSort] = useState(() => loadRegisterSort(registerId, 'liftRef'))
+  const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
+  const isLargeScreen = useLargeScreen()
+  const effectiveDocked = panelDocked && isLargeScreen
+  const [checkedLiftIds, setCheckedLiftIds] = useState<string[]>([])
+  const [bulkDeliverOpen, setBulkDeliverOpen] = useState(false)
+
+  const setMode = useCallback((next: LiftListMode) => {
+    if (next !== 'pending') setCheckedLiftIds([])
+    setSearchParams(prev => {
+      const current = parseMode(prev.get('view'))
+      if (current === next) return prev
+      const params = new URLSearchParams(prev)
+      params.delete('ref')
+      if (next === 'completed') params.set('view', 'completed')
+      else params.delete('view')
+      return params
+    }, { replace: true })
+  }, [setSearchParams])
+
+  const handleDockChange = useCallback((docked: boolean) => {
+    setPanelDocked(docked)
+    saveOrderPanelDocked(docked)
+  }, [])
+
+  const urlRef = searchParams.get('ref')
+  const urlQ = searchParams.get('q')
+  const urlParty = searchParams.get('party')
+
+  const selected = useMemo(() => {
+    if (!urlRef) return null
+    return store.lifts.find(l => String(l.liftRef) === urlRef || l.id === urlRef) ?? null
+  }, [urlRef, store.lifts])
+
+  const handleSelectLift = useCallback((lift: Lift) => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('ref', String(lift.liftRef))
+      const inCompleted = store.getLiftsDelivered().some(l => l.id === lift.id)
+      const inPending = store.getLiftsPending().some(l => l.id === lift.id)
+      if (inCompleted && !inPending) params.set('view', 'completed')
+      else if (inPending) params.delete('view')
+      return params
+    }, { replace: true })
+  }, [setSearchParams, store])
+
+  const handleCloseLift = useCallback(() => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.delete('ref')
+      return params
+    }, { replace: true })
+  }, [setSearchParams])
+
+  const handleSortChange = useCallback((key: string) => {
+    setSort(prev => {
+      const next = toggleSort(prev, key)
+      saveRegisterSort(registerId, next)
+      return next
+    })
+  }, [registerId])
+
+  useEffect(() => {
+    setSort(loadRegisterSort(registerId, 'liftRef'))
+  }, [registerId])
+
+  useEffect(() => {
+    if (urlQ) setSearch(urlQ)
+  }, [urlQ])
+
+  useEffect(() => {
+    if (!urlParty) return
+    setFilters(prev => ({ ...prev, parties: [urlParty] }))
+  }, [urlParty])
+
+  useEffect(() => {
+    if (!urlRef) return
+    const inPending = store.getLiftsPending().some(l => String(l.liftRef) === urlRef || l.id === urlRef)
+    const inCompleted = store.getLiftsDelivered().some(l => String(l.liftRef) === urlRef || l.id === urlRef)
+    const target: LiftListMode | null = inCompleted && !inPending
+      ? 'completed'
+      : inPending && !inCompleted
+        ? 'pending'
+        : null
+    if (!target) return
+    setSearchParams(prev => {
+      const current = parseMode(prev.get('view'))
+      if (current === target) return prev
+      const params = new URLSearchParams(prev)
+      if (target === 'completed') params.set('view', 'completed')
+      else params.delete('view')
+      return params
+    }, { replace: true })
+  }, [urlRef, setSearchParams, store])
+
+  const baseData = useMemo(() => {
+    if (mode === 'pending') return store.getLiftsPending()
+    return store.getLiftsDelivered()
+  }, [mode, store])
+
+  const { items, parties, brokers, spots } = useMemo(
+    () => liftFilterOptions(baseData, store.tradeOrders),
+    [baseData, store.tradeOrders],
+  )
+
+  const filtered = useMemo(() => {
+    const rows = applyLiftFilters(baseData, filters, search, store.tradeOrders)
+    const sorted = sortRows(rows, sort, (row, key) => {
+      switch (key) {
+        case 'liftRef': return row.liftRef
+        case 'date': return row.date
+        case 'itemName': return row.itemName
+        case 'buyerName': return row.buyerName
+        case 'sellerName': return row.sellerName
+        case 'liftedQty': return row.liftedQty
+        case 'rate': return row.rate
+        case 'balanceQtyMt': return getLiftBalanceQty(row)
+        default: return ''
+      }
+    })
+    return sorted
+  }, [baseData, filters, search, store.tradeOrders, sort])
+
+  const hasActiveFilters = hasActiveLiftFilters(filters, search)
+  const totalQty = filtered.reduce((s, l) => s + l.liftedQty, 0)
+  const pendingCount = store.getLiftsPending().length
+  const completedCount = store.getLiftsDelivered().length
+
+  const handleExport = () => {
+    exportToCSV(
+      filtered.map(l => ({
+        liftRef: l.liftRef,
+        status: l.status,
+        poRef: formatLiftPoRefs(l),
+        soRef: formatLiftSoRefs(l),
+        date: l.date,
+        deliveredAt: l.deliveredAt ?? '',
+        buyer: l.buyerName,
+        seller: l.sellerName,
+        item: l.itemName,
+        deliveryPeriod: formatDeliveryPeriodRange(l.deliveryPeriodStart, l.deliveryPeriodEnd),
+        rate: contractRateFromOrder(l.rate),
+        qty: l.liftedQty,
+        tankers: getLiftTankers(l).map(t => t.tankerNo).join('; '),
+        ...(mode === 'completed' ? { salesInvoiceNo: l.salesInvoiceNo ?? '' } : {}),
+      })),
+      [
+        { key: 'liftRef', header: 'Lift Ref#' },
+        { key: 'status', header: 'Status' },
+        { key: 'poRef', header: 'PO Ref#' },
+        { key: 'soRef', header: 'SO Ref#' },
+        { key: 'date', header: 'Created' },
+        { key: 'deliveredAt', header: 'Delivered' },
+        { key: 'buyer', header: 'Buyer Name' },
+        { key: 'seller', header: 'Seller Name' },
+        { key: 'item', header: 'Item Name' },
+        { key: 'deliveryPeriod', header: 'Delivery Period' },
+        { key: 'rate', header: RATE_COLUMN_HEADER },
+        { key: 'qty', header: mode === 'pending' ? 'Planned Qty' : 'Actual Qty' },
+        { key: 'tankers', header: 'Tanker No.' },
+        ...(mode === 'completed' ? [{ key: 'salesInvoiceNo' as const, header: 'Sales Invoice No.' }] : []),
+      ],
+      `lift-register-${mode}-${new Date().toISOString().slice(0, 10)}`,
+    )
+    toast.success(`Exported ${filtered.length} lifts`)
+  }
+
+  const handleClearFilters = () => {
+    setSearch('')
+    setFilters(emptyLiftFilters)
+  }
+
+  const checkedLifts = useMemo(
+    () => filtered.filter(l => checkedLiftIds.includes(l.id)),
+    [filtered, checkedLiftIds],
+  )
+
+  const toggleCheckedLift = useCallback((id: string) => {
+    setCheckedLiftIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  }, [])
+
+  const handleSelectAllVisible = useCallback((select: boolean, visibleIds: string[]) => {
+    setCheckedLiftIds(prev => (
+      select
+        ? [...new Set([...prev, ...visibleIds])]
+        : prev.filter(id => !visibleIds.includes(id))
+    ))
+  }, [])
+
+  const handleBulkDelivered = useCallback((delivered: Lift[]) => {
+    setCheckedLiftIds(prev => prev.filter(id => !delivered.some(l => l.id === id)))
+    if (store.getLiftsPending().length === 0) setMode('completed')
+  }, [setMode, store])
+
+  const tableSelectedRows = checkedLiftIds
+
+  const tableColumns = useMemo(() => [
+    {
+      key: 'liftRef',
+      header: 'Lift Ref#',
+      sortable: true,
+      sortValue: (r: Lift) => r.liftRef,
+      className: 'whitespace-nowrap min-w-[10.5rem]',
+      render: (r: Lift) => (
+        <div className="flex flex-nowrap items-center gap-1.5">
+          <span className={tableRefCellMutedClass}>{formatLiftRef(r.liftRef)}</span>
+          {isStockLift(r) && <Badge variant="info">{STOCK_LIFT_LABEL}</Badge>}
+          {r.isSelfLift && <Badge variant="info">Self Lift</Badge>}
+          {liftHasCrossPoAllocations(r, store.tradeOrders) && <Badge variant="warning">Cross lot</Badge>}
+        </div>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Created',
+      sortable: true,
+      sortValue: (r: Lift) => r.date,
+      className: 'whitespace-nowrap min-w-[6.5rem]',
+      render: (r: Lift) => <span className="tabular-nums">{formatDate(r.date)}</span>,
+    },
+    {
+      key: 'route',
+      header: 'PO → SO',
+      className: 'whitespace-nowrap min-w-[8rem]',
+      render: (r: Lift) => (
+        <span className={tableRefCellClass}>{formatLiftOrderSummary(r)}</span>
+      ),
+    },
+    {
+      key: 'itemName',
+      header: 'Item Name',
+      sortable: true,
+      sortValue: (r: Lift) => r.itemName,
+      className: 'min-w-[8rem]',
+      render: (r: Lift) => (
+        <span className="max-w-[12rem] truncate block font-medium text-heading">{r.itemName}</span>
+      ),
+    },
+    {
+      key: 'parties',
+      header: 'Seller → Buyer',
+      className: 'hidden lg:table-cell min-w-[12rem]',
+      render: (r: Lift) => (
+        <span className="max-w-[14rem] truncate block text-muted">{r.sellerName} → {r.buyerName}</span>
+      ),
+    },
+    {
+      key: 'deliveryPeriod',
+      header: 'Delivery Period',
+      className: 'hidden xl:table-cell whitespace-nowrap min-w-[9rem]',
+      render: (r: Lift) => (
+        <VerifiedPeriod
+          period={r.deliveryPeriod}
+          start={r.deliveryPeriodStart}
+          end={r.deliveryPeriodEnd}
+          verified={r.deliveryPeriodVerified}
+          display="label"
+        />
+      ),
+    },
+    {
+      key: 'rate',
+      header: RATE_COLUMN_HEADER,
+      sortable: true,
+      sortValue: (r: Lift) => r.rate,
+      className: 'text-right whitespace-nowrap min-w-[6.5rem]',
+      render: (r: Lift) => <span className="tabular-nums">{formatRateCell(r.rate)}</span>,
+    },
+    {
+      key: 'liftedQty',
+      header: mode === 'pending' ? 'Planned Qty' : 'Actual Qty',
+      sortable: true,
+      sortValue: (r: Lift) => r.liftedQty,
+      className: 'text-right whitespace-nowrap min-w-[6rem]',
+      render: (r: Lift) => <span className="tabular-nums font-medium">{formatMt(r.liftedQty)}</span>,
+    },
+    ...(mode === 'completed' ? [{
+      key: 'balanceQtyMt',
+      header: 'Balance',
+      sortable: true,
+      sortValue: (r: Lift) => getLiftBalanceQty(r),
+      className: 'text-right whitespace-nowrap min-w-[5.5rem]',
+      render: (r: Lift) => {
+        const balance = getLiftBalanceQty(r)
+        return balance > 0
+          ? <span className="tabular-nums font-medium text-amber-700 dark:text-amber-400">{formatMt(balance)}</span>
+          : <span className="text-gray-300">—</span>
+      },
+    }] : []),
+    {
+      key: 'tankers',
+      header: 'Tanker No.',
+      className: 'hidden xl:table-cell whitespace-nowrap min-w-[7rem]',
+      render: (r: Lift) => formatLiftTankerSummary(r),
+    },
+    ...(mode === 'completed' ? [{
+      key: 'salesInvoiceNo',
+      header: 'Sales Invoice No.',
+      className: 'hidden xl:table-cell whitespace-nowrap min-w-[8rem]',
+      render: (r: Lift) => <span className="font-mono">{r.salesInvoiceNo ?? '—'}</span>,
+    }] : []),
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-10',
+      render: (r: Lift) => <LiftRowActions lift={r} />,
+    },
+  ], [mode, store.tradeOrders])
+
+  return (
+    <>
+    <div className="animate-fade-in min-w-0">
+      <PageHeader
+        title="Lift Register"
+        subtitle={
+          mode === 'pending'
+            ? `${filtered.length} in transit · ${formatMt(totalQty)} planned`
+            : `${filtered.length} delivered · ${formatMt(totalQty)} actual`
+        }
+        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Lift Register' }]} />}
+        actions={
+          <Button to="/lifts/new" size="sm"><Plus className="h-4 w-4" /> Record Lift</Button>
+        }
+        hideActionsOnMobile
+      />
+      {mode === 'pending' && (
+        <p className="text-xs text-muted -mt-3 mb-4 leading-relaxed">
+          In transit = dispatched, not yet delivered. Qty still to book onto a lift is on the dashboard inbox as Ready to lift.
+        </p>
+      )}
+
+      <Tabs
+        className="mb-4"
+        tabs={[
+          { id: 'pending', label: 'In transit', count: pendingCount },
+          { id: 'completed', label: 'Completed', count: completedCount },
+        ]}
+        active={mode}
+        onChange={id => setMode(id as LiftListMode)}
+      />
+
+      <LiftFiltersBar
+        search={search}
+        onSearchChange={setSearch}
+        filters={filters}
+        onFiltersChange={setFilters}
+        items={items}
+        parties={parties}
+        brokers={brokers}
+        spots={spots}
+        onExport={handleExport}
+      />
+
+      {mode === 'pending' && checkedLiftIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-4 py-3">
+          <span className="text-sm font-medium text-heading tabular-nums">
+            {checkedLiftIds.length} selected
+          </span>
+          <Button size="sm" onClick={() => setBulkDeliverOpen(true)}>
+            <CheckCircle2 className="h-4 w-4" />
+            Mark as delivered
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCheckedLiftIds([])}
+            aria-label="Clear selection"
+          >
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+      )}
+
+      <DataTable
+        columns={tableColumns}
+        data={filtered}
+        qtyNote
+        selectedRows={tableSelectedRows}
+        activeRowId={selected?.id}
+        sortKey={sort.key}
+        sortDirection={sort.direction}
+        onSortChange={handleSortChange}
+        onRowClick={handleSelectLift}
+        onSelectRow={mode === 'pending' ? toggleCheckedLift : undefined}
+        onSelectAllVisible={mode === 'pending' ? handleSelectAllVisible : undefined}
+        getRowId={r => r.id}
+        stickyFirstColumn
+        emptyState={
+          <EmptyState
+            icon={<Scale className="h-10 w-10" />}
+            title={mode === 'pending' ? 'No lifts in transit' : 'No delivered lifts'}
+            description={
+              hasActiveFilters
+                ? 'Try adjusting your search or filters.'
+                : mode === 'pending'
+                  ? 'Record a lift when dispatched. Mark delivered once weight is confirmed.'
+                  : 'Delivered lifts appear after weight is confirmed.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button variant="outline" size="sm" onClick={handleClearFilters}>
+                  Clear filters
+                </Button>
+              ) : mode === 'pending' ? (
+                <Button to="/lifts/new" size="sm"><Plus className="h-4 w-4" /> Record Lift</Button>
+              ) : undefined
+            }
+          />
+        }
+        mobileRender={(r: Lift) => (
+          <div className="px-4 py-3 space-y-1">
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono font-medium">{formatLiftRef(r.liftRef)}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {liftHasCrossPoAllocations(r, store.tradeOrders) && <Badge variant="warning">Cross lot</Badge>}
+                  {r.isSelfLift && <Badge variant="info">Self</Badge>}
+                  <LiftRowActions lift={r} />
+                </div>
+              </div>
+              <p className="text-heading truncate">{r.itemName} · {formatMt(r.liftedQty)}</p>
+              <p className="text-muted truncate">{formatLiftOrderSummary(r)}</p>
+              <p className="text-muted truncate">{r.sellerName} → {r.buyerName}</p>
+            </div>
+          </div>
+        )}
+      />
+    </div>
+
+    {effectiveDocked && (
+      <LiftDetailDrawer
+        lift={selected}
+        open={!!selected}
+        docked
+        onClose={handleCloseLift}
+        onDockChange={handleDockChange}
+        onDelivered={() => setMode('completed')}
+      />
+    )}
+
+    {!effectiveDocked && (
+      <LiftDetailDrawer
+        lift={selected}
+        open={!!selected}
+        onClose={handleCloseLift}
+        onDockChange={handleDockChange}
+        onDelivered={() => setMode('completed')}
+      />
+    )}
+
+    <BulkMarkLiftsDeliveredModal
+      lifts={checkedLifts}
+      open={bulkDeliverOpen}
+      onClose={() => setBulkDeliverOpen(false)}
+      onDelivered={handleBulkDelivered}
+    />
+    </>
+  )
+}

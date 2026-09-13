@@ -1,0 +1,196 @@
+{
+  "exportedAt": "2026-03-13T10:00:00.000Z",
+  "version": 1,
+  "data": {
+    "tradeOrders": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "ref": "114",
+        "side": "purchase",
+        "date": "2026-08-01",
+        "partyName": "DVC Process Tech Pvt Ltd",
+        "partyCompanyId": "comp-seller-1",
+        "sellerCompanyId": "comp-seller-1",
+        "buyerCompanyId": "comp-trader-1",
+        "sellerName": "DVC Process Tech Pvt Ltd",
+        "buyerName": "Shri Kubera Traders",
+        "itemName": "Palm Oil",
+        "spot": "Kolhapur",
+        "deliveryType": "period",
+        "deliveryPeriodStart": "2026-08-05",
+        "deliveryPeriodEnd": "2026-08-15",
+        "deliveryPeriodVerified": false,
+        "rate": 14800,
+        "rateBasis": "PER 10 KG",
+        "ratePerBasis": 10,
+        "taxRate": 5,
+        "orderQty": 100,
+        "liftedQty": 50,
+        "committedLiftQty": 50,
+        "unit": "MT",
+        "brokerName": "SHREE GURUKRUPA BROKER'S",
+        "brokeragePct": 0,
+        "brokeragePerTon": 75,
+        "brokerContractRef": "713",
+        "paymentTerms": "15 days",
+        "unloading": "Buyer",
+        "remarks": "",
+        "status": "partial"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440002",
+        "ref": "81",
+        "side": "sale",
+        "poRef": "114",
+        "date": "2026-08-02",
+        "partyName": "Haldiram Foods International",
+        "partyCompanyId": "comp-buyer-1",
+        "sellerCompanyId": "comp-trader-1",
+        "buyerCompanyId": "comp-buyer-1",
+        "sellerName": "Shri Kubera Traders",
+        "buyerName": "Haldiram Foods International",
+        "itemName": "Palm Oil",
+        "spot": "Nagpur",
+        "deliveryType": "ready",
+        "deliveryPeriodStart": "2026-08-02",
+        "deliveryPeriodEnd": "2026-08-02",
+        "deliveryPeriodVerified": false,
+        "rate": 15200,
+        "rateBasis": "PER 10 KG",
+        "ratePerBasis": 10,
+        "taxRate": 5,
+        "orderQty": 50,
+        "liftedQty": 50,
+        "committedLiftQty": 50,
+        "unit": "MT",
+        "brokerName": "SHREE GURUKRUPA BROKER'S",
+        "brokeragePct": 0,
+        "brokeragePerTon": 70,
+        "paymentTerms": "Against delivery",
+        "status": "completed"
+      }
+    ],
+    "lifts": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440003",
+        "liftRef": 229,
+        "poRef": "114",
+        "soRef": "81",
+        "allocations": [
+          {
+            "poRef": "114",
+            "soRef": "81",
+            "qtyMt": 50
+          }
+        ],
+        "date": "2026-08-10",
+        "status": "delivered",
+        "deliveredAt": "2026-08-12",
+        "sellerName": "DVC Process Tech Pvt Ltd",
+        "buyerName": "Haldiram Foods International",
+        "itemName": "Palm Oil",
+        "deliveryPeriod": "Period",
+        "deliveryPeriodStart": "2026-08-05",
+        "deliveryPeriodEnd": "2026-08-15",
+        "deliveryPeriodVerified": false,
+        "rate": 15200,
+        "liftedQty": 50,
+        "plannedQtyMt": 50,
+        "tankerNo": "MH-12-AB-1234",
+        "tankers": [
+          {
+            "tankerNo": "MH-12-AB-1234",
+            "transportName": "ABC Logistics",
+            "driverMobile": "+919876543210",
+            "lrNo": "LR-9921",
+            "actualQtyMt": 50
+          }
+        ],
+        "salesInvoiceNo": "INV-2026-001",
+        "isSelfLift": true,
+        "stockLift": false,
+        "loadOnRisk": false,
+        "remarks": ""
+      }
+    ],
+    "companies": [
+      {
+        "id": "comp-trader-1",
+        "officialName": "Shri Kubera Traders",
+        "aliases": ["Kubera Traders"],
+        "types": ["both"],
+        "location": "Kolhapur"
+      },
+      {
+        "id": "comp-seller-1",
+        "officialName": "DVC Process Tech Pvt Ltd",
+        "aliases": [],
+        "types": ["seller"],
+        "location": "Navi Mumbai"
+      },
+      {
+        "id": "comp-buyer-1",
+        "officialName": "Haldiram Foods International",
+        "aliases": [],
+        "types": ["buyer"],
+        "location": "Nagpur"
+      }
+    ],
+    "brokers": [
+      {
+        "id": "seed-broker-1",
+        "name": "SHREE GURUKRUPA BROKER'S",
+        "email": "gurukrupa@broker.in",
+        "phone": "+91 98220 44102",
+        "contracts": 0,
+        "commissionEarned": 0,
+        "successRate": 91,
+        "network": 12,
+        "purchaseBrokerage": {
+          "mode": "perTon",
+          "value": 75
+        },
+        "saleBrokerage": {
+          "mode": "perTon",
+          "value": 70
+        }
+      }
+    ],
+    "producers": [
+      {
+        "id": "seed-producer-1",
+        "name": "DVC Process Tech Pvt Ltd",
+        "location": "Navi Mumbai",
+        "products": ["Palm Oil", "RBD Palmolein"],
+        "contracts": 0,
+        "avgRate": 0,
+        "rating": 4.5
+      }
+    ],
+    "retailers": [
+      {
+        "id": "seed-retailer-1",
+        "name": "Haldiram Foods International",
+        "location": "Nagpur",
+        "totalPurchases": 0,
+        "outstanding": 0,
+        "products": ["Palm Oil"],
+        "lastOrder": "2026-08-02"
+      }
+    ],
+    "balanceSettlements": [],
+    "contracts": [],
+    "lots": [],
+    "payments": [],
+    "deliveries": [],
+    "activities": [],
+    "spots": ["Kolhapur", "Mumbai", "Nagpur"],
+    "items": ["Palm Oil", "Soybean Oil", "Coconut Oil"],
+    "counters": {
+      "po": 114,
+      "so": 81,
+      "lift": 229,
+      "invoice": 1
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "exportedAt": "2026-01-01T00:00:00.000Z",
+  "version": 1,
+  "data": {
+    "tradeOrders": [],
+    "lifts": [],
+    "contracts": [],
+    "lots": [],
+    "payments": [],
+    "deliveries": [],
+    "brokers": [],
+    "producers": [],
+    "retailers": [],
+    "companies": [],
+    "activities": [],
+    "balanceSettlements": [],
+    "spots": [],
+    "items": [],
+    "counters": {
+      "po": 0,
+      "so": 0,
+      "lift": 0,
+      "invoice": 0
+    }
+  }
+}
