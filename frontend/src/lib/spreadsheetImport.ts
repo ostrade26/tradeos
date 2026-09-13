@@ -52,7 +52,8 @@ export function parseNumber(value: unknown): number | undefined {
 function spreadsheetRateFields(row: Record<string, unknown>, base?: TradeOrder) {
   const raw = row.Rate
   const hasRate = raw != null && String(raw).trim() !== ''
-  const per10 = hasRate ? parseIndianAmount(raw) : (base?.ratePerBasis ?? 0)
+  const rateValue = typeof raw === 'number' || typeof raw === 'string' ? raw : String(raw ?? '')
+  const per10 = hasRate ? parseIndianAmount(rateValue) : (base?.ratePerBasis ?? 0)
   if (per10 > 0) {
     return {
       rate: importRateFromSpreadsheet(raw),

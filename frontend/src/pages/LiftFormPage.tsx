@@ -290,8 +290,8 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
       stockLift: isStockLift(editingLift) && loaded[0]
         ? { poRef: loaded[0].poRef, qty: String(loaded[0].qtyMt) }
         : { poRef: urlPoRef, qty: urlQty },
-      allocations: loaded.map((a, i) => ({
-        soRef: a.soRef,
+      allocations: loaded.map((a, i) => newAllocationDraft({
+        soRef: a.soRef ?? '',
         poRef: a.poRef,
         qty: String(i === 0 && balance > 0 ? Math.max(0, a.qtyMt - balance) : a.qtyMt),
       })),

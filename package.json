@@ -1,52 +1,19 @@
 {
   "name": "tradeos",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
-    "dev:all": "bash scripts/dev-all.sh",
-    "dev:marketing": "vite --config marketing/vite.config.ts",
-    "verify:local": "bash scripts/verify-local.sh",
-    "build": "tsc -b && vite build",
-    "build:marketing": "tsc -b marketing/tsconfig.json && vite build --config marketing/vite.config.ts",
-    "lint": "oxlint",
-    "preview": "vite preview",
-    "preview:marketing": "vite preview --config marketing/vite.config.ts --port 5174"
+    "dev": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev:backend --prefix frontend",
+    "dev:all": "npm run dev:all --prefix frontend",
+    "dev:marketing": "npm run dev:marketing --prefix frontend",
+    "verify:local": "npm run verify:local --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "build:marketing": "npm run build:marketing --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "preview:marketing": "npm run preview:marketing --prefix frontend"
   },
-  "dependencies": {
-    "clsx": "^2.1.1",
-    "date-fns": "^4.4.0",
-    "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
-    "lucide-react": "^1.28.0",
-    "pdfjs-dist": "^6.2.108",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2",
-    "recharts": "^3.10.1",
-    "tesseract.js": "^7.0.0",
-    "xlsx": "^0.18.5"
-  },
-  "browserslist": [
-    "last 2 Chrome versions",
-    "last 2 Firefox versions",
-    "last 2 Safari versions",
-    "last 2 Edge versions",
-    "iOS >= 15",
-    "not dead",
-    "not ie 11"
-  ],
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "oxlint": "^1.75.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "~6.0.2",
-    "vite": "^8.2.0"
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

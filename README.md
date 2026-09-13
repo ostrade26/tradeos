@@ -2,18 +2,25 @@
 
 Trading operations app with a **React** frontend and **Python (FastAPI)** backend.
 
+```
+tradeos/
+  frontend/    React + Vite + TypeScript (app + marketing site) — deploy on Vercel
+  backend/     FastAPI — deploy on Railway (Postgres in production, SQLite locally)
+```
+
 ## Architecture
 
-- **Frontend** — React + Vite + TypeScript (`src/`)
-- **Backend** — FastAPI + SQLite JSON store (`backend/app/`)
+- **Frontend** — React + Vite + TypeScript (`frontend/src/`)
+- **Backend** — FastAPI (`backend/app/`)
 - **API** — REST under `/api/v1/`; Vite dev server proxies `/api` → `http://127.0.0.1:8000`
+- **Data** — SQLite at `backend/data/trade.db` locally; Railway Postgres when `DATABASE_URL` is set
 
 Business logic (orders, lifts, allocations, directory CRUD) lives in the Python `TradeService`. The React `TradeStore` is a thin client that loads state from the API and applies mutations via REST.
 
 ## Prerequisites
 
-- Node.js 20+
-- Python 3.11+
+- Node.js 20.19+ or 22+ (Vite 8)
+- Python 3.9+ locally (3.12 on Railway)
 
 ## Backend setup
 
@@ -22,10 +29,10 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+./run.sh
 ```
 
-Or from the repo root:
+Or from the repo root / `frontend/`:
 
 ```bash
 npm run dev:backend
@@ -36,7 +43,13 @@ Data is stored in `backend/data/trade.db`. On first load, if the database is emp
 ## Frontend setup
 
 ```bash
+cd frontend
 npm install
+```
+
+Then from the repo root or `frontend/`:
+
+```bash
 npm run dev
 ```
 
@@ -44,7 +57,7 @@ Open [http://localhost:5173](http://localhost:5173). Ensure the backend is runni
 
 ## Marketing website
 
-Public landing page (hero, product story, demo request) lives in `marketing/` and shares the root React + Tailwind dependencies.
+Public landing page (hero, product story, demo request) lives in `frontend/marketing/` and shares the React + Tailwind dependencies in `frontend/`.
 
 ```bash
 npm run dev:backend    # API on :8000 — needed for the demo form
@@ -57,7 +70,7 @@ Open [http://localhost:5174](http://localhost:5174). Demo requests are stored in
 npm run build:marketing
 ```
 
-**API docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)  
+**API docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
 Also available: [ReDoc](http://localhost:8000/redoc) · [OpenAPI JSON](http://localhost:8000/openapi.json) · shortcut [http://localhost:8000/swagger](http://localhost:8000/swagger)
 
 Optional: set `VITE_API_URL` if the API is hosted elsewhere (defaults to `/api/v1`).
@@ -76,6 +89,8 @@ Or in separate terminals:
 npm run dev:backend   # terminal 1 — API on :8000
 npm run dev           # terminal 2 — UI on :5173
 ```
+
+These scripts also work from `frontend/` (`cd frontend && npm run dev:all`).
 
 **Verify both are running and all API routes are reachable:**
 
@@ -109,10 +124,63 @@ Cross-platform notes:
 npm run build
 ```
 
+## Deploy
+
+```
+Browser  →  Vercel (React)  →  Railway (FastAPI)  →  Postgres
+              frontend/         backend/             Railway plugin
+```
+
+**Database:** SQLite locally (`backend/data/trade.db`). **Postgres on Railway** — Railway’s disk is ephemeral, so SQLite would lose every PO/SO on deploy. Do not run production on SQLite.
+
+The browser calls the Railway API using `VITE_API_URL` (baked in at Vercel **build** time).
+
+### 1. Railway — API + Postgres
+
+1. Create a [Railway](https://railway.app) project and add a **GitHub** service from this repo.
+2. Set the service **Root Directory** to `backend`.
+3. Add a **PostgreSQL** plugin to the same project.
+4. On the API service, set variables:
+
+   | Name | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference the Postgres plugin) |
+   | `CORS_ORIGINS` | `https://your-app.vercel.app` (add a custom domain later if you use one) |
+   | `TRADEOS_USERS` | `admin:change-me:admin:Admin` (do not ship the default `admin`/`admin`) |
+
+5. Generate a public domain on the API service (`xxx.up.railway.app`).
+6. Confirm `GET https://xxx.up.railway.app/api/v1/health` returns `{"status":"ok","db":"postgres"}`.
+
+`backend/Dockerfile` and `backend/railway.toml` define the start command and health check. Locally, leave `DATABASE_URL` unset so SQLite is still used.
+
+### 2. Vercel — frontend
+
+1. Import this repo in [Vercel](https://vercel.com). Root `vercel.json` already points install/build/output at `frontend/`.
+2. Add an environment variable for **Production** and **Preview**:
+
+   | Name | Value |
+   |---|---|
+   | `VITE_API_URL` | `https://xxx.up.railway.app/api/v1` |
+
+   Vite only reads `VITE_*` vars at **build** time. After changing this, redeploy the frontend.
+
+3. Deploy. Deep links (`/orders`, `/lifts/new`, …) rewrite to `index.html`.
+4. Copy the Vercel URL into Railway `CORS_ORIGINS` if you use a custom domain. `*.vercel.app` hosts are already allowed.
+
+### 3. First login
+
+Open the Vercel URL, sign in with the `TRADEOS_USERS` admin account, then **Settings → Load demo data** if you want seed POs/SOs.
+
+### Checklists
+
+- [ ] Railway health is `ok` and `"db":"postgres"`
+- [ ] Vercel build succeeds (`frontend` `npm run build`)
+- [ ] Browser network tab: UI calls `https://…railway.app/api/v1/…` (not `/api/v1` on Vercel)
+- [ ] Login works; creating a PO persists after a Railway redeploy
+
 ## Admin
 
 From **Settings** in the app:
 
 - **Load demo data** — `POST /api/v1/admin/seed`
 - **Clear all data** — `POST /api/v1/admin/reset`
-# tradeos

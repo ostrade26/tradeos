@@ -12,6 +12,9 @@ dist
 dist-marketing
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -25,6 +28,7 @@ dist-ssr
 *.sw?
 
 # Python backend
+.venv/
 backend/.venv/
 backend/data/
 __pycache__/

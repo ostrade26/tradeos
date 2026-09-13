@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
 
 from . import auth
-from .db import init_db, insert_demo_request
+from .db import init_db, insert_demo_request, ping_db
 from .trade.service import TradeService
 import os
 
@@ -43,16 +43,28 @@ app = FastAPI(
 service = TradeService()
 API_TOKEN = (os.environ.get("TRADEOS_API_TOKEN") or "").strip()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+
+def _cors_origins() -> list[str]:
+    extra = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip()]
+    return [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
-    ],
-    # LAN / Bonjour origins when opening the UI from another device on the same network.
-    allow_origin_regex=r"https?://((localhost|127\.0\.0\.1)(:\d+)?|([\w-]+\.local)(:\d+)?|(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?)",
+        *extra,
+    ]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    # Local LAN / Bonjour, plus Vercel production and preview hosts.
+    allow_origin_regex=(
+        r"https?://((localhost|127\.0\.0\.1)(:\d+)?"
+        r"|([\w-]+\.local)(:\d+)?"
+        r"|(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?"
+        r"|([\w-]+\.)*vercel\.app)"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -171,8 +183,11 @@ def swagger_redirect() -> RedirectResponse:
 
 @app.get("/api/v1/health", tags=["health"], summary="Health check")
 def health() -> dict:
-    """Returns `{"status": "ok"}` when the API is running."""
-    return {"status": "ok"}
+    """Returns `{"status": "ok", "db": "sqlite"|"postgres"}` when the API and database are up."""
+    try:
+        return {"status": "ok", "db": ping_db()}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
 
 
 @app.post("/api/v1/auth/login", tags=["auth"], summary="Sign in")

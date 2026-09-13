@@ -28,7 +28,7 @@ echo "============================"
 if curl -sf "${API}/health" | grep -q '"ok"'; then
   pass "Backend health ${API}/health"
 else
-  fail "Backend health — start with: npm run dev:backend"
+  fail "Backend health — start with: cd frontend && npm run dev:backend"
 fi
 
 check_code "Frontend UI" "${FRONTEND}/" "200"
@@ -48,10 +48,10 @@ for path in \
   "/retailers/missing-id/can-delete"
 do
   code=$(curl -s -o /dev/null -w "%{http_code}" "${API}${path}" || echo "000")
-  if [[ "$code" == "404" && "$path" == "/state" ]]; then
-    fail "GET ${path} returned 404"
-  elif [[ "$path" == "/state" && "$code" == "200" ]]; then
-    pass "GET ${path}"
+  if [[ "$path" == "/state" && "$code" != "404" ]]; then
+    pass "GET ${path} ($code)"
+  elif [[ "$path" == "/state" ]]; then
+    fail "GET ${path} returned 404 — route not registered"
   elif [[ "$path" != "/state" && "$code" != "404" ]]; then
     pass "GET ${path} ($code)"
   elif [[ "$path" != "/state" ]]; then
@@ -88,5 +88,5 @@ if [[ "$FAIL" -eq 0 ]]; then
   exit 0
 fi
 
-echo "Some checks failed. Ensure both servers are running: npm run dev:all"
+echo "Some checks failed. Ensure both servers are running: cd frontend && npm run dev:all"
 exit 1

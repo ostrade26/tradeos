@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Columns } from 'lucide-react'
 import { Checkbox } from '../ui/Checkbox'
 import type { ReportColumn } from '../../lib/reports/builders'
