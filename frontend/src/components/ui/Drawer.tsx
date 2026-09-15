@@ -6,7 +6,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 
-/** Above docked detail column (z-1000) and contextual menus (z-1100). */
+/** Above docked detail column (z-1000). Context menus use z-1250 (DetailPanelMenu). */
 const OVERLAY_Z = 1200
 
 /** Full-screen dim overlay — no blur; keeps focus on modal/drawer content */

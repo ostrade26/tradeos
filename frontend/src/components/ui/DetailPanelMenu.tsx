@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom'
 import { MoreHorizontal, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
-/** Above docked detail column (z-1000) and overlay drawer (z-50). */
-const MENU_Z_INDEX = 1100
+/** Above docked column (z-1000) and undocked detail drawer (z-1200 in Drawer.tsx). */
+const MENU_Z_INDEX = 1250
 
 export type DetailPanelMenuItem =
   | {
