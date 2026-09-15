@@ -276,12 +276,21 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
             <p>Sign in again at <code className="font-mono">http://localhost:5173/login</code></p>
           </div>
         ) : isOffline ? (
-          <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
-            <p className="font-medium text-heading mb-1">Start both servers:</p>
-            <p>Terminal 1: <code className="font-mono">npm run dev:backend</code></p>
-            <p>Terminal 2: <code className="font-mono">npm run dev</code></p>
-            <p className="mt-2">Then open <code className="font-mono">http://localhost:5173</code></p>
-          </div>
+          import.meta.env.DEV ? (
+            <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
+              <p className="font-medium text-heading mb-1">Start both servers:</p>
+              <p>Terminal 1: <code className="font-mono">npm run dev:backend</code></p>
+              <p>Terminal 2: <code className="font-mono">npm run dev</code></p>
+              <p className="mt-2">Then open <code className="font-mono">http://localhost:5173</code></p>
+            </div>
+          ) : (
+            <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
+              <p className="font-medium text-heading mb-1">Production checklist</p>
+              <p>Confirm Railway is running and open the API health URL in this browser.</p>
+              <p className="mt-2">In Chrome: disable ad blockers for this site, hard refresh (Cmd+Shift+R), or try Incognito — extensions often block cross-origin API calls.</p>
+              <p className="mt-2">On Vercel, set <code className="font-mono">VITE_API_URL</code> to your Railway URL ending in <code className="font-mono">/api/v1</code>, then redeploy.</p>
+            </div>
+          )
         ) : null}
         <button
           type="button"

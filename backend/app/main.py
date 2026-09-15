@@ -55,20 +55,6 @@ def _cors_origins() -> list[str]:
     ]
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins(),
-    # Local LAN / Bonjour, plus Vercel production and preview hosts.
-    allow_origin_regex=(
-        r"https?://((localhost|127\.0\.0\.1)(:\d+)?"
-        r"|([\w-]+\.local)(:\d+)?"
-        r"|(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?"
-        r"|([\w-]+\.)*vercel\.app)"
-    ),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 class DictBody(BaseModel):
@@ -146,6 +132,23 @@ async def auth_guard(request: Request, call_next):
 
     request.state.session = session
     return await call_next(request)
+
+
+# Register CORS *after* auth_guard so it wraps all responses (including 401 JSON from auth).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    # Local LAN / Bonjour, plus Vercel production and preview hosts.
+    allow_origin_regex=(
+        r"https?://((localhost|127\.0\.0\.1)(:\d+)?"
+        r"|([\w-]+\.local)(:\d+)?"
+        r"|(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?"
+        r"|([\w-]+\.)*vercel\.app)"
+    ),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _mutation(result: Any, state: dict) -> dict:
