@@ -81,6 +81,8 @@ def _cors_origins() -> list[str]:
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+        "https://www.tradeal.in",
+        "https://tradeal.in",
         *extra,
     ]
 
@@ -213,7 +215,8 @@ app.add_middleware(
         r"https?://((localhost|127\.0\.0\.1)(:\d+)?"
         r"|([\w-]+\.local)(:\d+)?"
         r"|(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?"
-        r"|([\w-]+\.)*vercel\.app)"
+        r"|([\w-]+\.)*vercel\.app"
+        r"|([\w-]+\.)*tradeal\.in)"
     ),
     allow_credentials=True,
     allow_methods=["*"],
