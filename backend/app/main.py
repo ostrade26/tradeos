@@ -133,6 +133,7 @@ class PreferencesPatchBody(BaseModel):
     accentId: str | None = None
     customHex: str | None = None
     tableDensity: str | None = None
+    lastSeenPlatformWhatsNew: str | None = None
 
 
 class ChangePasswordBody(BaseModel):

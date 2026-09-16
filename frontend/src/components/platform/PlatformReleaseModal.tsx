@@ -117,7 +117,7 @@ export function PlatformReleaseModal({
           onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
           placeholder="Lift matching and register polish"
         />
-        <label className="flex flex-col gap-1.5 sm:col-span-2">
+        <label className="flex flex-col gap-2.5 sm:col-span-2">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Summary</span>
           <textarea
             value={form.summary}
@@ -177,7 +177,7 @@ export function PlatformReleaseModal({
                 </Button>
               ) : null}
             </div>
-            <label className="flex flex-col gap-1.5 sm:col-span-2">
+            <label className="flex flex-col gap-2.5 sm:col-span-2">
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Detail</span>
               <textarea
                 value={item.detail}

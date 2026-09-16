@@ -226,44 +226,38 @@ export function PlatformNotifyModal({
             placeholder="inventory-lots-v2"
           />
         ) : (
-          <div className="flex items-end min-h-[4.5rem] pb-1">
-            <Checkbox
-              label="Exclude organisations with expired AMC"
-              checked={excludeExpiredAmc}
-              onChange={e => setExcludeExpiredAmc(e.target.checked)}
-            />
-          </div>
+          <div className="hidden sm:block" />
         )}
         {isUpdateKind ? (
-          <label className="flex min-h-[9.5rem] flex-col gap-1.5">
+          <label className="flex flex-col gap-2.5 sm:col-span-2">
             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">What's included</span>
             <textarea
               value={items}
               onChange={e => setItems(e.target.value)}
+              rows={4}
               placeholder={'Faster lift matching\nPurchase register improvements'}
-              className="min-h-[7.5rem] flex-1 w-full resize-none rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
+              className="min-h-[6.5rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
             />
             <p className="text-xs text-muted">One feature or change per line.</p>
           </label>
         ) : null}
-        <label className={`flex min-h-[9.5rem] flex-col gap-1.5 ${isUpdateKind ? '' : 'sm:col-span-2'}`}>
+        <label className="flex flex-col gap-2.5 sm:col-span-2">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Message</span>
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
-            className="min-h-[7.5rem] flex-1 w-full resize-none rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
+            rows={isUpdateKind ? 4 : 5}
+            className="min-h-[6.5rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
           />
-          {isUpdateKind ? <p className="text-xs text-muted">Shown in the recipient's notification.</p> : null}
         </label>
-        {isUpdateKind ? (
-          <div className="sm:col-span-2">
-            <Checkbox
-              label="Exclude organisations with expired AMC"
-              checked={excludeExpiredAmc}
-              onChange={e => setExcludeExpiredAmc(e.target.checked)}
-            />
-          </div>
-        ) : null}
+        <div className="sm:col-span-2">
+          <Checkbox
+            tight
+            label="Exclude organisations with expired AMC"
+            checked={excludeExpiredAmc}
+            onChange={e => setExcludeExpiredAmc(e.target.checked)}
+          />
+        </div>
       </div>
     </Modal>
   )

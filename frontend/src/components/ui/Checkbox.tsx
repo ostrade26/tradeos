@@ -6,10 +6,12 @@ interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'typ
   label?: string
   /** Dense/table layouts — 16px control only, no 44px touch padding. */
   compact?: boolean
+  /** Left-align the box with nearby field labels; tighter gap to the caption. */
+  tight?: boolean
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
-  { label, className, id, disabled, compact = false, ...props },
+  { label, className, id, disabled, compact = false, tight = false, ...props },
   ref,
 ) {
   const inputId = id ?? (label ? `checkbox-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined)
@@ -18,14 +20,15 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     <label
       htmlFor={inputId}
       className={cn(
-        'group inline-flex cursor-pointer items-center gap-2',
+        'group inline-flex cursor-pointer items-center',
+        tight ? 'gap-1.5' : 'gap-2',
         disabled && 'cursor-not-allowed opacity-50',
         className,
       )}
     >
       <span className={cn(
         'relative inline-flex shrink-0 items-center justify-center',
-        compact ? 'h-4 w-4' : 'h-11 w-11',
+        compact || tight ? 'h-4 w-4' : 'h-11 w-11',
       )}>
         <input
           ref={ref}

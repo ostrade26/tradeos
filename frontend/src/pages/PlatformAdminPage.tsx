@@ -63,6 +63,10 @@ import { PlatformCommercialMetrics } from '../components/platform/PlatformCommer
 import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
 import { PlatformReleaseModal, type ReleaseFormPayload } from '../components/platform/PlatformReleaseModal'
 import { PlatformPublishReleaseModal } from '../components/platform/PlatformPublishReleaseModal'
+import { PlatformWhatsNewModal } from '../components/platform/PlatformWhatsNewModal'
+import { useAuth } from '../hooks/useAuth'
+import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
+import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
 const PLATFORM_SECTIONS = [
   'organisations',
   'seats',
@@ -145,6 +149,8 @@ export function PlatformAdminPage() {
 function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const meta = SECTION_META[section]
   const toast = useToast()
+  const { session } = useAuth()
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [organisations, setOrganisations] = useState<PlatformOrganisation[]>([])
   const [licensedSeats, setLicensedSeats] = useState<OrganisationSeat[]>([])
@@ -269,6 +275,20 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!session) return
+    if (session.preferences?.lastSeenPlatformWhatsNew === PLATFORM_WHATS_NEW_VERSION) {
+      setWhatsNewOpen(false)
+      return
+    }
+    setWhatsNewOpen(true)
+  }, [session])
+
+  const dismissWhatsNew = () => {
+    setWhatsNewOpen(false)
+    schedulePersistPreferences({ lastSeenPlatformWhatsNew: PLATFORM_WHATS_NEW_VERSION })
+  }
 
   const loadSeatRequests = useCallback(async () => {
     setSeatRequestLoading(true)
@@ -1290,6 +1310,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         loading={publishingRelease}
         onSubmit={payload => void submitPublishRelease(payload)}
       />
+
+      <PlatformWhatsNewModal open={whatsNewOpen} onClose={dismissWhatsNew} />
 
       <PlatformSeatRequestDecisionModal
         open={seatDecision != null}

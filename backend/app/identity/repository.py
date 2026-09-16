@@ -377,7 +377,7 @@ def update_user_profile(
 def merge_user_preferences(user_id: int, patch: dict[str, Any]) -> AuthUser:
     if not patch:
         raise HTTPException(status_code=400, detail="Nothing to update")
-    allowed = {"theme", "accentId", "customHex", "tableDensity"}
+    allowed = {"theme", "accentId", "customHex", "tableDensity", "lastSeenPlatformWhatsNew"}
     clean = {k: v for k, v in patch.items() if k in allowed and v is not None}
     if not clean:
         raise HTTPException(status_code=400, detail="No valid preference keys")

@@ -155,6 +155,7 @@ export function PlatformPublishReleaseModal({
             />
           )}
           <Checkbox
+            tight
             label="Exclude organisations with expired AMC"
             checked={excludeExpiredAmc}
             onChange={e => setExcludeExpiredAmc(e.target.checked)}

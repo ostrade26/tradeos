@@ -13,6 +13,7 @@ export interface UserPreferences {
   accentId?: string
   customHex?: string
   tableDensity?: 'compact' | 'relaxed'
+  lastSeenPlatformWhatsNew?: string
 }
 
 export interface AuthSession {
