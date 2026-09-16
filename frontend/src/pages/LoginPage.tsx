@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { PasswordInput } from '../components/ui/PasswordInput'
 import { useAuth } from '../hooks/useAuth'
 import { loadAuthSession } from '../lib/auth'
+import { APP_HOME } from '../lib/appShellMode'
 import { ApiError } from '../api/client'
 
 export function LoginPage() {
@@ -20,7 +21,10 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (isAuthenticated) {
-    return <Navigate to={from} replace />
+    const saved = loadAuthSession()
+    const home = saved?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
+    const dest = from && from !== '/' && from !== '/login' ? from : home
+    return <Navigate to={dest} replace />
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,8 +34,8 @@ export function LoginPage() {
     try {
       await login(username.trim(), password)
       const saved = loadAuthSession()
-      const defaultHome = saved?.isPlatformAdmin ? '/platform-admin/organisations' : '/'
-      const dest = from && from !== '/' && from !== '/login' ? from : defaultHome
+      const defaultHome = saved?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
+      const dest = from && from !== '/' && from !== '/login' && from !== APP_HOME ? from : defaultHome
       navigate(dest, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in')
@@ -83,6 +87,12 @@ export function LoginPage() {
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+
+        <div className="mt-6 text-center">
+          <Link to="/" className="text-sm font-medium text-accent hover:text-accent-hover cursor-pointer">
+            Back to Tradeal
+          </Link>
+        </div>
 
         <div className="mt-6 rounded-md border border-gray-200 dark:border-gray-700 bg-card/60 px-4 py-3 text-sm text-muted leading-relaxed">
           <p className="font-medium text-heading text-sm mb-1">Forgot email or password?</p>

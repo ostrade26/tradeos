@@ -1,5 +1,6 @@
 import { ArrowDown, Sparkles } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { cn } from '../lib/utils'
 import { Marquee } from './Marquee'
@@ -92,6 +93,12 @@ export function Hero() {
             >
               See how it works
             </a>
+            <Link
+              to="/login"
+              className="inline-flex h-12 items-center text-sm font-semibold text-white/85 hover:text-white underline-offset-4 hover:underline cursor-pointer"
+            >
+              Sign in
+            </Link>
           </div>
         </div>
 

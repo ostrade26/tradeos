@@ -84,7 +84,7 @@ export function UserMenu() {
           onClick={async () => {
             setOpen(false)
             await logout()
-            navigate('/login')
+            navigate('/')
           }}
           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-heading hover:bg-gray-50 dark:hover:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700"
         >

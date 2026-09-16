@@ -1,5 +1,6 @@
 import { Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { cn } from '../lib/utils'
 import { Logo } from './Logo'
 
@@ -49,6 +50,17 @@ export function Nav() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Link
+            to="/login"
+            className={cn(
+              'hidden sm:inline-flex h-10 items-center rounded-md px-3 text-sm font-medium cursor-pointer transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2',
+              light
+                ? 'text-white/85 hover:text-white focus-visible:outline-white'
+                : 'text-heading hover:text-accent focus-visible:outline-accent',
+            )}
+          >
+            Sign in
+          </Link>
           <a
             href="#demo"
             className="btn-glow inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -93,6 +105,16 @@ export function Nav() {
               {link.label}
             </a>
           ))}
+          <Link
+            to="/login"
+            className={cn(
+              'block rounded-md px-3 py-3 text-sm font-medium cursor-pointer',
+              solid ? 'text-heading hover:bg-gray-50' : 'text-white hover:bg-white/10',
+            )}
+            onClick={() => setOpen(false)}
+          >
+            Sign in
+          </Link>
         </nav>
       )}
     </header>

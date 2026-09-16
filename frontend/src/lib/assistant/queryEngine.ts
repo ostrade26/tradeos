@@ -320,7 +320,7 @@ function helpResult(): AssistantResult {
       '• *Record lift for PO-1 SO-1*',
     ].join('\n'),
     actions: [
-      { label: 'Dashboard', path: '/' },
+      { label: 'Dashboard', path: '/app' },
       { label: 'Purchase Orders', path: '/purchase-orders' },
       { label: 'Sales Orders', path: '/sales-orders' },
       { label: 'Lift Register', path: '/lifts' },
@@ -345,7 +345,7 @@ function statsResult(store: TradeStoreValue): AssistantResult {
       lowStock.length > 0 ? `- **${lowStock.length}** low-stock alert${lowStock.length === 1 ? '' : 's'}` : '',
     ].filter(Boolean).join('\n'),
     actions: [
-      { label: 'Dashboard', path: '/' },
+      { label: 'Dashboard', path: '/app' },
       ...(lowStock.length > 0 ? [{ label: 'Low inventory', path: '/inventory?lowStock=true' }] : []),
       { label: 'Pending POs', path: '/purchase-orders' },
       { label: 'Pending SOs', path: '/sales-orders' },

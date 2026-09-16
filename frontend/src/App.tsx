@@ -16,6 +16,7 @@ import { PlatformAdminPage } from './pages/PlatformAdminPage'
 import { PlatformAdminProfilePage } from './pages/PlatformAdminProfilePage'
 import { PlatformAdminSettingsPage } from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
+import { MarketingPage } from './pages/MarketingPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ContractsPage } from './pages/ContractsPage'
 import { CreateContractPage } from './pages/CreateContractPage'
@@ -86,6 +87,7 @@ const router = createBrowserRouter([
   {
     element: <RootProviders />,
     children: [
+      { path: '/', element: <MarketingPage /> },
       { path: '/login', element: <LoginPage /> },
       {
         element: <RequireAuth />,
@@ -110,7 +112,7 @@ const router = createBrowserRouter([
               {
                 element: <ShellLayout />,
                 children: [
-                  { index: true, element: <DashboardPage /> },
+                  { path: 'app', element: <DashboardPage /> },
 
           { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
           { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },
@@ -149,11 +151,11 @@ const router = createBrowserRouter([
           { path: 'brokers', element: <Navigate to="/directory?tab=brokers" replace /> },
           { path: 'producers', element: <Navigate to="/directory?tab=parties" replace /> },
           { path: 'retailers', element: <Navigate to="/directory?tab=parties" replace /> },
-          { path: 'payments', element: <Navigate to="/" replace /> },
+          { path: 'payments', element: <Navigate to="/app" replace /> },
           { path: 'reports', element: <ReportsDashboardPage /> },
           { path: 'reports/:reportId', element: <ReportViewPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
-          { path: 'market-news', element: <Navigate to="/" replace /> },
+          { path: 'market-news', element: <Navigate to="/app" replace /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'profile', element: <ProfilePage /> },
           {
@@ -165,7 +167,7 @@ const router = createBrowserRouter([
             ],
           },
 
-                  { path: '*', element: <Navigate to="/" replace /> },
+                  { path: '*', element: <Navigate to="/app" replace /> },
                 ],
               },
             ],

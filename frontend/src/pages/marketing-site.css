@@ -1,0 +1,122 @@
+html.marketing-site {
+  height: auto;
+  overflow: auto;
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
+html.marketing-site body,
+html.marketing-site #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+html.marketing-site body {
+  font-size: 1rem;
+  line-height: 1.6;
+  background: #f8fafc;
+  color: #475569;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes kenburns {
+  from { transform: scale(1.06); }
+  to { transform: scale(1.16); }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes live-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.55s ease-out both;
+}
+
+.hero-kenburns {
+  animation: kenburns 22s ease-in-out alternate infinite;
+  transform-origin: 60% 40%;
+  will-change: transform;
+}
+
+.hero-float {
+  animation: float-y 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.marquee-track {
+  animation: marquee 38s linear infinite;
+  will-change: transform;
+}
+
+.live-dot {
+  animation: live-dot 1.6s ease-in-out infinite;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.55s ease-out, transform 0.55s ease-out;
+}
+
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.film-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.btn-glow {
+  box-shadow: 0 0 0 0 rgba(62, 96, 213, 0.45), 0 12px 32px rgba(62, 96, 213, 0.35);
+  transition: box-shadow 0.2s ease-out, background-color 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.btn-glow:hover {
+  box-shadow: 0 0 0 6px rgba(62, 96, 213, 0.18), 0 16px 40px rgba(62, 96, 213, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.marketing-site {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-up,
+  .hero-kenburns,
+  .hero-float,
+  .marquee-track,
+  .live-dot {
+    animation: none !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .btn-glow:hover {
+    transform: none;
+  }
+}

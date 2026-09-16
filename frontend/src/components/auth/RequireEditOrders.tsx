@@ -5,7 +5,7 @@ export function RequireEditOrders({ children }: { children: React.ReactNode }) {
   const { canEditOrders } = usePermissions()
 
   if (!canEditOrders) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/app" replace />
   }
 
   return <>{children}</>

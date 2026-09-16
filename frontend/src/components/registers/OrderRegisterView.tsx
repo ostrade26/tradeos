@@ -563,8 +563,36 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   }
 
   const handleExport = () => {
+    type OrderExportRow = {
+      ref: string
+      date: string
+      party: string
+      item: string
+      deliveryPeriod: string
+      spot: string
+      rate: number
+      orderQty: number
+      buyBackQty?: number
+      liftedQty: number
+      toBeLift: number
+      broker: string
+    }
+    const exportColumns: { key: keyof OrderExportRow; header: string }[] = [
+      { key: 'ref', header: 'Ref#' },
+      { key: 'date', header: 'Date' },
+      { key: 'party', header: `${partyColumn} Name` },
+      { key: 'item', header: 'Item Name' },
+      { key: 'deliveryPeriod', header: 'Delivery Period' },
+      { key: 'spot', header: 'Spot' },
+      { key: 'rate', header: RATE_COLUMN_HEADER },
+      { key: 'orderQty', header: `${shortLabel} Qty` },
+      ...(isPO ? [{ key: 'buyBackQty' as const, header: 'Buy back' }] : []),
+      { key: 'liftedQty', header: 'Lifted Qty' },
+      { key: 'toBeLift', header: 'To Be Lift' },
+      { key: 'broker', header: 'Broker Name' },
+    ]
     exportToCSV(
-      filtered.map(o => ({
+      filtered.map((o): OrderExportRow => ({
         ref: o.ref,
         date: o.date,
         party: o.partyName,
@@ -578,20 +606,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         toBeLift: registerToBeLift(o),
         broker: o.brokerName,
       })),
-      [
-        { key: 'ref', header: 'Ref#' },
-        { key: 'date', header: 'Date' },
-        { key: 'party', header: `${partyColumn} Name` },
-        { key: 'item', header: 'Item Name' },
-        { key: 'deliveryPeriod', header: 'Delivery Period' },
-        { key: 'spot', header: 'Spot' },
-        { key: 'rate', header: RATE_COLUMN_HEADER },
-        { key: 'orderQty', header: `${shortLabel} Qty` },
-        ...(isPO ? [{ key: 'buyBackQty', header: 'Buy back' }] : []),
-        { key: 'liftedQty', header: 'Lifted Qty' },
-        { key: 'toBeLift', header: 'To Be Lift' },
-        { key: 'broker', header: 'Broker Name' },
-      ],
+      exportColumns,
       `${shortLabel}-${mode}-${new Date().toISOString().slice(0, 10)}`
     )
     toast.success(`Exported ${filtered.length} ${shortLabel}${filtered.length === 1 ? '' : 's'}`)

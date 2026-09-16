@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Logo } from './Logo'
 
 export function Footer() {
@@ -11,6 +12,10 @@ export function Footer() {
           </p>
         </div>
         <div className="text-sm">
+          <Link to="/login" className="font-medium text-white hover:text-accent transition-colors duration-200 cursor-pointer">
+            Sign in
+          </Link>
+          <span className="mx-2 text-white/30">·</span>
           <a href="#demo" className="font-medium text-white hover:text-accent transition-colors duration-200 cursor-pointer">
             Request a demo
           </a>

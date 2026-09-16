@@ -32,6 +32,7 @@ type Column<T> = {
   className?: string
   sortable?: boolean
   sortValue?: (row: T) => string | number
+  actionsWide?: boolean
 }
 
 export function organisationColumns(): Column<PlatformOrganisation>[] {

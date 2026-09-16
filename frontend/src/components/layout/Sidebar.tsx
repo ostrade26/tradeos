@@ -17,7 +17,7 @@ function registerNavTo(path: string) {
 }
 
 const tradingNav = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true, clearSearch: false },
+  { to: '/app', icon: LayoutDashboard, label: 'Dashboard', end: true, clearSearch: false },
   { to: '/purchase-orders', icon: ArrowDownToLine, label: 'Purchase Orders', clearSearch: true },
   { to: '/sales-orders', icon: ArrowUpFromLine, label: 'Sales Orders', clearSearch: true },
   { to: '/lifts', icon: Scale, label: 'Lift Register', clearSearch: true },
@@ -145,7 +145,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               )}
               <div className="space-y-0.5 mb-3">
                 <NavLink
-                  to="/"
+                  to="/app"
                   end
                   title={iconOnly ? 'Dashboard' : undefined}
                   className={navClass}

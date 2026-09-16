@@ -35,7 +35,7 @@ function DealNotFound({ decodedRef }: { decodedRef: string }) {
         icon={<FileText className="h-10 w-10" />}
         title="Order not found"
         description={`Could not find ${decodedRef}.`}
-        action={<Button to="/">Back to Dashboard</Button>}
+        action={<Button to="/app">Back to Dashboard</Button>}
       />
     </div>
   )
