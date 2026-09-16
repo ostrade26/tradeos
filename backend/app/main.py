@@ -67,7 +67,7 @@ async def sqlite_integrity_handler(_request: Request, exc: sqlite3.IntegrityErro
 try:
     from psycopg.errors import IntegrityError as PsycopgIntegrityError
 
-    @app.exception_handler(PsykopgIntegrityError)
+    @app.exception_handler(PsycopgIntegrityError)
     async def psycopg_integrity_handler(_request: Request, exc: PsycopgIntegrityError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": _integrity_error_detail(exc)})
 except ImportError:
