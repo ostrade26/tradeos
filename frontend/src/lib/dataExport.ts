@@ -48,7 +48,7 @@ export async function exportAllTradeData(store: TradeStoreValue, format: 'json' 
   const payload = buildTradeBackup(data)
   downloadFile(
     new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }),
-    `tradeos-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    `tradeal-backup-${new Date().toISOString().slice(0, 10)}.json`,
   )
 }
 

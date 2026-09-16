@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
-import { DetailPanelColumn, DetailPanelSlotProvider } from './DetailPanelSlot'
+import { DetailPanelColumn, DetailPanelRouteSync, DetailPanelSlotProvider } from './DetailPanelSlot'
 import { GlobalCommandPalette } from './GlobalCommandPalette'
 import { FloatingCreateCta } from './FloatingCreateCta'
 import { AssistantPanel } from '../assistant/AssistantPanel'
 import { ApiStatusBanner } from './ApiStatusBanner'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
+import { usePermissions } from '../../hooks/useAuth'
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -18,6 +19,7 @@ function isTypingTarget(target: EventTarget | null) {
 }
 
 export function AppShell() {
+  const { hasPermission } = usePermissions()
   const [commandOpen, setCommandOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -48,16 +50,17 @@ export function AppShell() {
         setAssistantOpen(true)
       }
       if (isTypingTarget(e.target)) return
-      if (e.key === 'F1') { e.preventDefault(); navigate('/purchase-orders/new') }
-      if (e.key === 'F3') { e.preventDefault(); navigate('/sales-orders/new') }
-      if (e.key === 'F5') { e.preventDefault(); navigate('/lifts/new') }
+      if (e.key === 'F1' && hasPermission('purchase.create')) { e.preventDefault(); navigate('/purchase-orders/new') }
+      if (e.key === 'F3' && hasPermission('sales.create')) { e.preventDefault(); navigate('/sales-orders/new') }
+      if (e.key === 'F5' && hasPermission('lifts.create')) { e.preventDefault(); navigate('/lifts/new') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [navigate])
+  }, [hasPermission, navigate])
 
   return (
     <DetailPanelSlotProvider>
+      <DetailPanelRouteSync />
       <div className="flex h-viewport overflow-hidden bg-body wrapper">
         <a href="#main-content" className="skip-to-main">
           Skip to main content
@@ -80,7 +83,7 @@ export function AppShell() {
             <main
               id="main-content"
               tabIndex={-1}
-              className="flex flex-1 min-h-0 min-w-0 flex-col overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              className="relative z-0 flex flex-1 min-h-0 min-w-0 flex-col overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
             >
               <Outlet />
             </main>

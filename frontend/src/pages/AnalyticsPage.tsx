@@ -27,7 +27,7 @@ export function AnalyticsPage() {
       <PageHeader
         title="Analytics"
         subtitle="Trade performance and market trends"
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Analytics' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Analytics' }]} />}
       />
 
       <StatGrid cols={4}>

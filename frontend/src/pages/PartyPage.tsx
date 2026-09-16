@@ -95,7 +95,7 @@ export function PartyPage() {
         title={partyName}
         subtitle={`${partyKind} · ${pos.length} POs · ${sos.length} SOs · ${lifts.length} lifts`}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Directory', href: '/directory' },
           { label: partyName },
         ]} />}

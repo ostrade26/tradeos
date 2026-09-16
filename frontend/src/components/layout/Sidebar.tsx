@@ -1,16 +1,26 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Package,
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
-  ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList
+  ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
+  Building2, Users, UserPlus, CreditCard, ScrollText,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { isSettingsAreaPath, SETTINGS_SECTIONS, settingsPath } from '../../lib/settingsSections'
+import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
+
+/** Register routes — navigate with a clean URL (no `ref` from the previous register). */
+function registerNavTo(path: string) {
+  return { pathname: path }
+}
 
 const tradingNav = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/purchase-orders', icon: ArrowDownToLine, label: 'Purchase Orders' },
-  { to: '/sales-orders', icon: ArrowUpFromLine, label: 'Sales Orders' },
-  { to: '/lifts', icon: Scale, label: 'Lift Register' },
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true, clearSearch: false },
+  { to: '/purchase-orders', icon: ArrowDownToLine, label: 'Purchase Orders', clearSearch: true },
+  { to: '/sales-orders', icon: ArrowUpFromLine, label: 'Sales Orders', clearSearch: true },
+  { to: '/lifts', icon: Scale, label: 'Lift Register', clearSearch: true },
   { to: '/inventory', icon: Package, label: 'Inventory' },
   { to: '/contracts', icon: FileText, label: 'Contracts' },
 ]
@@ -22,6 +32,14 @@ const platformNav = [
   { to: '/activity', icon: Activity, label: 'Activity' },
 ]
 
+const platformAdminNav = [
+  { to: '/platform-admin/organisations', icon: Building2, label: 'Organisations', end: true },
+  { to: '/platform-admin/seats', icon: Users, label: 'Seats' },
+  { to: '/platform-admin/plans', icon: CreditCard, label: 'Plans' },
+  { to: '/platform-admin/seat-requests', icon: UserPlus, label: 'Seat requests' },
+  { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
+]
+
 interface SidebarProps {
   collapsed: boolean
   onToggleCollapse: () => void
@@ -30,6 +48,22 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMobileClose }: SidebarProps) {
+  const location = useLocation()
+  const platformAdminMode = isPlatformAdminPath(location.pathname)
+  const settingsMode = !platformAdminMode && isSettingsAreaPath(location.pathname)
+  const { isPlatformAdmin } = useAuth()
+  const { hasPermission } = usePermissions()
+  const canManageOrganisation = hasPermission('organisation.edit')
+  const showPlanInSettings =
+    canManageOrganisation &&
+    (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
+  const showTeamInSettings = canManageOrganisation
+  const { pendingCount: openSeatRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
+  const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
+    if (s.planSection && !showPlanInSettings) return false
+    if (s.teamSection && !showTeamInSettings) return false
+    return true
+  })
   const showLabels = !collapsed || mobileOpen
   const iconOnly = collapsed && !mobileOpen
 
@@ -48,6 +82,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
       )}
 
       <aside
+        data-overlay-dismiss="ignore"
         className={cn(
           'app-menu flex flex-col overflow-hidden bg-white dark:bg-card border-r border-gray-200/80 dark:border-gray-700/50',
           'transition-all duration-300 ease-out shrink-0',
@@ -68,7 +103,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                   <path d="M2 12L7 7L10 10L14 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="text-lg font-semibold text-heading truncate">TradeOS</span>
+              <span className="text-lg font-semibold text-heading truncate">Tradeal</span>
             </div>
           ) : (
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
@@ -101,42 +136,127 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
         )}
 
         <nav className="flex-1 overflow-y-auto overscroll-contain px-2.5 py-2 pb-[env(safe-area-inset-bottom)]">
-          {showLabels && (
-            <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Trading</p>
-          )}
-          <div className="space-y-0.5 mb-3">
-            {tradingNav.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={iconOnly ? item.label : undefined}
-                className={navClass}
-                onClick={onMobileClose}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {showLabels && item.label}
-              </NavLink>
-            ))}
-          </div>
+          {settingsMode ? (
+            <>
+              {showLabels && (
+                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
+                  Settings
+                </p>
+              )}
+              <div className="space-y-0.5 mb-3">
+                <NavLink
+                  to="/"
+                  end
+                  title={iconOnly ? 'Dashboard' : undefined}
+                  className={navClass}
+                  onClick={onMobileClose}
+                >
+                  <LayoutDashboard className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Dashboard'}
+                </NavLink>
+              </div>
+              {showLabels && (
+                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
+                  Categories
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {settingsNavItems.map(item => (
+                  <NavLink
+                    key={item.id}
+                    to={settingsPath(item.segment)}
+                    title={iconOnly ? item.label : undefined}
+                    className={navClass}
+                    onClick={onMobileClose}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    {showLabels && item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          ) : platformAdminMode ? (
+            <>
+              {showLabels && (
+                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
+                  Administration
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {platformAdminNav.map(item => {
+                  const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      title={iconOnly ? item.label : undefined}
+                      className={navClass}
+                      onClick={onMobileClose}
+                    >
+                      <span className="relative shrink-0">
+                        <item.icon className="h-5 w-5" />
+                        {iconOnly && seatBadge && (
+                          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                            {openSeatRequests > 9 ? '9+' : openSeatRequests}
+                          </span>
+                        )}
+                      </span>
+                      {showLabels && (
+                        <>
+                          <span className="truncate">{item.label}</span>
+                          {seatBadge && (
+                            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white tabular-nums">
+                              {openSeatRequests > 9 ? '9+' : openSeatRequests}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              {showLabels && (
+                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Trading</p>
+              )}
+              <div className="space-y-0.5 mb-3">
+                {tradingNav.map(item => (
+                  <NavLink
+                    key={item.to}
+                    to={item.clearSearch ? registerNavTo(item.to) : item.to}
+                    end={item.end}
+                    title={iconOnly ? item.label : undefined}
+                    className={navClass}
+                    onClick={onMobileClose}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    {showLabels && item.label}
+                  </NavLink>
+                ))}
+              </div>
 
-          {showLabels && (
-            <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Platform</p>
+              {showLabels && (
+                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Platform</p>
+              )}
+              <div className="space-y-0.5">
+                {platformNav.map(item => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    title={iconOnly ? item.label : undefined}
+                    className={navClass}
+                    onClick={onMobileClose}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    {showLabels && item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
           )}
-          <div className="space-y-0.5">
-            {platformNav.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                title={iconOnly ? item.label : undefined}
-                className={navClass}
-                onClick={onMobileClose}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {showLabels && item.label}
-              </NavLink>
-            ))}
-          </div>
         </nav>
       </aside>
     </>

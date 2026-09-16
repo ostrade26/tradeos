@@ -1,12 +1,12 @@
-import { storageGet, storageSet } from './storage'
+import { readScopedPref, writeScopedPref } from './userPreferences'
 
 export type TableDensity = 'compact' | 'relaxed'
 
-const STORAGE_KEY = 'tradeos-table-density'
+const STORAGE_KEY = 'tradeal-table-density'
 
-export function loadTableDensity(): TableDensity {
+export function loadTableDensity(userKey?: string | null): TableDensity {
   try {
-    const stored = storageGet(STORAGE_KEY)
+    const stored = readScopedPref(STORAGE_KEY, userKey)
     if (stored === 'compact' || stored === 'relaxed') return stored
   } catch {
     /* ignore */
@@ -14,9 +14,9 @@ export function loadTableDensity(): TableDensity {
   return 'relaxed'
 }
 
-export function storeTableDensity(density: TableDensity) {
+export function storeTableDensity(density: TableDensity, userKey?: string | null) {
   try {
-    storageSet(STORAGE_KEY, density)
+    writeScopedPref(STORAGE_KEY, density, userKey)
   } catch {
     /* ignore */
   }

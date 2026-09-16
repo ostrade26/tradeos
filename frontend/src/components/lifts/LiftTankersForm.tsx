@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { QtyInput } from '../ui/QtyInput'
@@ -20,6 +20,7 @@ import {
 } from '../../lib/loadOnRisk'
 import { Checkbox } from '../ui/Checkbox'
 import type { CaptionStrip } from '../ui/CaptionCard'
+import { DeliveryFormSection } from './DeliveryFormSection'
 
 interface LiftTankersFormProps {
   tankers: LiftTankerFormValues[]
@@ -34,6 +35,12 @@ interface LiftTankersFormProps {
   hideTotal?: boolean
   tankerNoOptional?: boolean
   allowAddTanker?: boolean
+  /** At delivery — one optional invoice no. per tanker (multi-tanker lifts). */
+  showSalesInvoicePerTanker?: boolean
+  /** Lighter layout for mark-delivered — less chrome, transport collapsed. */
+  compactDelivery?: boolean
+  /** Per-tanker DeliveryFormSection heading (multi-tanker delivery modal). */
+  deliverySectionPerTanker?: boolean
   fieldErrors?: LiftTankerFieldErrorMap
   onChange: (tankers: LiftTankerFormValues[]) => void
 }
@@ -90,6 +97,9 @@ export function LiftTankersForm({
   hideTotal = false,
   tankerNoOptional = false,
   allowAddTanker = true,
+  showSalesInvoicePerTanker = false,
+  compactDelivery = false,
+  deliverySectionPerTanker = false,
   fieldErrors,
   onChange,
 }: LiftTankersFormProps) {
@@ -113,15 +123,48 @@ export function LiftTankersForm({
     onChange(tankers.filter((_, i) => i !== index))
   }
 
+  const gridGap = compactDelivery ? 'gap-3' : 'gap-4'
+  const fieldSize = compactDelivery ? '' : 'text-base'
+
+  const transportFields = (tanker: LiftTankerFormValues, index: number) => (
+    <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
+      <Input
+        label="Transport"
+        value={tanker.transportName}
+        onChange={e => updateTanker(index, { transportName: e.target.value })}
+        className={fieldSize}
+        placeholder="Carrier name"
+      />
+      <Input
+        label="LR No."
+        value={tanker.lrNo}
+        onChange={e => updateTanker(index, { lrNo: e.target.value.toUpperCase() })}
+        className={cn(fieldSize, 'uppercase')}
+        placeholder="LR-4521"
+      />
+      <Input
+        label="Driver mobile"
+        value={tanker.driverMobile}
+        onChange={e => updateTanker(index, { driverMobile: e.target.value })}
+        className={fieldSize}
+        type="tel"
+        inputMode="tel"
+        placeholder="9876543210"
+      />
+    </div>
+  )
+
   return (
-    <div className="space-y-3">
+    <div className={cn(compactDelivery ? 'space-y-5' : 'space-y-3')}>
       {needsMoreTankers && totalEntered > TANKER_CAPACITY_MT && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           Add {suggested - tankers.length} more tanker{suggested - tankers.length === 1 ? '' : 's'} for this quantity.
         </p>
       )}
 
-      <div className="space-y-3">
+      <div className={cn(
+        deliverySectionPerTanker ? 'space-y-8' : compactDelivery ? 'space-y-6' : 'space-y-3',
+      )}>
         {tankers.map((tanker, index) => {
           const tankerQty = parseFloat(tanker.actualQty) || 0
           const otherTankerQty = totalEntered - tankerQty
@@ -129,31 +172,47 @@ export function LiftTankersForm({
             ? Math.max(0, maxQtyMt - otherTankerQty)
             : undefined
 
-          return (
-          <div
-            key={index}
-            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-3 space-y-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Tanker {index + 1}
-              </p>
-              {tankers.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeTanker(index)}
-                  className="inline-flex items-center gap-1 text-xs text-muted hover:text-danger transition-colors"
-                  aria-label={`Remove tanker ${index + 1}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Remove
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {!hideQty && (
+          const useSectionHeading = deliverySectionPerTanker
+          const tankerShell = compactDelivery
+            ? cn(!useSectionHeading && index > 0 && 'pt-6 border-t border-gray-200 dark:border-gray-700', 'space-y-3')
+            : 'rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-3 space-y-3'
+
+          const tankerBody = (
+          <div className={useSectionHeading ? 'space-y-3' : tankerShell}>
+            {!(compactDelivery && hideQty && tankers.length === 1) && !useSectionHeading && (
+              <div className="flex items-center justify-between gap-2">
+                <p className={cn(
+                  compactDelivery ? 'text-sm font-medium text-heading' : 'text-xs font-semibold uppercase tracking-wide text-muted',
+                )}>
+                  {tankers.length > 1 ? `Tanker ${index + 1}` : 'Tanker'}
+                </p>
+                {tankers.length > 1 && allowAddTanker && (
+                  <button
+                    type="button"
+                    onClick={() => removeTanker(index)}
+                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-danger transition-colors"
+                    aria-label={`Remove tanker ${index + 1}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </button>
+                )}
+              </div>
+            )}
+            {showSalesInvoicePerTanker && !hideQty ? (
+              <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
+                <Input
+                  label={tankerNoOptional ? 'Tanker No. (optional)' : 'Tanker No.'}
+                  value={tanker.tankerNo}
+                  error={fieldErrors?.[index]?.tankerNo}
+                  onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
+                  className={cn(fieldSize, 'uppercase font-mono')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="e.g. MH-12-RF-4236"
+                />
                 <QtyInput
-                  label={qtyLabel}
+                  label={qtyMode === 'actual' ? 'Actual weight (MT)' : qtyLabel}
                   value={tanker.actualQty}
                   maxQty={tankerMaxQty}
                   maxQtyMessage={tankerMaxQty != null && tankerMaxQty > 0
@@ -161,46 +220,102 @@ export function LiftTankersForm({
                     : undefined}
                   error={fieldErrors?.[index]?.actualQty}
                   onChange={e => updateTanker(index, { actualQty: sanitizeQtyInput(e.target.value) })}
-                  className="text-base"
+                  className={fieldSize}
                   placeholder={qtyPlaceholder}
                 />
-              )}
+                <Input
+                  label="Sales invoice no."
+                  value={tanker.salesInvoiceNo}
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                  className={cn(fieldSize, 'font-mono uppercase')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+              </div>
+            ) : null}
+            {showSalesInvoicePerTanker && hideQty && (
               <Input
-                label={tankerNoOptional ? 'Tanker No. (optional)' : 'Tanker No.'}
-                value={tanker.tankerNo}
-                error={fieldErrors?.[index]?.tankerNo}
-                onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-                className="text-base uppercase font-mono"
+                label="Sales invoice no."
+                value={tanker.salesInvoiceNo}
+                onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                className={cn(fieldSize, 'font-mono uppercase sm:max-w-xs')}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="e.g. MH-12-RF-4236"
+                placeholder="Optional"
               />
-              <Input
-                label="Transport Name"
-                value={tanker.transportName}
-                onChange={e => updateTanker(index, { transportName: e.target.value })}
-                className="text-base"
-                placeholder="e.g. Shree Logistics"
-              />
-              <Input
-                label="LR No."
-                value={tanker.lrNo}
-                onChange={e => updateTanker(index, { lrNo: e.target.value.toUpperCase() })}
-                className="text-base uppercase"
-                placeholder="e.g. LR-4521"
-              />
-              <Input
-                label="Driver Mobile"
-                value={tanker.driverMobile}
-                onChange={e => updateTanker(index, { driverMobile: e.target.value })}
-                className="text-base"
-                type="tel"
-                inputMode="tel"
-                placeholder="e.g. 9876543210"
-              />
-            </div>
+            )}
+            {!(showSalesInvoicePerTanker && !hideQty) && (
+              <div className={cn('grid grid-cols-1 sm:grid-cols-2', gridGap)}>
+                {!hideQty && (
+                  <QtyInput
+                    label={qtyLabel}
+                    value={tanker.actualQty}
+                    maxQty={tankerMaxQty}
+                    maxQtyMessage={tankerMaxQty != null && tankerMaxQty > 0
+                      ? `Cannot exceed ${formatQty(tankerMaxQty)} on this tanker`
+                      : undefined}
+                    error={fieldErrors?.[index]?.actualQty}
+                    onChange={e => updateTanker(index, { actualQty: sanitizeQtyInput(e.target.value) })}
+                    className={fieldSize}
+                    placeholder={qtyPlaceholder}
+                  />
+                )}
+                {!compactDelivery && (
+                  <Input
+                    label={tankerNoOptional ? 'Tanker No. (optional)' : 'Tanker No.'}
+                    value={tanker.tankerNo}
+                    error={fieldErrors?.[index]?.tankerNo}
+                    onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
+                    className={cn(fieldSize, 'uppercase font-mono')}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="e.g. MH-12-RF-4236"
+                  />
+                )}
+              </div>
+            )}
+            {compactDelivery ? (
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted hover:text-heading select-none">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 transition group-open:rotate-90" aria-hidden />
+                  Transport &amp; tanker no.
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {(hideQty || !(showSalesInvoicePerTanker && !hideQty)) && (
+                    <Input
+                      label={tankerNoOptional ? 'Tanker no. (optional)' : 'Tanker no.'}
+                      value={tanker.tankerNo}
+                      error={fieldErrors?.[index]?.tankerNo}
+                      onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
+                      className={cn(fieldSize, 'uppercase font-mono sm:max-w-md')}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="MH-12-RF-4236"
+                    />
+                  )}
+                  {transportFields(tanker, index)}
+                </div>
+              </details>
+            ) : (
+              transportFields(tanker, index)
+            )}
           </div>
           )
+
+          if (useSectionHeading) {
+            return (
+              <DeliveryFormSection
+                key={index}
+                title={`Tanker ${index + 1}`}
+                description="Weight and invoice for each tanker."
+              >
+                {tankerBody}
+              </DeliveryFormSection>
+            )
+          }
+
+          return <div key={index}>{tankerBody}</div>
         })}
       </div>
 

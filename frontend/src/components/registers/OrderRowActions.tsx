@@ -33,7 +33,7 @@ export function OrderRowActions({
   onCancelDelete,
   onBlockedDelete,
 }: OrderRowActionsProps) {
-  const { canEditOrders, isAdmin } = usePermissions()
+  const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
   const { classes: density } = useTableDensity()
   const isPO = order.side === 'purchase'
   const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
@@ -45,7 +45,7 @@ export function OrderRowActions({
         ...(canEditOrders
           ? [{ type: 'link' as const, label: 'Edit', icon: Pencil, href: editHref }]
           : []),
-        ...(isPO
+        ...(isPO && canCreateOrders
           ? [{
               type: 'link' as const,
               label: (sellAvailableQty ?? 0) > 0 ? 'Sell available' : 'Create SO',
@@ -82,7 +82,7 @@ export function OrderRowActions({
         onClick: () => shareOrderOnWhatsApp(order),
       }],
     },
-    ...(isAdmin
+    ...(canDeleteOrders
       ? [{
           items: [order.deleteScheduledAt
             ? { type: 'button' as const, label: 'Cancel deletion', icon: Undo2, onClick: onCancelDelete }
@@ -106,7 +106,8 @@ export function OrderRowActions({
     canDelete.ok,
     canDelete.reason,
     editHref,
-    isAdmin,
+    canCreateOrders,
+    canDeleteOrders,
     isPO,
     onBuyBack,
     onBlockedDelete,

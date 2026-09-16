@@ -172,15 +172,55 @@ export const tradeApi = {
     }),
 }
 
+export interface AuthMeResponse {
+  token?: string
+  userId?: number
+  username: string
+  email?: string
+  name: string
+  phone?: string
+  location?: string
+  preferences?: import('../lib/auth').UserPreferences
+  role: string
+  roleSlug?: string
+  roleName?: string
+  organisationId?: number | null
+  organisationName?: string | null
+  accountType?: 'wholesaler_retailer' | 'broker'
+  permissions?: string[]
+  isPlatformAdmin?: boolean
+  organisationSandboxTools?: boolean
+}
+
 export const authApi = {
   login: (username: string, password: string) =>
-    apiFetch<{ token: string; username: string; name: string; role: 'admin' | 'operator' }>(
-      '/auth/login',
-      { method: 'POST', body: JSON.stringify({ username, password }) },
-    ),
+    apiFetch<AuthMeResponse & { token: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
 
   logout: () => apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
 
-  me: () =>
-    apiFetch<{ username: string; name: string; role: 'admin' | 'operator' }>('/auth/me'),
+  me: () => apiFetch<AuthMeResponse>('/auth/me'),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiFetch<{ ok: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    }),
+
+  updateProfile: (body: { name?: string; phone?: string; location?: string }) =>
+    apiFetch<AuthMeResponse>('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  updatePreferences: (body: import('../lib/auth').UserPreferences) =>
+    apiFetch<AuthMeResponse>('/auth/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 }

@@ -86,7 +86,7 @@ export function DemoForm() {
           </h2>
           <p className="mt-4 text-white/70 leading-relaxed">
             Tell us how you buy, sell, and lift today. We’ll walk through purchase orders, tanker
-            splits, and remaining-to-lift on a working TradeOS desk.
+            splits, and remaining-to-lift on a working Tradeal desk.
           </p>
           <ul className="mt-6 space-y-3 text-sm text-white/75">
             <li className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export function DemoForm() {
               </span>
               <h3 className="mt-4 text-lg font-semibold text-heading">Request received</h3>
               <p className="mt-2 text-sm text-muted leading-relaxed">
-                Thanks — we’ll be in touch shortly to schedule a demo of TradeOS on your trades.
+                Thanks — we’ll be in touch shortly to schedule a demo of Tradeal on your trades.
               </p>
             </div>
           ) : (

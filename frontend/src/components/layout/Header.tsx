@@ -1,8 +1,10 @@
 import { Search, Command, Menu, Settings, Bot } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { Button } from '../ui/Button'
 import { NotificationsDropdown } from './NotificationsDropdown'
 import { UserMenu } from './UserMenu'
 import { cn } from '../../lib/utils'
+import { isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface HeaderProps {
   onOpenCommand: () => void
@@ -17,6 +19,10 @@ export function Header({
   onOpenAssistant,
   onOpenMobileNav,
 }: HeaderProps) {
+  const location = useLocation()
+  const platformAdminMode = isPlatformAdminPath(location.pathname)
+  const settingsPath = platformAdminMode ? '/platform-admin/settings' : '/settings'
+
   return (
     <header className="z-30 flex h-14 sm:h-[70px] shrink-0 items-center gap-1.5 sm:gap-3 bg-white dark:bg-card border-b border-gray-200/80 dark:border-gray-700/50 px-2.5 sm:px-6 pt-[env(safe-area-inset-top)] shadow-sm">
       <Button
@@ -36,7 +42,9 @@ export function Header({
         className="flex min-w-0 flex-1 max-w-[9.5rem] sm:max-w-md lg:max-w-xl items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-2.5 sm:px-3 py-2 text-sm text-muted hover:border-accent/40 hover:text-accent transition-colors cursor-pointer dark:border-gray-600 dark:bg-gray-700/30 attex-focus"
       >
         <Search className="h-[1.125rem] w-[1.125rem] shrink-0" />
-        <span className="hidden sm:inline flex-1 text-left truncate">Search orders, parties, lifts…</span>
+        <span className="hidden sm:inline flex-1 text-left truncate">
+          {platformAdminMode ? 'Search organisations, users, plans…' : 'Search orders, parties, lifts…'}
+        </span>
         <kbd className="hidden md:flex items-center gap-0.5 rounded border border-gray-200 dark:border-gray-600 px-1.5 py-0.5 text-[10px] shrink-0">
           <Command className="h-3 w-3" />K
         </kbd>
@@ -55,7 +63,7 @@ export function Header({
         </Button>
         <NotificationsDropdown />
         <div className="hidden md:contents">
-          <Button variant="ghost" size="icon" className={navIconButtonClass} aria-label="Settings" to="/settings">
+          <Button variant="ghost" size="icon" className={navIconButtonClass} aria-label="Settings" to={settingsPath}>
             <Settings className="h-5 w-5" />
           </Button>
         </div>

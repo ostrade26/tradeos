@@ -49,8 +49,6 @@ const PO_EXPORT_HEADERS = [
   'Delivery To',
   'Delivery Others',
   'Brokerage',
-  'Loading',
-  'Unloading',
   'Payment',
   'Remarks',
   'Spot',
@@ -77,8 +75,6 @@ const SO_EXPORT_HEADERS = [
   'Delivery To',
   'Delivery Others',
   'Brokerage',
-  'Loading',
-  'Unloading',
   'Payment',
   'Remarks',
   'Spot',
@@ -123,7 +119,7 @@ type ObjectSheet = (typeof OBJECT_SHEETS)[number]
 const EMPTY_COUNTERS: TradeCounters = { po: 0, so: 0, lift: 0, invoice: 0 }
 
 function backupFilename(ext: string) {
-  return `tradeos-backup-${new Date().toISOString().slice(0, 10)}.${ext}`
+  return `tradeal-backup-${new Date().toISOString().slice(0, 10)}.${ext}`
 }
 
 function isoDate(value?: string) {
@@ -196,8 +192,6 @@ function purchaseOrderRow(order: TradeOrder, lifts: Lift[]) {
     'Delivery To': isoDate(order.deliveryPeriodEnd),
     'Delivery Others': deliveryOthers(order),
     Brokerage: formatBrokerageExport(order),
-    Loading: '',
-    Unloading: order.unloading ?? '',
     Payment: order.paymentTerms ?? '',
     Remarks: order.remarks ?? '',
     Spot: order.spot,
@@ -222,8 +216,6 @@ function salesOrderRow(order: TradeOrder) {
     'Delivery To': isoDate(order.deliveryPeriodEnd),
     'Delivery Others': deliveryOthers(order),
     Brokerage: formatBrokerageExport(order),
-    Loading: '',
-    Unloading: order.unloading ?? '',
     Payment: order.paymentTerms ?? '',
     Remarks: order.remarks ?? '',
     Spot: order.spot,
@@ -949,7 +941,7 @@ export async function exportImportTemplate() {
   const out = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   downloadFile(
     new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    'tradeos-import-template.xlsx',
+    'tradeal-import-template.xlsx',
   )
 }
 

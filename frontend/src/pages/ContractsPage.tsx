@@ -108,7 +108,7 @@ export function ContractsPage() {
       <PageHeader
         title="Contract Confirmations"
         subtitle={`${filtered.length} contracts`}
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Contracts' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Contracts' }]} />}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4" /> Export</Button>

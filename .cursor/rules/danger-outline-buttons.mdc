@@ -1,0 +1,21 @@
+---
+description: Destructive outline buttons use outlineDanger variant (red text + red border)
+globs: frontend/**/*.tsx
+alwaysApply: false
+---
+
+# Danger outline buttons
+
+When a button is **outline-style with red/destructive text** (delete, disable, remove), use the shared `Button` variant — do not hand-roll red text on `variant="outline"`.
+
+```tsx
+// Correct
+<Button variant="outlineDanger" size="sm">Delete user</Button>
+
+// Wrong — red text without matching border
+<Button variant="outline" className="text-red-600 dark:text-red-400">Delete</Button>
+```
+
+`outlineDanger` is defined in `frontend/src/components/ui/Button.tsx` (`text-danger` + `border-danger/30`, hover states included).
+
+Solid filled destructive actions use `variant="danger"`.

@@ -94,7 +94,7 @@ export function LotDetailsPage() {
       <div className="animate-fade-in">
         <PageHeader
           title="Lot not found"
-          breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: 'Not found' }]} />}
+          breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: 'Not found' }]} />}
         />
         <EmptyState
           card
@@ -119,7 +119,7 @@ export function LotDetailsPage() {
         title={lot.lotNumber}
         subtitle={`${lot.commodity} · Purchased from ${lot.producer}`}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Inventory', href: '/inventory' },
           { label: lot.lotNumber },
         ]} />}

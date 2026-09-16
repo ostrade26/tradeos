@@ -7,7 +7,11 @@ import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 
 /** Above docked detail column (z-1000). Context menus use z-1250 (DetailPanelMenu). */
-const OVERLAY_Z = 1200
+export const DETAIL_OVERLAY_Z = 1200
+/** Register table sits above the undocked overlay so rows stay selectable. */
+export const REGISTER_TABLE_LAYER_Z = 1210
+
+const OVERLAY_Z = DETAIL_OVERLAY_Z
 
 /** Full-screen dim overlay — no blur; keeps focus on modal/drawer content */
 const overlayClass = 'absolute inset-0 bg-black/45 dark:bg-black/55'
@@ -17,6 +21,8 @@ const panelWidths = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg' }
 interface DetailPanelShellProps {
   title: string
   subtitle?: string
+  /** Status chips etc. — shown on the subtitle row (e.g. org active). */
+  headerBadges?: ReactNode
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
@@ -29,6 +35,7 @@ interface DetailPanelShellProps {
 export function DetailPanelShell({
   title,
   subtitle,
+  headerBadges,
   children,
   footer,
   onClose,
@@ -40,9 +47,16 @@ export function DetailPanelShell({
   return (
     <div className={cn('flex h-full min-h-0 flex-col bg-white dark:bg-card', className)}>
       <div className="flex shrink-0 items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3 sm:px-5">
-        <div className="min-w-0 pr-3">
+        <div className="min-w-0 pr-3 flex-1">
           <h2 id="drawer-title" className="text-base font-semibold text-heading truncate">{title}</h2>
-          {subtitle && <p className="text-[14px] text-muted mt-0.5 truncate">{subtitle}</p>}
+          {(subtitle || headerBadges) && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 min-w-0">
+              {subtitle ? (
+                <p className="text-[14px] text-muted tabular-nums truncate">{subtitle}</p>
+              ) : null}
+              {headerBadges}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {headerActions}
@@ -79,15 +93,30 @@ interface DrawerProps {
   onClose: () => void
   title: string
   subtitle?: string
+  headerBadges?: ReactNode
   children: ReactNode
   footer?: ReactNode
   width?: 'sm' | 'md' | 'lg'
   headerActions?: ReactNode
+  /** `registerDetail` — modal backdrop; register table layer (z-1210) stays clickable. */
+  variant?: 'modal' | 'registerDetail'
 }
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'md', headerActions }: DrawerProps) {
+export function Drawer({
+  open,
+  onClose,
+  title,
+  subtitle,
+  headerBadges,
+  children,
+  footer,
+  width = 'md',
+  headerActions,
+  variant = 'modal',
+}: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(panelRef, open)
+  const isRegisterDetail = variant === 'registerDetail'
+  useFocusTrap(panelRef, open && variant === 'modal')
 
   useEffect(() => {
     if (!open) return
@@ -106,27 +135,45 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
   if (!open) return null
 
+  const panelShell = (
+    <DetailPanelShell
+      title={title}
+      subtitle={subtitle}
+      headerBadges={headerBadges}
+      footer={footer}
+      onClose={onClose}
+      headerActions={headerActions}
+    >
+      {children}
+    </DetailPanelShell>
+  )
+
+  const panelNode = (
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal={isRegisterDetail ? 'false' : 'true'}
+      aria-labelledby="drawer-title"
+      className={cn(
+        'fixed inset-y-0 right-0 z-10 flex max-h-viewport w-full flex-col bg-white shadow-lg animate-slide-in dark:bg-card overscroll-contain',
+        panelWidths[width],
+      )}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+    >
+      {panelShell}
+    </div>
+  )
+
   return createPortal(
-    <div className="fixed inset-0 flex justify-end" style={{ zIndex: OVERLAY_Z }}>
-      <div className={overlayClass} onClick={onClose} aria-hidden />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="drawer-title"
-        className={cn('relative z-10 flex h-full max-h-viewport w-full flex-col bg-white shadow-lg animate-slide-in dark:bg-card overscroll-contain', panelWidths[width])}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        <DetailPanelShell
-          title={title}
-          subtitle={subtitle}
-          footer={footer}
-          onClose={onClose}
-          headerActions={headerActions}
-        >
-          {children}
-        </DetailPanelShell>
-      </div>
+    <div className="fixed inset-0" style={{ zIndex: OVERLAY_Z }}>
+      <button
+        type="button"
+        aria-label="Close panel"
+        className={cn(overlayClass, 'fixed inset-0 z-0 cursor-default border-0 p-0')}
+        onClick={onClose}
+      />
+      {panelNode}
     </div>,
     document.body,
   )
@@ -135,6 +182,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 interface DockedPanelProps {
   title: string
   subtitle?: string
+  headerBadges?: ReactNode
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
@@ -146,6 +194,7 @@ interface DockedPanelProps {
 export function DockedPanel({
   title,
   subtitle,
+  headerBadges,
   children,
   footer,
   onClose,
@@ -153,7 +202,7 @@ export function DockedPanel({
   width = 'lg',
   className,
 }: DockedPanelProps) {
-  const { containerRef, open, setOpen } = useDetailPanelSlot()
+  const { containerRef, setOpen } = useDetailPanelSlot()
 
   useLayoutEffect(() => {
     setOpen(true, width)
@@ -161,13 +210,14 @@ export function DockedPanel({
   }, [setOpen, width])
 
   const container = containerRef.current
-  if (!open || !container) return null
+  if (!container) return null
 
   return createPortal(
     <div className={cn('flex h-full min-h-0 flex-col overflow-hidden', className)}>
       <DetailPanelShell
         title={title}
         subtitle={subtitle}
+        headerBadges={headerBadges}
         footer={footer}
         onClose={onClose}
         headerActions={headerActions}
@@ -184,6 +234,7 @@ interface ModalProps {
   open: boolean
   onClose: () => void
   title: string
+  subtitle?: ReactNode
   children: ReactNode
   footer?: ReactNode
   footerClassName?: string
@@ -192,7 +243,7 @@ interface ModalProps {
   hideHeader?: boolean
 }
 
-export function Modal({ open, onClose, title, children, footer, footerClassName, size = 'md', hideHeader = false }: ModalProps) {
+export function Modal({ open, onClose, title, subtitle, children, footer, footerClassName, size = 'md', hideHeader = false }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, open)
 
@@ -243,9 +294,12 @@ export function Modal({ open, onClose, title, children, footer, footerClassName,
               </button>
             </>
           ) : (
-            <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-5">
-              <h2 id="modal-title" className="text-lg font-semibold text-heading pr-3">{title}</h2>
-              <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus" aria-label="Close dialog">
+            <div className="flex items-start justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-5">
+              <div className="min-w-0 pr-3">
+                <h2 id="modal-title" className="text-lg font-semibold text-heading">{title}</h2>
+                {subtitle ? <p className="text-sm text-muted mt-0.5">{subtitle}</p> : null}
+              </div>
+              <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus" aria-label="Close dialog">
                 <X className="h-4 w-4" />
               </button>
             </div>

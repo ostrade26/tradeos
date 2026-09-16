@@ -23,6 +23,11 @@ export function useUnsavedChangesGuard({
   const leavingRef = useRef(false)
 
   useEffect(() => {
+    if (shouldBlock || blocker.state !== 'blocked') return
+    blocker.reset?.()
+  }, [shouldBlock, blocker])
+
+  useEffect(() => {
     if (!shouldBlock) return
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()

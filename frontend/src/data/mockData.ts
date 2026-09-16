@@ -69,13 +69,6 @@ export interface TradeOrder {
   rateBasis?: string
   ratePerBasis?: number
   paymentTerms?: string
-  unloading?: string
-  /** PO-only — total freight in ₹ */
-  freightCost?: number
-  /** PO-only — total loading in ₹ */
-  loadingCost?: number
-  /** PO-only — other landed costs in ₹ */
-  otherCost?: number
   remarks?: string
   status: OrderStatus
   /** How the order was closed when liftedQty < orderQty. */
@@ -120,6 +113,8 @@ export interface LiftTanker {
   lrNo: string
   /** Actual weighed quantity loaded on this tanker (MT). */
   actualQtyMt?: number
+  /** Sales invoice for this tanker (multi-tanker deliveries). */
+  salesInvoiceNo?: string
 }
 
 export type LiftStatus = 'pending' | 'delivered'
@@ -312,14 +307,26 @@ export const items: string[] = []
 
 /** @deprecated Use useTradeStore() — kept for type-only imports */
 
-export function toBeLifted(order: Pick<TradeOrder, 'orderQty' | 'committedLiftQty' | 'liftedQty'>): number {
-  const committed = order.committedLiftQty ?? order.liftedQty
-  return Math.max(0, order.orderQty - committed)
+function orderQtyCap(order: Pick<TradeOrder, 'orderQty' | 'liftedQty' | 'buyBacks' | 'side'>): number {
+  if (order.side === 'purchase') {
+    const boughtBack = (order.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
+    return Math.max(0, order.orderQty - boughtBack)
+  }
+  return order.orderQty
 }
 
-/** Qty not yet physically lifted (delivered) — matches PO/SO Qty minus Lifted Qty. */
-export function unliftedQty(order: Pick<TradeOrder, 'orderQty' | 'liftedQty'>): number {
-  return roundQtyMt(Math.max(0, order.orderQty - order.liftedQty))
+export function toBeLifted(
+  order: Pick<TradeOrder, 'orderQty' | 'committedLiftQty' | 'liftedQty' | 'buyBacks' | 'side'>,
+): number {
+  const committed = order.committedLiftQty ?? order.liftedQty
+  return Math.max(0, orderQtyCap(order) - committed)
+}
+
+/** Qty not yet physically lifted (delivered) — active qty minus lifted. */
+export function unliftedQty(
+  order: Pick<TradeOrder, 'orderQty' | 'liftedQty' | 'buyBacks' | 'side'>,
+): number {
+  return roundQtyMt(Math.max(0, orderQtyCap(order) - order.liftedQty))
 }
 
 export function getLiftsPending(lifts: Lift[]): Lift[] {
@@ -374,7 +381,8 @@ export function getRemainingSellQty(orders: TradeOrder[], poRef: string): number
   const soldQty = orders
     .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled')
     .reduce((sum, o) => sum + o.orderQty, 0)
-  return roundQtyMt(po.orderQty - soldQty)
+  const cap = orderQtyCap(po)
+  return roundQtyMt(cap - soldQty)
 }
 
 export function getSOsForPO(orders: TradeOrder[], poRef: string): TradeOrder[] {

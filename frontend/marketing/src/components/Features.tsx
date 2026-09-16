@@ -20,7 +20,7 @@ const features = [
   {
     icon: FileUp,
     title: 'Broker contract PDF import',
-    body: 'Drop the contract. TradeOS reads parties, item, rate, and quantity so the order is not retyped from a printout.',
+    body: 'Drop the contract. Tradeal reads parties, item, rate, and quantity so the order is not retyped from a printout.',
   },
   {
     icon: MessageCircle,
@@ -44,7 +44,7 @@ export function Features() {
             The register, the tanker, and the lot — together.
           </h2>
           <p className="mt-4 max-w-2xl text-muted leading-relaxed">
-            TradeOS is the operating desk: capture the contract, dispatch the lift, and close the lot
+            Tradeal is the operating desk: capture the contract, dispatch the lift, and close the lot
             without a second system for each step.
           </p>
         </Reveal>

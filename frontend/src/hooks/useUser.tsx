@@ -1,45 +1,89 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { roleLabel } from '../lib/auth'
+import { authApi } from '../api/tradeApi'
+import { saveAuthSession, loadAuthSession } from '../lib/auth'
+import { sessionFromApi } from '../lib/authSession'
+import { profileFromSession } from '../lib/profileFromSession'
 import {
   loadUserProfile,
   saveUserProfile,
   userInitials,
   type UserProfile,
 } from '../lib/userProfile'
+import { preferenceUserKey } from '../lib/userPreferences'
 import { useAuth } from './useAuth'
 
 interface UserContextValue {
   profile: UserProfile
   initials: string
-  updateProfile: (patch: Partial<UserProfile>) => void
+  updateProfile: (patch: Partial<UserProfile>) => Promise<void>
 }
 
 const UserContext = createContext<UserContextValue | null>(null)
 
+function mergeProfile(sessionProfile: UserProfile, stored: UserProfile): UserProfile {
+  return {
+    name: sessionProfile.name.trim() ? sessionProfile.name : stored.name,
+    email: sessionProfile.email.trim() ? sessionProfile.email : stored.email,
+    phone: sessionProfile.phone.trim() ? sessionProfile.phone : stored.phone,
+    location: sessionProfile.location.trim() ? sessionProfile.location : stored.location,
+    role: sessionProfile.role || stored.role,
+  }
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const [profile, setProfile] = useState<UserProfile>(() => loadUserProfile())
+  const userKey = preferenceUserKey()
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const stored = loadUserProfile(userKey)
+    return mergeProfile(profileFromSession(session), stored)
+  })
 
   useEffect(() => {
-    if (!session) return
-    setProfile(prev => {
-      const next: UserProfile = {
-        ...prev,
-        name: session.name,
-        role: roleLabel(session.role),
-      }
-      saveUserProfile(next)
-      return next
-    })
-  }, [session?.username, session?.name, session?.role])
+    if (!session?.userId && !session?.username) return
+    const key = preferenceUserKey()
+    const fromSession = profileFromSession(session)
+    const stored = loadUserProfile(key)
+    const next = mergeProfile(fromSession, stored)
+    setProfile(next)
+    saveUserProfile(next, key)
+  }, [
+    session?.userId,
+    session?.username,
+    session?.name,
+    session?.email,
+    session?.phone,
+    session?.location,
+    session?.roleSlug,
+    session?.roleName,
+    session?.role,
+  ])
 
-  const updateProfile = useCallback((patch: Partial<UserProfile>) => {
-    setProfile(prev => {
-      const next = { ...prev, ...patch }
-      saveUserProfile(next)
-      return next
-    })
-  }, [])
+  const updateProfile = useCallback(async (patch: Partial<UserProfile>) => {
+    const { role: _role, email: _email, ...writable } = patch
+    const next = { ...profile, ...patch }
+    setProfile(next)
+    saveUserProfile(next, userKey)
+
+    const token = loadAuthSession()?.token
+    if (!token) return
+
+    try {
+      const result = await authApi.updateProfile({
+        name: writable.name ?? profile.name,
+        phone: writable.phone ?? profile.phone,
+        location: writable.location ?? profile.location,
+      })
+      const current = loadAuthSession()
+      if (current?.token) {
+        saveAuthSession(sessionFromApi(result, current.token))
+      }
+      const synced = profileFromSession(sessionFromApi(result, token))
+      setProfile(prev => ({ ...synced, role: prev.role }))
+      saveUserProfile({ ...next, ...synced }, preferenceUserKey())
+    } catch {
+      /* keep local optimistic state */
+    }
+  }, [profile, userKey])
 
   const value = useMemo(
     () => ({

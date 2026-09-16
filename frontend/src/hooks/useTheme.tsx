@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   applyAccentColor,
   getStoredAccentId,
@@ -11,7 +11,9 @@ import {
   CUSTOM_ACCENT_ID,
   normalizeHex,
 } from '../lib/accentColor'
-import { storageGet, storageSet } from '../lib/storage'
+import { readScopedPref, writeScopedPref } from '../lib/userPreferences'
+import { schedulePersistPreferences } from './usePersistUserPreferences'
+import { useAuth } from './useAuth'
 
 type Theme = 'light' | 'dark'
 
@@ -29,33 +31,64 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
+function readTheme(userKey: string | null): Theme {
+  const stored = readScopedPref('tradeal-theme', userKey)
+  return stored === 'dark' ? 'dark' : 'light'
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = storageGet('tradeos-theme')
-    return (stored as Theme) || 'light'
-  })
-  const [accentId, setAccentIdState] = useState(getStoredAccentId)
-  const [customHex, setCustomHexState] = useState(getStoredCustomHex)
+  const { session } = useAuth()
+  const userKey = session?.username ?? null
+
+  const [theme, setThemeState] = useState<Theme>(() => readTheme(userKey))
+  const [accentId, setAccentIdState] = useState(() => getStoredAccentId(userKey))
+  const [customHex, setCustomHexState] = useState(() => getStoredCustomHex(userKey))
+
+  useEffect(() => {
+    setThemeState(readTheme(userKey))
+    setAccentIdState(getStoredAccentId(userKey))
+    setCustomHexState(getStoredCustomHex(userKey))
+  }, [userKey])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
-    storageSet('tradeos-theme', theme)
+    writeScopedPref('tradeal-theme', theme, userKey)
     applyAccentColor(accentId, theme === 'dark', customHex)
-  }, [theme, accentId, customHex])
+  }, [theme, accentId, customHex, userKey])
+
+  const skipNextPersist = useRef(true)
+  useEffect(() => {
+    if (!userKey) return
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false
+      return
+    }
+    schedulePersistPreferences({ theme, accentId, customHex })
+  }, [theme, accentId, customHex, userKey])
+
+  useEffect(() => {
+    skipNextPersist.current = true
+  }, [userKey])
 
   const toggleTheme = () => setThemeState(t => (t === 'light' ? 'dark' : 'light'))
   const setTheme = (next: Theme) => setThemeState(next)
-  const setAccentId = (next: string) => {
-    setAccentIdState(next)
-    storeAccentId(next)
-  }
-  const setCustomAccent = (hex: string) => {
-    const next = normalizeHex(hex)
-    setCustomHexState(next)
-    storeCustomHex(next)
-    setAccentIdState(CUSTOM_ACCENT_ID)
-    storeAccentId(CUSTOM_ACCENT_ID)
-  }
+  const setAccentId = useCallback(
+    (next: string) => {
+      setAccentIdState(next)
+      storeAccentId(next, userKey)
+    },
+    [userKey],
+  )
+  const setCustomAccent = useCallback(
+    (hex: string) => {
+      const next = normalizeHex(hex)
+      setCustomHexState(next)
+      storeCustomHex(next, userKey)
+      setAccentIdState(CUSTOM_ACCENT_ID)
+      storeAccentId(CUSTOM_ACCENT_ID, userKey)
+    },
+    [userKey],
+  )
 
   const accentPreset = resolveAccent(accentId, customHex)
 

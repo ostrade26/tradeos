@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { Button } from './Button'
+import { Select } from './Select'
 import { Checkbox } from './Checkbox'
 import { EmptyState, emptyStateShellClass } from './Tabs'
 import type { SortDirection } from '../../lib/registerSort'
@@ -18,6 +19,8 @@ interface Column<T> {
   className?: string
   sortable?: boolean
   sortValue?: (row: T) => string | number
+  /** Multi-button row actions (e.g. Approve / Reject) — wider sticky column than the ⋯ menu. */
+  actionsWide?: boolean
 }
 
 interface DataTableProps<T> {
@@ -42,6 +45,8 @@ interface DataTableProps<T> {
   stickyFirstColumn?: boolean
   stickyLastColumn?: boolean
   qtyNote?: boolean
+  /** Stretch table to container width (default grows with column content). */
+  fullWidth?: boolean
 }
 
 interface DataTablePaginationProps {
@@ -76,19 +81,24 @@ function DataTablePagination({
       </p>
 
       <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-        <label className="flex items-center gap-2 text-[14px] text-muted">
-          Rows per page
-          <select
-            value={pageSize}
-            onChange={e => onPageSizeChange(Number(e.target.value))}
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-[14px] text-heading dark:border-gray-600 dark:bg-card attex-focus cursor-pointer"
-            aria-label="Rows per page"
-          >
-            {pageSizeOptions.map(size => (
-              <option key={size} value={size}>{size}</option>
-            ))}
-          </select>
-        </label>
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] text-muted whitespace-nowrap">Rows per page</span>
+          <div className="w-[4.75rem] shrink-0">
+            <Select
+              compact
+              searchable={false}
+              options={pageSizeOptions.map(size => ({
+                value: String(size),
+                label: String(size),
+              }))}
+              value={String(pageSize)}
+              onChange={e => {
+                const next = Number(e.target.value)
+                if (Number.isFinite(next) && next > 0) onPageSizeChange(next)
+              }}
+            />
+          </div>
+        </div>
 
         <div className="flex items-center gap-1">
           <Button
@@ -153,12 +163,14 @@ const STICKY_ACTIONS_SHADOW = 'table-sticky-actions'
 /** ⋯ control — horizontal sizing; vertical padding comes from table density. */
 const STICKY_ACTIONS_COL =
   'px-2 w-[3.75rem] min-w-[3.75rem] max-w-[3.75rem] text-center'
+const STICKY_ACTIONS_COL_WIDE =
+  'px-3 min-w-[11.75rem] w-[11.75rem] max-w-[11.75rem] text-right whitespace-nowrap'
 
 /** Checkbox column width — must match sticky offset for the first data column (`md:left-14`). */
 const CHECKBOX_COL_CLASS = 'w-14 min-w-14 max-w-14 p-0'
 const CHECKBOX_COL_INNER = 'flex h-full w-full items-center justify-center'
 
-export function DataTable<T extends { id?: string }>({
+export function DataTable<T extends { id?: string | number }>({
   columns,
   data,
   onRowClick,
@@ -179,15 +191,24 @@ export function DataTable<T extends { id?: string }>({
   stickyFirstColumn = false,
   stickyLastColumn,
   qtyNote = false,
+  fullWidth = false,
 }: DataTableProps<T>) {
   const { classes: density } = useTableDensity()
   const hasCheckboxColumn = Boolean(onSelectRow && getRowId)
   const stickyRefLeft = hasCheckboxColumn ? 'left-0 md:left-14' : 'left-0'
   const lastColIndex = columns.length - 1
-  const stickActions = stickyLastColumn ?? columns[lastColIndex]?.key === 'actions'
+  const lastColumn = columns[lastColIndex]
+  const stickActions = stickyLastColumn ?? lastColumn?.key === 'actions'
+  const stickyActionsColClass =
+    lastColumn?.actionsWide ? STICKY_ACTIONS_COL_WIDE : STICKY_ACTIONS_COL
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(defaultPageSize)
+
+  const resolvedPageSizeOptions = useMemo(() => {
+    const sizes = new Set([...pageSizeOptions, defaultPageSize, pageSize])
+    return [...sizes].sort((a, b) => a - b)
+  }, [pageSizeOptions, defaultPageSize, pageSize])
 
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize))
 
@@ -235,7 +256,7 @@ export function DataTable<T extends { id?: string }>({
   return (
     <div className="rounded-md bg-card shadow-[var(--shadow-card)]">
       {mobileRender && (
-        <div className={cn('md:hidden divide-y divide-gray-200 dark:divide-gray-700', density.text)}>
+        <div data-register-table className={cn('md:hidden divide-y divide-gray-200 dark:divide-gray-700', density.text)}>
           {visibleData.map((row, i) => {
             const id = getRowId?.(row) || (row as { id?: string }).id || String(i)
             const checked = selectedRows.includes(id)
@@ -258,7 +279,15 @@ export function DataTable<T extends { id?: string }>({
       )}
 
       <div className={cn('overflow-x-auto', mobileRender && 'hidden md:block')}>
-        <table className={cn('min-w-full w-max border-collapse', density.text, density.leading)}>
+        <table
+          data-register-table
+          className={cn(
+            'min-w-full border-collapse',
+            fullWidth ? 'w-full' : 'w-max',
+            density.text,
+            density.leading,
+          )}
+        >
           {(hasCheckboxColumn || stickyFirstColumn || stickActions) && (
             <colgroup>
               {hasCheckboxColumn && <col className="hidden md:table-column" style={{ width: 56 }} />}
@@ -309,7 +338,7 @@ export function DataTable<T extends { id?: string }>({
                   key={col.key}
                   scope="col"
                   className={cn(
-                    isStickyLast ? `${STICKY_ACTIONS_COL} ${density.actionsY}` : `${density.cellX} ${density.headerY} text-left`,
+                    isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.headerY} text-left`,
                     `${density.text} font-medium text-muted`,
                     gridCellClasses(false, isStickyFirst || isStickyLast, true),
                     col.sortable && onSortChange && 'cursor-pointer select-none group',
@@ -389,7 +418,7 @@ export function DataTable<T extends { id?: string }>({
                     <td
                       key={col.key}
                       className={cn(
-                        isStickyLast ? `${STICKY_ACTIONS_COL} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
+                        isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
                         `${density.text} text-gray-700 dark:text-gray-300`,
                         gridCellClasses(highlighted, isStickyCol),
                         !highlighted && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
@@ -428,7 +457,7 @@ export function DataTable<T extends { id?: string }>({
               page={page}
               pageSize={pageSize}
               totalItems={data.length}
-              pageSizeOptions={pageSizeOptions}
+              pageSizeOptions={resolvedPageSizeOptions}
               onPageChange={setPage}
               onPageSizeChange={handlePageSizeChange}
             />

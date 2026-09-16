@@ -140,18 +140,29 @@ export function formatDateRange(start: string, end: string): string {
   return formatDate(end)
 }
 
+const DATE_TIME_DISPLAY: Intl.DateTimeFormatOptions = {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+}
+
+function parseDateTimeValue(value: string): Date | null {
+  const text = value.trim()
+  if (!text) return null
+  if (text.includes('T')) {
+    const instant = new Date(text)
+    return Number.isNaN(instant.getTime()) ? null : instant
+  }
+  return parseDateValue(text.slice(0, 10))
+}
+
 export function formatDateTime(date: string): string {
   if (!date) return '—'
-  const parsed = parseDateValue(date.includes('T') ? date : date.slice(0, 10))
-    ?? (Number.isNaN(Date.parse(date)) ? null : new Date(date))
+  const parsed = parseDateTimeValue(date)
   if (!parsed) return '—'
-  return new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(parsed)
+  return new Intl.DateTimeFormat('en-IN', DATE_TIME_DISPLAY).format(parsed)
 }
 
 /** Round to 3 decimal places (MT). */

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -11,6 +12,8 @@ from pydantic import BaseModel, ConfigDict
 
 from . import auth
 from .db import init_db, insert_demo_request, ping_db
+from .identity.org_api import router as organisation_router
+from .identity.platform_api import router as platform_router
 from .trade.service import TradeService
 import os
 
@@ -25,13 +28,14 @@ OPENAPI_TAGS = [
     {"name": "directory", "description": "Brokers, producers, and retailers."},
     {"name": "catalog", "description": "Items and delivery spots."},
     {"name": "companies", "description": "Company linking from contract PDFs."},
-    {"name": "leads", "description": "Marketing demo requests from the TradeOS website."},
+    {"name": "leads", "description": "Marketing demo requests from the Tradeal website."},
+    {"name": "platform", "description": "Tradeal platform admin — organisations and users."},
 ]
 
 app = FastAPI(
-    title="TradeOS API",
+    title="Tradeal API",
     description=(
-        "REST API for TradeOS — purchase/sales orders, lifts, allocations, and directory data.\n\n"
+        "REST API for Tradeal — purchase/sales orders, lifts, allocations, and directory data.\n\n"
         "**Swagger UI:** [/docs](/docs) · **ReDoc:** [/redoc](/redoc) · **OpenAPI JSON:** [/openapi.json](/openapi.json)"
     ),
     version="1.0.0",
@@ -40,8 +44,34 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
-service = TradeService()
-API_TOKEN = (os.environ.get("TRADEOS_API_TOKEN") or "").strip()
+app.include_router(platform_router)
+app.include_router(organisation_router)
+
+
+def _integrity_error_detail(exc: BaseException) -> str:
+    text = str(exc).casefold()
+    if "row-level security" in text:
+        return "Could not save organisation trade data. Retry after deploy, or contact support."
+    if "users" in text and ("username" in text or "email" in text or "unique" in text):
+        return "A user with this login email already exists."
+    if "unique" in text or "duplicate" in text:
+        return "This conflicts with an existing record."
+    return "Database constraint violation."
+
+
+@app.exception_handler(sqlite3.IntegrityError)
+async def sqlite_integrity_handler(_request: Request, exc: sqlite3.IntegrityError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": _integrity_error_detail(exc)})
+
+
+try:
+    from psycopg.errors import IntegrityError as PsycopgIntegrityError
+
+    @app.exception_handler(PsykopgIntegrityError)
+    async def psycopg_integrity_handler(_request: Request, exc: PsycopgIntegrityError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": _integrity_error_detail(exc)})
+except ImportError:
+    pass
 
 
 def _cors_origins() -> list[str]:
@@ -90,11 +120,45 @@ class LoginBody(BaseModel):
     password: str
 
 
+class ProfilePatchBody(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    location: str | None = None
+
+
+class PreferencesPatchBody(BaseModel):
+    theme: str | None = None
+    accentId: str | None = None
+    customHex: str | None = None
+    tableDensity: str | None = None
+
+
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str
+
+
 def _session(request: Request) -> auth.Session:
     session = getattr(request.state, "session", None)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return session
+
+
+def _trade_service(request: Request) -> TradeService:
+    session = _session(request)
+    org_id = auth.resolve_organisation_id(session, request)
+    return TradeService(org_id)
+
+
+def _order_perm(side: str, action: str) -> str:
+    prefix = "purchase" if side == "purchase" else "sales"
+    return f"{prefix}.{action}"
+
+
+def _require_order_perm(session: auth.Session, body: dict, action: str) -> None:
+    side = (body.get("side") or "purchase").strip()
+    auth.require_permission(session, _order_perm(side, action))
 
 
 @app.on_event("startup")
@@ -113,24 +177,30 @@ async def auth_guard(request: Request, call_next):
 
     session = auth.session_from_request(request)
 
-    if path.startswith("/api/v1/admin"):
-        if session and session.role == "admin":
+    if path.startswith("/api/v1/platform"):
+        if session and session.user.role_slug == "platform_admin":
             request.state.session = session
             return await call_next(request)
-        if API_TOKEN:
-            header = request.headers.get("x-tradeos-token") or ""
-            auth_header = request.headers.get("authorization") or ""
-            token = header.strip() or (
-                auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
-            )
-            if token == API_TOKEN:
-                return await call_next(request)
+        if auth.is_api_token_request(request):
+            return await call_next(request)
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    if path.startswith("/api/v1/admin"):
+        if auth.is_api_token_request(request):
+            return await call_next(request)
+        if session:
+            request.state.session = session
+            return await call_next(request)
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
     if not session:
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
 
     request.state.session = session
+    if session.user.role_slug != "platform_admin":
+        from .identity.repository import touch_user_activity
+
+        touch_user_activity(session.user.id)
     return await call_next(request)
 
 
@@ -168,7 +238,7 @@ def _handle(fn):
 @app.get("/")
 def root() -> dict:
     return {
-        "name": "TradeOS API",
+        "name": "Tradeal API",
         "swagger": "/docs",
         "redoc": "/redoc",
         "openapi": "/openapi.json",
@@ -212,51 +282,118 @@ def auth_me(request: Request) -> dict:
     return auth.session_to_dict(_session(request))
 
 
+@app.patch("/api/v1/auth/profile", tags=["auth"], summary="Update your profile")
+def auth_update_profile(body: ProfilePatchBody, request: Request) -> dict:
+    session = _session(request)
+    from .identity.repository import append_audit_log, update_user_profile
+
+    user = update_user_profile(
+        session.user.id,
+        name=body.name,
+        phone=body.phone,
+        location=body.location,
+    )
+    append_audit_log(
+        organisation_id=session.user.organisation_id,
+        actor_user_id=session.user.id,
+        action="user.profile_updated",
+        entity_type="user",
+        entity_id=str(session.user.id),
+    )
+    from .identity.repository import Session as AuthSessionModel
+
+    return auth.session_to_dict(AuthSessionModel(token=session.token, user=user, created_at=session.created_at))
+
+
+@app.patch("/api/v1/auth/preferences", tags=["auth"], summary="Update appearance preferences")
+def auth_update_preferences(body: PreferencesPatchBody, request: Request) -> dict:
+    session = _session(request)
+    from .identity.repository import Session as AuthSessionModel, merge_user_preferences
+
+    patch = body.model_dump(exclude_unset=True)
+    user = merge_user_preferences(session.user.id, patch)
+    return auth.session_to_dict(AuthSessionModel(token=session.token, user=user, created_at=session.created_at))
+
+
+@app.post("/api/v1/auth/change-password", tags=["auth"], summary="Change your password")
+def auth_change_password(body: ChangePasswordBody, request: Request) -> dict:
+    session = _session(request)
+    from .identity.repository import append_audit_log, change_user_password
+
+    change_user_password(session.user.id, body.current_password, body.new_password)
+    append_audit_log(
+        organisation_id=session.user.organisation_id,
+        actor_user_id=session.user.id,
+        action="auth.password_changed",
+        entity_type="user",
+        entity_id=str(session.user.id),
+    )
+    return {"ok": True}
+
+
 @app.get("/api/v1/state", tags=["state"], summary="Get full trade state")
 def get_state(request: Request) -> dict:
     """Returns orders, lifts, directory entries, companies, counters, and related data."""
-    _session(request)
-    return service.get_state()
+    session = _session(request)
+    if session.user.role_slug == "platform_admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Tradeal platform admin accounts cannot access organisation trade data",
+        )
+    if not (
+        auth.user_has_permission(session, "purchase.view")
+        or auth.user_has_permission(session, "sales.view")
+    ):
+        auth.require_permission(session, "purchase.view")
+    return _trade_service(request).get_state()
 
 
 @app.post("/api/v1/admin/seed", tags=["admin"], summary="Load demo data")
-def seed() -> dict:
-    """Replaces current data with seeded demo POs, SOs, lifts, and directory entries."""
-    state = service.seed()
+def seed(request: Request) -> dict:
+    """Replaces current data with seeded demo POs, SOs, lifts, and directory entries (sandbox org only)."""
+    auth.require_sandbox_demo_tools(_session(request), request)
+    state = _trade_service(request).seed()
     return {"data": state, "result": {"seeded": True}}
 
 
 @app.post("/api/v1/admin/reset", tags=["admin"], summary="Clear all data")
-def reset() -> dict:
-    """Wipes the database and returns an empty trade state."""
-    state = service.reset()
+def reset(request: Request) -> dict:
+    """Wipes trade data for this organisation (sandbox org only)."""
+    auth.require_sandbox_demo_tools(_session(request), request)
+    state = _trade_service(request).reset()
     return {"data": state, "result": {"reset": True}}
 
 
 @app.post("/api/v1/admin/import", tags=["admin"], summary="Import full backup")
-def import_backup(body: ImportBody) -> dict:
+def import_backup(body: ImportBody, request: Request) -> dict:
     """Replaces current data with a JSON backup (same format as Settings export)."""
+    session = _session(request)
+    auth.require_permission(session, "organisation.edit")
 
     def run():
-        state = service.import_state(body.model_dump())
+        state = _trade_service(request).import_state(body.model_dump())
         return _mutation({"imported": True}, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/contracts", tags=["contracts"], summary="Create contract")
-def create_contract(body: DictBody) -> dict:
+def create_contract(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "contracts.create")
+
     def run():
-        contract, state = service.add_contract(body.model_dump())
+        contract, state = _trade_service(request).add_contract(body.model_dump())
         return _mutation(contract, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/orders", tags=["orders"], summary="Create order")
-def create_order(body: DictBody) -> dict:
+def create_order(body: DictBody, request: Request) -> dict:
+    _require_order_perm(_session(request), body.model_dump(), "create")
+
     def run():
-        order, state = service.add_order(body.model_dump())
+        order, state = _trade_service(request).add_order(body.model_dump())
         return _mutation(order, state)
 
     return _handle(run)
@@ -264,10 +401,10 @@ def create_order(body: DictBody) -> dict:
 
 @app.patch("/api/v1/orders/{order_id}", tags=["orders"], summary="Update order")
 def update_order(order_id: str, body: DictBody, request: Request) -> dict:
-    auth.require_can_edit_orders(_session(request))
+    _require_order_perm(_session(request), body.model_dump(), "edit")
 
     def run():
-        order, state = service.update_order(order_id, body.model_dump())
+        order, state = _trade_service(request).update_order(order_id, body.model_dump())
         return _mutation(order, state)
 
     return _handle(run)
@@ -275,10 +412,10 @@ def update_order(order_id: str, body: DictBody, request: Request) -> dict:
 
 @app.post("/api/v1/orders/{order_id}/buy-back", tags=["orders"], summary="Record PO buy back")
 def buy_back_po(order_id: str, body: DictBody, request: Request) -> dict:
-    auth.require_can_edit_orders(_session(request))
+    auth.require_permission(_session(request), "purchase.edit")
 
     def run():
-        order, state = service.buy_back_po(order_id, body.model_dump())
+        order, state = _trade_service(request).buy_back_po(order_id, body.model_dump())
         return _mutation(order, state)
 
     return _handle(run)
@@ -286,10 +423,10 @@ def buy_back_po(order_id: str, body: DictBody, request: Request) -> dict:
 
 @app.post("/api/v1/orders/{order_id}/close", tags=["orders"], summary="Close order with settlement")
 def close_order(order_id: str, body: DictBody, request: Request) -> dict:
-    auth.require_can_edit_orders(_session(request))
+    _require_order_perm(_session(request), body.model_dump(), "edit")
 
     def run():
-        order, state = service.close_order(order_id, body.model_dump())
+        order, state = _trade_service(request).close_order(order_id, body.model_dump())
         return _mutation(order, state)
 
     return _handle(run)
@@ -297,10 +434,17 @@ def close_order(order_id: str, body: DictBody, request: Request) -> dict:
 
 @app.post("/api/v1/orders/{order_id}/schedule-deletion", tags=["orders"], summary="Schedule order deletion")
 def schedule_order_deletion(order_id: str, request: Request) -> dict:
-    auth.require_admin(_session(request))
+    session = _session(request)
+    svc = _trade_service(request)
+    order = next(
+        (o for o in svc.get_state().get("tradeOrders", []) if o.get("id") == order_id),
+        None,
+    )
+    side = (order or {}).get("side") or "purchase"
+    auth.require_permission(session, _order_perm(side, "delete"))
 
     def run():
-        _, state = service.schedule_order_deletion(order_id)
+        _, state = svc.schedule_order_deletion(order_id)
         return _mutation({"scheduled": True}, state)
 
     return _handle(run)
@@ -308,174 +452,217 @@ def schedule_order_deletion(order_id: str, request: Request) -> dict:
 
 @app.delete("/api/v1/orders/{order_id}/schedule-deletion", tags=["orders"], summary="Cancel scheduled deletion")
 def cancel_order_deletion(order_id: str, request: Request) -> dict:
-    auth.require_admin(_session(request))
+    session = _session(request)
+    svc = _trade_service(request)
+    order = next(
+        (o for o in svc.get_state().get("tradeOrders", []) if o.get("id") == order_id),
+        None,
+    )
+    side = (order or {}).get("side") or "purchase"
+    auth.require_permission(session, _order_perm(side, "delete"))
 
     def run():
-        _, state = service.cancel_order_deletion(order_id)
+        _, state = svc.cancel_order_deletion(order_id)
         return _mutation({"cancelled": True}, state)
 
     return _handle(run)
 
 
 @app.get("/api/v1/orders/{order_id}/can-delete", tags=["orders"], summary="Check if order can be deleted")
-def can_delete_order(order_id: str) -> dict:
-    return service.can_delete_order(order_id)
+def can_delete_order(order_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_order(order_id)
 
 
 @app.post("/api/v1/lifts", tags=["lifts"], summary="Create lift")
-def create_lift(body: DictBody) -> dict:
+def create_lift(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.create")
+
     def run():
-        lift, state = service.add_lift(body.model_dump())
+        lift, state = _trade_service(request).add_lift(body.model_dump())
         return _mutation(lift, state)
 
     return _handle(run)
 
 
 @app.patch("/api/v1/lifts/{lift_id}", tags=["lifts"], summary="Update lift")
-def update_lift(lift_id: str, body: DictBody) -> dict:
+def update_lift(lift_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.edit")
+
     def run():
-        lift, state = service.update_lift(lift_id, body.model_dump())
+        lift, state = _trade_service(request).update_lift(lift_id, body.model_dump())
         return _mutation(lift, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/lifts/{lift_id}/deliver", tags=["lifts"], summary="Mark lift delivered")
-def mark_lift_delivered(lift_id: str, body: DictBody) -> dict:
+def mark_lift_delivered(lift_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.edit")
+
     def run():
-        lift, state = service.mark_lift_delivered(lift_id, body.model_dump())
+        lift, state = _trade_service(request).mark_lift_delivered(lift_id, body.model_dump())
         return _mutation(lift, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/brokers", tags=["directory"], summary="Create broker")
-def create_broker(body: DictBody) -> dict:
+def create_broker(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        broker, state = service.add_broker(body.model_dump())
+        broker, state = _trade_service(request).add_broker(body.model_dump())
         return _mutation(broker, state)
 
     return _handle(run)
 
 
 @app.patch("/api/v1/brokers/{broker_id}", tags=["directory"], summary="Update broker")
-def update_broker(broker_id: str, body: DictBody) -> dict:
+def update_broker(broker_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        broker, state = service.update_broker(broker_id, body.model_dump())
+        broker, state = _trade_service(request).update_broker(broker_id, body.model_dump())
         return _mutation(broker, state)
 
     return _handle(run)
 
 
 @app.delete("/api/v1/brokers/{broker_id}", tags=["directory"], summary="Delete broker")
-def delete_broker(broker_id: str) -> dict:
+def delete_broker(broker_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        _, state = service.delete_broker(broker_id)
+        _, state = _trade_service(request).delete_broker(broker_id)
         return _mutation({"deleted": True}, state)
 
     return _handle(run)
 
 
 @app.get("/api/v1/brokers/{broker_id}/can-delete", tags=["directory"], summary="Check if broker can be deleted")
-def can_delete_broker(broker_id: str) -> dict:
-    return service.can_delete_broker(broker_id)
+def can_delete_broker(broker_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_broker(broker_id)
 
 
 @app.post("/api/v1/producers", tags=["directory"], summary="Create producer")
-def create_producer(body: DictBody) -> dict:
+def create_producer(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        producer, state = service.add_producer(body.model_dump())
+        producer, state = _trade_service(request).add_producer(body.model_dump())
         return _mutation(producer, state)
 
     return _handle(run)
 
 
 @app.patch("/api/v1/producers/{producer_id}", tags=["directory"], summary="Update producer")
-def update_producer(producer_id: str, body: DictBody) -> dict:
+def update_producer(producer_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        producer, state = service.update_producer(producer_id, body.model_dump())
+        producer, state = _trade_service(request).update_producer(producer_id, body.model_dump())
         return _mutation(producer, state)
 
     return _handle(run)
 
 
 @app.delete("/api/v1/producers/{producer_id}", tags=["directory"], summary="Delete producer")
-def delete_producer(producer_id: str) -> dict:
+def delete_producer(producer_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        _, state = service.delete_producer(producer_id)
+        _, state = _trade_service(request).delete_producer(producer_id)
         return _mutation({"deleted": True}, state)
 
     return _handle(run)
 
 
 @app.get("/api/v1/producers/{producer_id}/can-delete", tags=["directory"], summary="Check if producer can be deleted")
-def can_delete_producer(producer_id: str) -> dict:
-    return service.can_delete_producer(producer_id)
+def can_delete_producer(producer_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_producer(producer_id)
 
 
 @app.post("/api/v1/retailers", tags=["directory"], summary="Create retailer")
-def create_retailer(body: DictBody) -> dict:
+def create_retailer(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        retailer, state = service.add_retailer(body.model_dump())
+        retailer, state = _trade_service(request).add_retailer(body.model_dump())
         return _mutation(retailer, state)
 
     return _handle(run)
 
 
 @app.patch("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Update retailer")
-def update_retailer(retailer_id: str, body: DictBody) -> dict:
+def update_retailer(retailer_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        retailer, state = service.update_retailer(retailer_id, body.model_dump())
+        retailer, state = _trade_service(request).update_retailer(retailer_id, body.model_dump())
         return _mutation(retailer, state)
 
     return _handle(run)
 
 
 @app.delete("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Delete retailer")
-def delete_retailer(retailer_id: str) -> dict:
+def delete_retailer(retailer_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        _, state = service.delete_retailer(retailer_id)
+        _, state = _trade_service(request).delete_retailer(retailer_id)
         return _mutation({"deleted": True}, state)
 
     return _handle(run)
 
 
 @app.get("/api/v1/retailers/{retailer_id}/can-delete", tags=["directory"], summary="Check if retailer can be deleted")
-def can_delete_retailer(retailer_id: str) -> dict:
-    return service.can_delete_retailer(retailer_id)
+def can_delete_retailer(retailer_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_retailer(retailer_id)
 
 
 @app.post("/api/v1/items", tags=["catalog"], summary="Add item")
-def create_item(body: NameBody) -> dict:
+def create_item(body: NameBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        item, state = service.add_item(body.name)
+        item, state = _trade_service(request).add_item(body.name)
         return _mutation(item, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/spots", tags=["catalog"], summary="Add spot")
-def create_spot(body: NameBody) -> dict:
+def create_spot(body: NameBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
     def run():
-        spot, state = service.add_spot(body.name)
+        spot, state = _trade_service(request).add_spot(body.name)
         return _mutation(spot, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/companies/confirm-link", tags=["companies"], summary="Confirm company link")
-def confirm_company_link(body: DictBody) -> dict:
+def confirm_company_link(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "contracts.edit")
+
     def run():
-        company, state = service.confirm_company_link(body.model_dump())
+        company, state = _trade_service(request).confirm_company_link(body.model_dump())
         return _mutation(company, state)
 
     return _handle(run)
 
 
 @app.post("/api/v1/companies/link-high-confidence", tags=["companies"], summary="Link high-confidence company match")
-def link_high_confidence_company(body: LinkHighConfidenceBody) -> dict:
+def link_high_confidence_company(body: LinkHighConfidenceBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "contracts.edit")
+
     def run():
-        company, state = service.link_high_confidence_company(body.result, body.type)
+        company, state = _trade_service(request).link_high_confidence_company(body.result, body.type)
         return _mutation(company, state)
 
     return _handle(run)

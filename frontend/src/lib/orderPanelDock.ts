@@ -1,6 +1,6 @@
 import { storageGet, storageSet } from './storage'
 
-const STORAGE_KEY = 'tradeos-order-panel-docked'
+const STORAGE_KEY = 'tradeal-order-panel-docked'
 
 export function loadOrderPanelDocked(): boolean {
   return storageGet(STORAGE_KEY) === 'true'

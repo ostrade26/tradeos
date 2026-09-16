@@ -1,10 +1,12 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   loadTableDensity,
   storeTableDensity,
   tableDensityClasses,
   type TableDensity,
 } from '../lib/tableDensity'
+import { schedulePersistPreferences } from './usePersistUserPreferences'
+import { useAuth } from './useAuth'
 
 interface TableDensityContextValue {
   density: TableDensity
@@ -15,18 +17,25 @@ interface TableDensityContextValue {
 const TableDensityContext = createContext<TableDensityContextValue | null>(null)
 
 export function TableDensityProvider({ children }: { children: ReactNode }) {
-  const [density, setDensityState] = useState<TableDensity>(loadTableDensity)
+  const { session } = useAuth()
+  const userKey = session?.username ?? null
+  const [density, setDensityState] = useState<TableDensity>(() => loadTableDensity(userKey))
+
+  useEffect(() => {
+    setDensityState(loadTableDensity(userKey))
+  }, [userKey])
 
   const setDensity = (next: TableDensity) => {
     setDensityState(next)
-    storeTableDensity(next)
+    storeTableDensity(next, userKey)
+    schedulePersistPreferences({ tableDensity: next })
   }
 
   const value = useMemo<TableDensityContextValue>(() => ({
     density,
     setDensity,
     classes: tableDensityClasses(density),
-  }), [density])
+  }), [density, userKey])
 
   return (
     <TableDensityContext.Provider value={value}>
@@ -39,7 +48,6 @@ export function useTableDensity() {
   const ctx = useContext(TableDensityContext)
   if (ctx) return ctx
 
-  // Fallback when provider is missing (e.g. HMR) — read persisted setting, no live updates.
   const density = loadTableDensity()
   return {
     density,

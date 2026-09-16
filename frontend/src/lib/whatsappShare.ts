@@ -36,7 +36,7 @@ function section(title: string, lines: string[]): string {
 }
 
 function footer(): string {
-  return `\n${DIVIDER}\n_Shared from TradeOS · ${CURRENT_TRADER}_`
+  return `\n${DIVIDER}\n_Shared from Tradeal · ${CURRENT_TRADER}_`
 }
 
 export function openWhatsAppShare(text: string, phone?: string) {
@@ -87,7 +87,6 @@ export function formatOrderWhatsAppMessage(order: TradeOrder): string {
     order.brokerContractRef ? bullet('Contract #', order.brokerContractRef) : '',
     order.brokeragePerTon ? bullet('Brokerage', `₹${order.brokeragePerTon.toLocaleString('en-IN')}/MT`) : '',
     order.paymentTerms ? bullet('Payment', order.paymentTerms) : '',
-    order.unloading ? bullet('Unloading', order.unloading) : '',
     order.remarks ? bullet('Remarks', order.remarks) : '',
   ].filter(Boolean)
 

@@ -472,7 +472,7 @@ export function InventoryPage() {
       <PageHeader
         title="Inventory"
         subtitle={`${lots.length} lots across ${itemStats.length} item${itemStats.length === 1 ? '' : 's'}`}
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Inventory' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Inventory' }]} />}
       />
 
       {itemStats.length > 0 && (

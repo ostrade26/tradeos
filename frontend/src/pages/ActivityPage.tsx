@@ -37,8 +37,8 @@ export function ActivityPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Activity Timeline"
-        subtitle="Every saved change in TradeOS — not the same as the Action inbox, which only lists work still open."
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Activity' }]} />}
+        subtitle="Every saved change in Tradeal — not the same as the Action inbox, which only lists work still open."
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Activity' }]} />}
       />
 
       <FilterBar>

@@ -120,7 +120,7 @@ export function ReportViewPage() {
         title={def.title}
         subtitle={def.subtitle}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Reports', href: '/reports' },
           { label: def.title },
         ]} />}
@@ -144,7 +144,7 @@ export function ReportViewPage() {
       />
 
       <p className="text-xs text-muted mb-4">
-        Live TradeOS records for this organisation. Reports do not change orders, lifts, or inventory.
+        Live Tradeal records for this organisation. Reports do not change orders, lifts, or inventory.
         {def.id === 'audit-trail' ? ' This trail is append-only.' : null}
       </p>
 

@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, FileText } from 'lucide-react'
 import { PageHeader } from '../ui/CommandPalette'
 import { Breadcrumb, Tabs, EmptyState } from '../ui/Tabs'
@@ -12,7 +12,7 @@ import { Badge, StatusBadge } from '../ui/Badge'
 import { BuyBackTag } from '../orders/BuyBackTag'
 import { CloseOrderModal } from '../orders/CloseOrderModal'
 import { BuyBackModal } from '../orders/BuyBackModal'
-import { canBuyBackPO } from '../../lib/buyBack'
+import { canBuyBackPO, totalBuyBackQty } from '../../lib/buyBack'
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../ui/DeleteActions'
 import { OrderRowActions } from './OrderRowActions'
 import { OrderDetailDrawer, findOrderByRef } from './OrderDetailDrawer'
@@ -37,9 +37,12 @@ import {
 import { useTradeStore } from '../../store/TradeStore'
 import { canCloseOrder, completionTypeLabel } from '../../lib/orderClosure'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
+import { loadRegisterDetailRef, saveRegisterDetailRef } from '../../lib/registerDetailRef'
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../../lib/registerSort'
 import { useToast } from '../../hooks/useToast'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
+import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
+import { REGISTER_TABLE_LAYER_Z } from '../ui/Drawer'
 
 export type OrderListMode = 'pending' | 'completed'
 
@@ -60,6 +63,7 @@ interface OrderRegisterViewProps {
 export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterViewProps) {
   const store = useTradeStore()
   const toast = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const registerId = `${side}-${mode}`
   const [search, setSearch] = useState('')
@@ -75,6 +79,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
   const isLargeScreen = useLargeScreen()
   const effectiveDocked = panelDocked && isLargeScreen
+  const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
 
   const isPO = side === 'purchase'
   const label = isPO ? 'Purchase Order' : 'Sales Order'
@@ -83,33 +88,54 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
 
   const handleDockChange = useCallback((docked: boolean) => {
+    if (!docked) setDetailPanelOpen(false)
     setPanelDocked(docked)
     saveOrderPanelDocked(docked)
-  }, [])
+  }, [setDetailPanelOpen])
+
+  const urlRef = searchParams.get('ref')
+  /** Drives the open panel immediately; URL syncs in parallel (avoids close lag). */
+  const [detailRef, setDetailRef] = useState<string | null>(urlRef)
+
+  useEffect(() => {
+    setDetailRef(searchParams.get('ref'))
+  }, [searchParams])
+
+  const closeOrderPanel = useCallback(() => {
+    setDetailRef(null)
+    setDetailPanelOpen(false)
+    saveRegisterDetailRef(pathPrefix, null)
+    const params = new URLSearchParams(searchParams)
+    params.delete('ref')
+    setSearchParams(params, { replace: true })
+  }, [searchParams, setSearchParams, setDetailPanelOpen, pathPrefix])
 
   const syncOrderToUrl = useCallback((order: TradeOrder | null) => {
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev)
-      if (order) {
-        params.set('ref', order.ref)
-        const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
-        const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
-        if (inCompleted && !inPending) params.set('view', 'completed')
-        else if (inPending) params.delete('view')
-      } else {
-        params.delete('ref')
-      }
-      return params
-    }, { replace: true })
-  }, [setSearchParams, isPO, store])
+    const params = new URLSearchParams(searchParams)
+    if (order) {
+      params.set('ref', order.ref)
+      const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
+      const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
+      if (inCompleted && !inPending) params.set('view', 'completed')
+      else if (inPending) params.delete('view')
+    } else {
+      params.delete('ref')
+    }
+    setSearchParams(params, { replace: true })
+  }, [searchParams, setSearchParams, isPO, store])
 
   const handleSelectOrder = useCallback((order: TradeOrder) => {
+    if (detailRef === order.ref) {
+      closeOrderPanel()
+      return
+    }
+    setDetailRef(order.ref)
+    saveRegisterDetailRef(pathPrefix, order.ref)
+    if (effectiveDocked) setDetailPanelOpen(true)
     syncOrderToUrl(order)
-  }, [syncOrderToUrl])
+  }, [syncOrderToUrl, detailRef, setDetailPanelOpen, effectiveDocked, closeOrderPanel, pathPrefix])
 
-  const handleCloseOrder = useCallback(() => {
-    syncOrderToUrl(null)
-  }, [syncOrderToUrl])
+  const handleCloseOrder = closeOrderPanel
 
   const handleSortChange = useCallback((key: string) => {
     setSort(prev => {
@@ -127,14 +153,74 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     return `${pathPrefix}?${params.toString()}`
   }
 
-  const urlRef = searchParams.get('ref')
   const urlQ = searchParams.get('q')
   const urlParty = searchParams.get('party')
 
   const selectedOrder = useMemo(() => {
-    if (!urlRef) return null
-    return findOrderByRef(store, urlRef, side) ?? null
-  }, [urlRef, store, side])
+    if (!detailRef) return null
+    return findOrderByRef(store, detailRef, side) ?? null
+  }, [detailRef, store.tradeOrders, side])
+
+  const undockedDetailOpen = !effectiveDocked && detailRef != null && selectedOrder != null
+
+  const restoredDetailRef = useRef(false)
+
+  useLayoutEffect(() => {
+    if (effectiveDocked && detailRef && selectedOrder) {
+      setDetailPanelOpen(true, 'lg')
+    } else if (effectiveDocked && !detailRef) {
+      setDetailPanelOpen(false)
+    }
+  }, [effectiveDocked, detailRef, selectedOrder, setDetailPanelOpen])
+
+  useLayoutEffect(() => {
+    if (restoredDetailRef.current) return
+    restoredDetailRef.current = true
+    if (urlRef) return
+    const persisted = loadRegisterDetailRef(pathPrefix)
+    if (!persisted) return
+    const order = findOrderByRef(store, persisted, side)
+    if (!order) {
+      saveRegisterDetailRef(pathPrefix, null)
+      return
+    }
+    setDetailRef(persisted)
+    if (effectiveDocked) setDetailPanelOpen(true, 'lg')
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('ref', persisted)
+      const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
+      const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
+      if (inCompleted && !inPending) params.set('view', 'completed')
+      else if (inPending) params.delete('view')
+      return params
+    }, { replace: true })
+  }, [
+    urlRef,
+    pathPrefix,
+    side,
+    store,
+    isPO,
+    effectiveDocked,
+    setDetailPanelOpen,
+    setSearchParams,
+  ])
+
+  useEffect(() => {
+    if (urlRef && selectedOrder) saveRegisterDetailRef(pathPrefix, urlRef)
+  }, [urlRef, selectedOrder, pathPrefix])
+
+  useEffect(() => {
+    if (!urlRef) return
+    if (findOrderByRef(store, urlRef, side)) return
+    setDetailRef(null)
+    setDetailPanelOpen(false)
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.delete('ref')
+      return params
+    }, { replace: true })
+  }, [urlRef, side, store, setSearchParams, setDetailPanelOpen])
 
   useEffect(() => {
     if (urlQ) setSearch(urlQ)
@@ -261,7 +347,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             onClick={e => {
               e.preventDefault()
               e.stopPropagation()
-              syncOrderToUrl(r)
+              handleSelectOrder(r)
             }}
           >
             {formatOrderRef(r.ref, r.side)}
@@ -289,9 +375,24 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       key: 'poRef',
       header: 'PO Ref#',
       className: 'whitespace-nowrap',
-      render: (r: TradeOrder) => r.poRef
-        ? <Link to={`/purchase-orders?ref=${encodeURIComponent(r.poRef)}`} className={cn(tableRefCellClass, 'hover:underline')} onClick={e => e.stopPropagation()}>{formatPoRef(r.poRef)}</Link>
-        : <span className="text-muted">Not linked</span>,
+      render: (r: TradeOrder) => {
+        const poRef = r.poRef
+        if (!poRef) return <span className="text-muted">Not linked</span>
+        const poHref = `/purchase-orders?ref=${encodeURIComponent(poRef)}`
+        return (
+          <Link
+            to={poHref}
+            className={cn(tableRefCellClass, 'hover:underline')}
+            onClick={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              navigate(poHref)
+            }}
+          >
+            {formatPoRef(poRef)}
+          </Link>
+        )
+      },
     }] : []),
     {
       key: 'partyName',
@@ -340,6 +441,23 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       sortValue: (r: TradeOrder) => r.orderQty,
       render: (r: TradeOrder) => <span className="tabular-nums">{formatMt(r.orderQty)}</span>,
     },
+    ...(isPO
+      ? [{
+          key: 'buyBackQty',
+          header: 'Buy back',
+          className: 'text-right',
+          sortable: true,
+          sortValue: (r: TradeOrder) => totalBuyBackQty(r),
+          render: (r: TradeOrder) => {
+            const bb = totalBuyBackQty(r)
+            return (
+              <span className={cn('tabular-nums', bb > 0 ? 'text-heading font-medium' : 'text-muted')}>
+                {formatMt(bb)}
+              </span>
+            )
+          },
+        }]
+      : []),
     {
       key: 'liftedQty',
       header: 'Lifted Qty',
@@ -455,6 +573,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         spot: o.spot,
         rate: contractRateFromOrder(o.rate, o.rateBasis, o.ratePerBasis),
         orderQty: o.orderQty,
+        ...(isPO ? { buyBackQty: totalBuyBackQty(o) } : {}),
         liftedQty: o.liftedQty,
         toBeLift: registerToBeLift(o),
         broker: o.brokerName,
@@ -468,6 +587,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         { key: 'spot', header: 'Spot' },
         { key: 'rate', header: RATE_COLUMN_HEADER },
         { key: 'orderQty', header: `${shortLabel} Qty` },
+        ...(isPO ? [{ key: 'buyBackQty', header: 'Buy back' }] : []),
         { key: 'liftedQty', header: 'Lifted Qty' },
         { key: 'toBeLift', header: 'To Be Lift' },
         { key: 'broker', header: 'Broker Name' },
@@ -528,7 +648,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             : `${filtered.length} completed ${label.toLowerCase()}s · ${formatMt(totals.orderQty)} total`
         }
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: pageTitle },
         ]} />}
         actions={
@@ -589,6 +709,10 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         </div>
       </CollapsibleRegisterStats>
 
+      <div
+        className={cn('min-w-0', undockedDetailOpen && 'relative')}
+        style={undockedDetailOpen ? { zIndex: REGISTER_TABLE_LAYER_Z } : undefined}
+      >
       <DataTable<TradeOrder>
             data={sortedFiltered}
             columns={columns}
@@ -657,32 +781,19 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
               )
             }}
           />
+      </div>
     </div>
 
-    {effectiveDocked && (
-        <OrderDetailDrawer
-          order={selectedOrder}
-          open={!!selectedOrder}
-          docked
-          onClose={handleCloseOrder}
-          onDockChange={handleDockChange}
-          onScheduleDelete={selectedOrder ? () => { setDeleteError(''); setDeleteTarget(selectedOrder) } : undefined}
-          onCancelDelete={selectedOrder ? () => setCancelTarget(selectedOrder) : undefined}
-          onBlockedDelete={reason => setBlockedDelete({ name: selectedOrder?.ref ?? '', reason })}
-        />
-    )}
-
-    {!effectiveDocked && (
-      <OrderDetailDrawer
-        order={selectedOrder}
-        open={!!selectedOrder}
-        onClose={handleCloseOrder}
-        onDockChange={handleDockChange}
-        onScheduleDelete={selectedOrder ? () => { setDeleteError(''); setDeleteTarget(selectedOrder) } : undefined}
-        onCancelDelete={selectedOrder ? () => setCancelTarget(selectedOrder) : undefined}
-        onBlockedDelete={reason => setBlockedDelete({ name: selectedOrder?.ref ?? '', reason })}
-      />
-    )}
+    <OrderDetailDrawer
+      order={selectedOrder}
+      open={detailRef != null && selectedOrder != null}
+      docked={effectiveDocked}
+      onClose={handleCloseOrder}
+      onDockChange={handleDockChange}
+      onScheduleDelete={selectedOrder ? () => { setDeleteError(''); setDeleteTarget(selectedOrder) } : undefined}
+      onCancelDelete={selectedOrder ? () => setCancelTarget(selectedOrder) : undefined}
+      onBlockedDelete={reason => setBlockedDelete({ name: selectedOrder?.ref ?? '', reason })}
+    />
 
     <ConfirmDeleteModal
         open={!!deleteTarget}

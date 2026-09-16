@@ -22,7 +22,7 @@ check_code() {
   fi
 }
 
-echo "TradeOS local guardrail check"
+echo "Tradeal local guardrail check"
 echo "============================"
 
 if curl -sf "${API}/health" | grep -q '"ok"'; then

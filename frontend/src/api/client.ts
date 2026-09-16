@@ -9,7 +9,10 @@ export function resolveApiBase(raw: string | undefined): string {
 }
 
 const API_BASE = resolveApiBase(import.meta.env.VITE_API_URL)
-const API_TOKEN = (import.meta.env.VITE_TRADEOS_API_TOKEN as string | undefined)?.trim() ?? ''
+const API_TOKEN = (
+  (import.meta.env.VITE_TRADEAL_API_TOKEN as string | undefined)
+  ?? (import.meta.env.VITE_TRADEOS_API_TOKEN as string | undefined)
+)?.trim() ?? ''
 const USING_LOCAL_PROXY = API_BASE === '/api/v1'
 
 if (import.meta.env.PROD && USING_LOCAL_PROXY) {
@@ -70,25 +73,40 @@ async function parseJson(res: Response) {
   }
 }
 
+const FETCH_TIMEOUT_MS = 25_000
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal: init?.signal ?? controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders(),
-        ...(API_TOKEN ? { 'X-TradeOS-Token': API_TOKEN } : {}),
+        ...(API_TOKEN ? { 'X-Tradeal-Token': API_TOKEN } : {}),
         ...init?.headers,
       },
     })
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError(
+        USING_LOCAL_PROXY
+          ? `Request timed out — the Python API on port 8000 is not responding. Stop any stuck backend, then run: npm run dev:all`
+          : `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s. Check Railway is up and VITE_API_URL is ${API_BASE}.`,
+        0,
+      )
+    }
     throw new ApiError(
       USING_LOCAL_PROXY
         ? 'Cannot reach the API. Start the backend with: npm run dev:backend (port 8000), then open http://localhost:5173'
         : `Cannot reach the API at ${API_BASE}. Check that Railway is running and VITE_API_URL is set on Vercel.`,
       0,
     )
+  } finally {
+    clearTimeout(timeout)
   }
   const body = await parseJson(res)
   if (!res.ok) {

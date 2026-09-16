@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Users,
   Package,
@@ -76,9 +76,14 @@ export function OrderDetailDrawer({
   onScheduleDelete, onCancelDelete, onBlockedDelete,
 }: OrderDetailDrawerProps) {
   const store = useTradeStore()
-  const { canEditOrders, isAdmin } = usePermissions()
+  const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
   const [buyBackOpen, setBuyBackOpen] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
+
+  useEffect(() => {
+    setBuyBackOpen(false)
+    setCloseOpen(false)
+  }, [order?.ref])
 
   const closeCheck = useMemo(
     () => (order ? canCloseOrder(order, store.lifts, store.balanceSettlements ?? [], store.tradeOrders) : null),
@@ -109,7 +114,7 @@ export function OrderDetailDrawer({
                 href: `${pathPrefix}/${ref}/edit`,
               }]
             : []),
-          ...(isPO
+          ...(isPO && canCreateOrders
             ? [{
                 type: 'link' as const,
                 label: store.getRemainingSellQty(order.ref) > 0 ? 'Sell available' : 'Create SO',
@@ -146,7 +151,7 @@ export function OrderDetailDrawer({
           onClick: () => shareOrderOnWhatsApp(order),
         }],
       },
-      ...(isAdmin && (onScheduleDelete || onCancelDelete) ? [{
+      ...(canDeleteOrders && (onScheduleDelete || onCancelDelete) ? [{
         items: [order.deleteScheduledAt
           ? { type: 'button' as const, label: 'Cancel deletion', icon: Undo2, onClick: () => onCancelDelete?.() }
           : {
@@ -163,7 +168,7 @@ export function OrderDetailDrawer({
         ],
       }] : []),
     ])
-  }, [canEditOrders, isAdmin, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
+  }, [canCreateOrders, canDeleteOrders, canEditOrders, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
 
   if (!order) return null
 
@@ -305,7 +310,6 @@ export function OrderDetailDrawer({
           <DetailRow label="Broker contract #" value={order.brokerContractRef} mono />
         )}
         <DetailRow label="Payment terms" value={order.paymentTerms} />
-        <DetailRow label="Unloading" value={order.unloading} />
         {order.remarks && <DetailRow label="Remarks" value={order.remarks} />}
       </DetailGroup>
 
@@ -365,7 +369,7 @@ export function OrderDetailDrawer({
 
   return (
     <>
-      <Drawer open={open} {...panelProps}>
+      <Drawer open={open} variant="registerDetail" {...panelProps}>
         {content}
       </Drawer>
       <BuyBackModal order={order} open={buyBackOpen} onClose={() => setBuyBackOpen(false)} />

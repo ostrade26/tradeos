@@ -10,7 +10,7 @@ export interface ExceptionOverlay {
   notes?: string
 }
 
-const KEY = 'tradeos.audit-exceptions'
+const KEY = 'tradeal.audit-exceptions'
 
 export function loadExceptionOverlay(): Record<string, ExceptionOverlay> {
   try {

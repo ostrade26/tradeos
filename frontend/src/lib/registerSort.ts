@@ -9,7 +9,7 @@ export interface SortState {
 
 export function loadRegisterSort(registerId: string, defaultKey: string): SortState {
   try {
-    const raw = storageGet(`tradeos-sort-${registerId}`)
+    const raw = storageGet(`tradeal-sort-${registerId}`)
     if (!raw) return { key: defaultKey, direction: 'desc' }
     return JSON.parse(raw) as SortState
   } catch {
@@ -19,7 +19,7 @@ export function loadRegisterSort(registerId: string, defaultKey: string): SortSt
 
 export function saveRegisterSort(registerId: string, sort: SortState) {
   try {
-    storageSet(`tradeos-sort-${registerId}`, JSON.stringify(sort))
+    storageSet(`tradeal-sort-${registerId}`, JSON.stringify(sort))
   } catch {
     // ignore
   }

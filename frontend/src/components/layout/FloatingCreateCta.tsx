@@ -2,19 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Plus, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { usePermissions } from '../../hooks/useAuth'
+import { isPlatformAdminPath } from '../../lib/appShellMode'
 
-const actions = [
-  { to: '/purchase-orders/new', label: 'New PO', icon: ArrowDownToLine },
-  { to: '/sales-orders/new', label: 'New SO', icon: ArrowUpFromLine },
-  { to: '/lifts/new', label: 'Record Lift', icon: Scale },
+const ALL_ACTIONS = [
+  { to: '/purchase-orders/new', label: 'New PO', icon: ArrowDownToLine, permission: 'purchase.create' },
+  { to: '/sales-orders/new', label: 'New SO', icon: ArrowUpFromLine, permission: 'sales.create' },
+  { to: '/lifts/new', label: 'Record Lift', icon: Scale, permission: 'lifts.create' },
 ] as const
 
-function shouldHideFab(pathname: string) {
+function shouldHideFab(pathname: string, actions: readonly { to: string }[]) {
   if (pathname.includes('/edit')) return true
   return actions.some(a => pathname === a.to)
 }
 
 export function FloatingCreateCta() {
+  const { hasPermission } = usePermissions()
+  const actions = ALL_ACTIONS.filter(a => hasPermission(a.permission))
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const location = useLocation()
@@ -32,7 +36,13 @@ export function FloatingCreateCta() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
 
-  if (shouldHideFab(location.pathname)) return null
+  if (
+    isPlatformAdminPath(location.pathname) ||
+    !actions.length ||
+    shouldHideFab(location.pathname, actions)
+  ) {
+    return null
+  }
 
   return (
     <div

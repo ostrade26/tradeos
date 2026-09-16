@@ -92,7 +92,13 @@ function BulkLiftTankerFields({
               </button>
             </div>
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div
+            className={
+              !hideQty && tankers.length > 1
+                ? 'grid grid-cols-1 gap-3 sm:grid-cols-3'
+                : 'grid grid-cols-1 gap-3 sm:grid-cols-2'
+            }
+          >
             <Input
               label="Tanker No. (optional)"
               value={tanker.tankerNo}
@@ -111,6 +117,17 @@ function BulkLiftTankerFields({
                 onChange={e => updateTanker(index, { actualQty: sanitizeQtyInput(e.target.value) })}
                 className="tabular-nums"
                 placeholder="e.g. 49.740"
+              />
+            )}
+            {!hideQty && tankers.length > 1 && (
+              <Input
+                label="Sales invoice no."
+                value={tanker.salesInvoiceNo}
+                onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                className="font-mono uppercase"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Optional"
               />
             )}
           </div>
@@ -136,7 +153,6 @@ export function BulkMarkLiftsDeliveredModal({
   const toast = useToast()
   const [forms, setForms] = useState<Record<string, LiftTankerFormValues[]>>(() => buildTankerForms(lifts))
   const [soActuals, setSoActuals] = useState<Record<string, Record<string, string>>>(() => buildSoActuals(lifts))
-  const [deliveredDate, setDeliveredDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [salesInvoiceNos, setSalesInvoiceNos] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [tankerFieldErrors, setTankerFieldErrors] = useState<Record<string, LiftTankerFieldErrorMap>>({})
@@ -152,7 +168,6 @@ export function BulkMarkLiftsDeliveredModal({
     if (!open) return
     setForms(buildTankerForms(lifts))
     setSoActuals(buildSoActuals(lifts))
-    setDeliveredDate(new Date().toISOString().slice(0, 10))
     setSalesInvoiceNos({})
     setError('')
     setTankerFieldErrors({})
@@ -195,7 +210,7 @@ export function BulkMarkLiftsDeliveredModal({
     }
 
     setSubmitting(true)
-    const deliveredAt = new Date(`${deliveredDate}T12:00:00`).toISOString()
+    const deliveredAt = new Date().toISOString()
     const delivered: Lift[] = []
     const failures: string[] = []
 
@@ -217,7 +232,9 @@ export function BulkMarkLiftsDeliveredModal({
             }
           }),
           deliveredAt,
-          ...(salesInvoiceNos[lift.id]?.trim() ? { salesInvoiceNo: salesInvoiceNos[lift.id].trim() } : {}),
+          ...(hideQty && salesInvoiceNos[lift.id]?.trim()
+            ? { salesInvoiceNo: salesInvoiceNos[lift.id].trim() }
+            : {}),
         }
         if (hideQty) {
           const actualBySo = parsedActualQtyDraft(soActuals[lift.id] ?? {})
@@ -288,15 +305,6 @@ export function BulkMarkLiftsDeliveredModal({
           <FieldValidationBanner />
         )}
 
-        <div className="sm:max-w-xs">
-          <Input
-            label="Delivery date"
-            type="date"
-            value={deliveredDate}
-            onChange={e => setDeliveredDate(e.target.value)}
-          />
-        </div>
-
         <div className="max-h-[min(70vh,40rem)] space-y-4 overflow-y-auto pr-1">
           {sortedLifts.map(lift => {
             const plannedQty = getLiftPlannedQty(lift)
@@ -310,28 +318,20 @@ export function BulkMarkLiftsDeliveredModal({
             return (
             <section
               key={lift.id}
-              className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 dark:border-gray-700 dark:bg-gray-800/30"
+              className="pb-8 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0 space-y-5"
             >
-              <div className="mb-3 space-y-2">
-                <p className="font-mono text-sm font-medium text-heading">
-                  {formatLiftRef(lift.liftRef)} · {formatLiftSoRefs(lift)}
+              <div className="space-y-3">
+                <p className="font-mono text-sm font-semibold text-heading">
+                  {formatLiftRef(lift.liftRef)}
                 </p>
+                <p className="text-xs text-muted -mt-2">{formatLiftSoRefs(lift)}</p>
                 <DeliveryQtySummary
                   planned={plannedQty}
                   actual={actualPreview}
                   balance={balancePreview}
                 />
               </div>
-              <div className="space-y-4">
-                <Input
-                  label="Sales invoice no."
-                  value={salesInvoiceNos[lift.id] ?? ''}
-                  onChange={e => setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value }))}
-                  className="font-mono uppercase sm:max-w-xs"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="Optional"
-                />
+              <div className="space-y-4 max-w-lg">
                 {hideQty && (
                   <LiftSoActualQtyForm
                     allocations={allocations}
@@ -348,6 +348,17 @@ export function BulkMarkLiftsDeliveredModal({
                       })
                       setSoActuals(prev => ({ ...prev, [lift.id]: next }))
                     }}
+                  />
+                )}
+                {hideQty && (
+                  <Input
+                    label="Sales invoice no."
+                    value={salesInvoiceNos[lift.id] ?? ''}
+                    onChange={e => setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value }))}
+                    className="font-mono uppercase sm:max-w-xs"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="Optional"
                   />
                 )}
                 <BulkLiftTankerFields

@@ -229,6 +229,8 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
   const [balanceAppliedQty, setBalanceAppliedQty] = useState('')
   const [loadOnRisk, setLoadOnRisk] = useState(false)
   const liftBaseline = useRef('')
+  /** Set after save so the leave guard clears before navigating to the register. */
+  const [registerHrefAfterSave, setRegisterHrefAfterSave] = useState<string | null>(null)
 
   useEffect(() => {
     if (isEdit) return
@@ -413,7 +415,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstSoRef])
 
-  const liftDirty = serializeLiftFormState({
+  const currentLiftFormSnapshot = () => serializeLiftFormState({
     date,
     salesInvoiceNo,
     remarks,
@@ -424,12 +426,20 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     tankers,
     balanceAppliedQty,
     loadOnRisk,
-  }) !== liftBaseline.current
+  })
+
+  const liftDirty = registerHrefAfterSave == null && currentLiftFormSnapshot() !== liftBaseline.current
 
   const { requestLeave, dialog: unsavedDialog } = useUnsavedChangesGuard({
     dirty: liftDirty,
     message: 'Your lift entry has unsaved changes. Leave without saving?',
   })
+
+  useEffect(() => {
+    if (!registerHrefAfterSave) return
+    navigate(registerHrefAfterSave, { replace: true })
+    setRegisterHrefAfterSave(null)
+  }, [registerHrefAfterSave, navigate])
 
   const handleCancel = () => {
     requestLeave(() => navigate('/lifts'))
@@ -466,7 +476,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
             title="Record Lift"
             subtitle="Receive stock or dispatch to a customer"
             breadcrumb={<Breadcrumb items={[
-              { label: 'TradeOS', href: '/' },
+              { label: 'Tradeal', href: '/' },
               { label: 'Lift Register', href: '/lifts' },
               { label: 'New Lift' },
             ]} />}
@@ -522,20 +532,23 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     }
     try {
       setSaving(true)
+      const registerHref = (liftRef: number) =>
+        `/lifts?ref=${encodeURIComponent(String(liftRef))}`
+
       if (isEdit && editingLift) {
         await store.updateLift(editingLift.id, payload)
+        liftBaseline.current = currentLiftFormSnapshot()
         toast.success(`${formatLiftRef(editingLift.liftRef)} updated`, {
           description: `${formatQty(totalActualQtyFromForm(tankers))} ${editingLift.status === 'delivered' ? 'actual' : 'planned'}`,
-          action: { label: 'View register', to: `/lifts?ref=${encodeURIComponent(editingLift.liftRef)}` },
         })
-        navigate(`/lifts?ref=${encodeURIComponent(editingLift.liftRef)}`)
+        setRegisterHrefAfterSave(registerHref(editingLift.liftRef))
       } else {
         const lift = await store.addLift(payload)
+        liftBaseline.current = currentLiftFormSnapshot()
         toast.success(`${formatLiftRef(lift.liftRef)} recorded`, {
           description: `${formatQty(lift.liftedQty)} planned · in transit`,
-          action: { label: 'View register', to: `/lifts?ref=${encodeURIComponent(lift.liftRef)}` },
         })
-        navigate(`/lifts?ref=${encodeURIComponent(lift.liftRef)}`)
+        setRegisterHrefAfterSave(registerHref(lift.liftRef))
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save lift')
@@ -565,7 +578,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
         title={pageTitle}
         subtitle={pageSubtitle}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Lift Register', href: '/lifts' },
           { label: isEdit ? formatLiftRef(editLiftRef!) : 'New Lift' },
         ]} />}

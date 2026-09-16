@@ -221,7 +221,6 @@ export function buildSeedData(): SeedTradeData {
       sellerName: producer.name,
       buyerName: CURRENT_TRADER,
       paymentTerms: n % 2 === 0 ? 'Advance' : 'Against delivery',
-      unloading: 'Buyer account',
       remarks: n % 4 === 0 ? 'Fixed duty' : '',
       status: orderStatus({ orderQty: c.qty, liftedQty: c.lifted }),
     })
@@ -233,9 +232,6 @@ export function buildSeedData(): SeedTradeData {
 
   const po2 = tradeOrders.find(o => o.ref === 'PO-2')
   if (po2) {
-    po2.freightCost = 4000
-    po2.loadingCost = 1000
-    po2.otherCost = 500
     po2.brokeragePerTon = 15
   }
 

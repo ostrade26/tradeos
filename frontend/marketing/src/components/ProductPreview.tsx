@@ -26,7 +26,7 @@ export function ProductPreview({ compact = false }: { compact?: boolean }) {
         <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
         <span className="ml-3 flex items-center gap-2 text-xs font-medium text-muted">
           <span className="live-dot h-1.5 w-1.5 rounded-full bg-success" />
-          TradeOS · Live
+          Tradeal · Live
         </span>
       </div>
 

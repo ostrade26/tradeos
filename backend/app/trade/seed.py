@@ -187,9 +187,6 @@ def build_seed_data() -> dict:
 
     po2 = next((o for o in trade_orders if o["ref"] == "PO-2"), None)
     if po2:
-        po2["freightCost"] = 4000
-        po2["loadingCost"] = 1000
-        po2["otherCost"] = 500
         po2["brokeragePerTon"] = 15
 
     so_configs = [

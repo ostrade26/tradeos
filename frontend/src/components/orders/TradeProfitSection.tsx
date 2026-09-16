@@ -48,17 +48,8 @@ export function TradeProfitSection({ po, orders, lifts, className }: TradeProfit
 
         <RelatedCardBody>
           <RelatedDetailRow label="Purchase rate" value={formatRatePerMt(profit.purchaseRatePerMt)} />
-          {profit.freightCost > 0 && (
-            <RelatedDetailRow label="Freight" value={formatCurrency(profit.freightCost)} />
-          )}
-          {profit.loadingCost > 0 && (
-            <RelatedDetailRow label="Loading" value={formatCurrency(profit.loadingCost)} />
-          )}
           {profit.brokerageTotal > 0 && (
             <RelatedDetailRow label="Brokerage" value={formatCurrency(profit.brokerageTotal)} />
-          )}
-          {profit.otherCost > 0 && (
-            <RelatedDetailRow label="Other" value={formatCurrency(profit.otherCost)} />
           )}
           <RelatedDetailRow
             label="True landed cost"

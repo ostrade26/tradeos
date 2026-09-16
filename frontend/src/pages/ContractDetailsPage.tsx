@@ -24,7 +24,7 @@ export function ContractDetailsPage() {
       <div className="animate-fade-in">
         <PageHeader
           title="Contract not found"
-          breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Contracts', href: '/contracts' }, { label: 'Not found' }]} />}
+          breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Contracts', href: '/contracts' }, { label: 'Not found' }]} />}
         />
         <EmptyState
           card
@@ -56,7 +56,7 @@ export function ContractDetailsPage() {
         title={contract.ref}
         subtitle={`${contract.commodity} · ${formatQty(contract.quantity, contract.unit)} · ${contract.buyer} ↔ ${contract.seller}`}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Contracts', href: '/contracts' },
           { label: contract.ref },
         ]} />}

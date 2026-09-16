@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { CommandPalette } from '../ui/CommandPalette'
 import { buildGlobalSearchItems } from '../../lib/globalSearch'
 import { useTradeStore } from '../../store/TradeStore'
+import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { useLocation } from 'react-router-dom'
+import { isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface GlobalCommandPaletteProps {
   open: boolean
@@ -13,8 +16,33 @@ interface GlobalCommandPaletteProps {
 export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalCommandPaletteProps) {
   const store = useTradeStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const { isPlatformAdmin } = useAuth()
+  const { hasPermission } = usePermissions()
+  const platformAdminMode = isPlatformAdmin && isPlatformAdminPath(location.pathname)
 
   const items = useMemo(() => {
+    if (platformAdminMode) {
+      const nav = [
+        { id: 'orgs', label: 'Organisations', group: 'Navigation', action: () => navigate('/platform-admin/organisations') },
+        { id: 'seats', label: 'Seats', group: 'Navigation', action: () => navigate('/platform-admin/seats') },
+        { id: 'plans', label: 'Plans', group: 'Navigation', action: () => navigate('/platform-admin/plans') },
+        {
+          id: 'seat-requests',
+          label: 'Seat requests',
+          group: 'Navigation',
+          action: () => navigate('/platform-admin/seat-requests'),
+        },
+        { id: 'audit', label: 'Audit log', group: 'Navigation', action: () => navigate('/platform-admin/audit') },
+        { id: 'profile', label: 'Profile', group: 'Navigation', action: () => navigate('/platform-admin/profile') },
+        { id: 'settings', label: 'Settings', group: 'Navigation', action: () => navigate('/platform-admin/settings') },
+      ]
+      return [
+        { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
+        ...nav,
+      ]
+    }
+
     const nav = [
       { id: 'dash', label: 'Go to Dashboard', group: 'Navigation', action: () => navigate('/') },
       { id: 'po', label: 'Purchase Orders', group: 'Navigation', action: () => navigate('/purchase-orders') },
@@ -31,11 +59,19 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     ]
 
     const actions = [
-      { id: 'new-po', label: 'New Purchase Order', description: 'F1', group: 'Actions', action: () => navigate('/purchase-orders/new') },
-      { id: 'new-so', label: 'New Sales Order', description: 'F3', group: 'Actions', action: () => navigate('/sales-orders/new') },
-      { id: 'new-lift', label: 'Record Lift', description: 'F5', group: 'Actions', action: () => navigate('/lifts/new') },
-      { id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate('/contracts/new') },
-      { id: 'assistant', label: 'Ask TradeOS AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
+      ...(hasPermission('purchase.create')
+        ? [{ id: 'new-po', label: 'New Purchase Order', description: 'F1', group: 'Actions', action: () => navigate('/purchase-orders/new') }]
+        : []),
+      ...(hasPermission('sales.create')
+        ? [{ id: 'new-so', label: 'New Sales Order', description: 'F3', group: 'Actions', action: () => navigate('/sales-orders/new') }]
+        : []),
+      ...(hasPermission('lifts.create')
+        ? [{ id: 'new-lift', label: 'Record Lift', description: 'F5', group: 'Actions', action: () => navigate('/lifts/new') }]
+        : []),
+      ...(hasPermission('contracts.create')
+        ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate('/contracts/new') }]
+        : []),
+      { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
     ]
 
     const searchHits = buildGlobalSearchItems(store, navigate).map(item => ({
@@ -47,7 +83,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     }))
 
     return [...actions, ...nav, ...searchHits]
-  }, [store, navigate, onOpenAssistant])
+  }, [hasPermission, store, navigate, onOpenAssistant, platformAdminMode])
 
   return <CommandPalette open={open} onClose={onClose} items={items} />
 }

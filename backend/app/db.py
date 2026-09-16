@@ -9,7 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(os.environ.get("TRADEOS_DB_PATH", Path(__file__).resolve().parent.parent / "data" / "trade.db"))
+DB_PATH = Path(
+    os.environ.get("TRADEAL_DB_PATH")
+    or os.environ.get("TRADEOS_DB_PATH")
+    or Path(__file__).resolve().parent.parent / "data" / "trade.db",
+)
 
 DEFAULT_STATE: dict[str, Any] = {
     "tradeOrders": [],
@@ -62,6 +66,31 @@ def _pg_connect():
     return psycopg.connect(_pg_dsn(), row_factory=dict_row, connect_timeout=10)
 
 
+def begin_transaction(conn) -> None:
+    """Start an explicit transaction (required for SQLite autocommit connections)."""
+    if uses_postgres():
+        conn.execute("BEGIN")
+    else:
+        conn.execute("BEGIN IMMEDIATE")
+
+
+def rollback_transaction(conn) -> None:
+    if uses_postgres():
+        conn.rollback()
+    else:
+        conn.execute("ROLLBACK")
+
+
+def set_pg_organisation_context(conn, organisation_id: int) -> None:
+    """Set session var for optional trade_state RLS (see migrations/001_org_rbac_rls.sql)."""
+    if not uses_postgres():
+        return
+    conn.execute(
+        "SELECT set_config('app.organisation_id', %s, true)",
+        (str(int(organisation_id)),),
+    )
+
+
 def _sqlite_connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -94,6 +123,8 @@ def ping_db() -> str:
 
 
 def init_db() -> None:
+    from .identity.schema import init_identity_schema
+
     if running_on_railway() and not uses_postgres():
         raise RuntimeError(
             "DATABASE_URL is not set. Attach Railway Postgres and set "
@@ -103,22 +134,44 @@ def init_db() -> None:
 
     if uses_postgres():
         with _pg_connect() as conn:
-            conn.execute(
+            legacy_ts = conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS trade_state (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    data JSONB NOT NULL
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'trade_state' AND column_name = 'id'
+                """
+            ).fetchone()
+            org_ts = conn.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'trade_state' AND column_name = 'organisation_id'
+                """
+            ).fetchone()
+            if not legacy_ts and not org_ts:
+                conn.execute(
+                    """
+                    CREATE TABLE trade_state (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        data JSONB NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                INSERT INTO trade_state (id, data)
-                VALUES (1, %s::jsonb)
-                ON CONFLICT (id) DO NOTHING
-                """,
-                (json.dumps(DEFAULT_STATE),),
-            )
+                conn.execute(
+                    """
+                    INSERT INTO trade_state (id, data)
+                    VALUES (1, %s::jsonb)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (json.dumps(DEFAULT_STATE),),
+                )
+            elif legacy_ts and not org_ts:
+                conn.execute(
+                    """
+                    INSERT INTO trade_state (id, data)
+                    VALUES (1, %s::jsonb)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (json.dumps(DEFAULT_STATE),),
+                )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS demo_requests (
@@ -133,23 +186,31 @@ def init_db() -> None:
                 """
             )
             conn.commit()
+        init_identity_schema()
         return
 
     with _sqlite_connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS trade_state (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                data TEXT NOT NULL
+        ts_cols = [r[1] for r in conn.execute("PRAGMA table_info(trade_state)").fetchall()]
+        if not ts_cols:
+            conn.execute(
+                """
+                CREATE TABLE trade_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    data TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        row = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
-        if row is None:
             conn.execute(
                 "INSERT INTO trade_state (id, data) VALUES (1, ?)",
                 (json.dumps(DEFAULT_STATE),),
             )
+        elif "id" in ts_cols and "organisation_id" not in ts_cols:
+            row = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
+            if row is None:
+                conn.execute(
+                    "INSERT INTO trade_state (id, data) VALUES (1, ?)",
+                    (json.dumps(DEFAULT_STATE),),
+                )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS demo_requests (
@@ -164,33 +225,55 @@ def init_db() -> None:
             """
         )
         conn.commit()
+    init_identity_schema()
 
 
-def get_state() -> dict[str, Any]:
+def get_state(organisation_id: int) -> dict[str, Any]:
     init_db()
     if uses_postgres():
         with _pg_connect() as conn:
-            row = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
+            set_pg_organisation_context(conn, organisation_id)
+            row = conn.execute(
+                "SELECT data FROM trade_state WHERE organisation_id = %s",
+                (organisation_id,),
+            ).fetchone()
             return _row_data(row)
 
     with _sqlite_connect() as conn:
-        row = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
+        row = conn.execute(
+            "SELECT data FROM trade_state WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone()
         return _row_data(row)
 
 
-def save_state(data: dict[str, Any]) -> None:
+def save_state(data: dict[str, Any], organisation_id: int) -> None:
     init_db()
     payload = json.dumps(data)
     if uses_postgres():
         with _pg_connect() as conn:
             conn.execute("BEGIN")
-            conn.execute("UPDATE trade_state SET data = %s::jsonb WHERE id = 1", (payload,))
+            set_pg_organisation_context(conn, organisation_id)
+            conn.execute(
+                """
+                INSERT INTO trade_state (organisation_id, data)
+                VALUES (%s, %s::jsonb)
+                ON CONFLICT (organisation_id) DO UPDATE SET data = EXCLUDED.data
+                """,
+                (organisation_id, payload),
+            )
             conn.commit()
         return
 
     with _sqlite_connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute("UPDATE trade_state SET data = ? WHERE id = 1", (payload,))
+        conn.execute(
+            """
+            INSERT INTO trade_state (organisation_id, data) VALUES (?, ?)
+            ON CONFLICT(organisation_id) DO UPDATE SET data = excluded.data
+            """,
+            (organisation_id, payload),
+        )
         conn.commit()
 
 

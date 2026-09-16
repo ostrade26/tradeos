@@ -73,31 +73,31 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
       hideHeader
       size="md"
       footer={
-        isPO ? (
-          <div className="grid grid-cols-2 gap-3 w-full">
+        <div
+          className={
+            isPO || canRecordLift
+              ? 'grid grid-cols-2 gap-3 w-full'
+              : 'grid w-full'
+          }
+        >
+          <Button variant="secondary" onClick={onClose} className="w-full min-h-11">
+            Done
+          </Button>
+          {isPO ? (
             <Button
               to={`/sales-orders/new?poRef=${encodeURIComponent(order.ref)}`}
-              variant="secondary"
               className="w-full min-h-11"
             >
               <Plus className="h-4 w-4" />
               Create SO
             </Button>
-            <Button
-              to={canRecordLift ? liftHref : undefined}
-              className="w-full min-h-11"
-              disabled={!canRecordLift}
-            >
+          ) : canRecordLift ? (
+            <Button to={liftHref} className="w-full min-h-11">
               <Truck className="h-4 w-4" />
               Lift
             </Button>
-          </div>
-        ) : canRecordLift ? (
-          <Button to={liftHref} className="w-full min-h-11">
-            <Truck className="h-4 w-4" />
-            Lift
-          </Button>
-        ) : undefined
+          ) : null}
+        </div>
       }
     >
       <div className="-mx-6 -mt-8 px-6 pt-8 pb-6 text-center bg-gray-50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700">

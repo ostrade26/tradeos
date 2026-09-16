@@ -1,5 +1,5 @@
 {
-  "name": "tradeos",
+  "name": "tradeal",
   "private": true,
   "scripts": {
     "dev": "npm run dev --prefix frontend",

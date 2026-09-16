@@ -14,7 +14,7 @@ export function Footer() {
           <a href="#demo" className="font-medium text-white hover:text-accent transition-colors duration-200 cursor-pointer">
             Request a demo
           </a>
-          <p className="mt-2 text-white/45">© {new Date().getFullYear()} TradeOS</p>
+          <p className="mt-2 text-white/45">© {new Date().getFullYear()} Tradeal</p>
         </div>
       </div>
     </footer>

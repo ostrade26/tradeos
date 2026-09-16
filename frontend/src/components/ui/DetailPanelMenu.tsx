@@ -192,6 +192,7 @@ export function DetailPanelMenu({ items, onItemSelect, align = 'end', tableTrigg
         <div
           ref={menuRef}
           role="menu"
+          data-overlay-dismiss="ignore"
           style={{ position: 'fixed', top: menuStyle.top, left: menuStyle.left, zIndex: MENU_Z_INDEX }}
           className="min-w-[12.5rem] rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg py-0.5"
           onMouseDown={e => e.stopPropagation()}

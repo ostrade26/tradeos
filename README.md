@@ -1,9 +1,9 @@
-# TradeOS
+# Tradeal
 
 Trading operations app with a **React** frontend and **Python (FastAPI)** backend.
 
 ```
-tradeos/
+tradeal/
   frontend/    React + Vite + TypeScript (app + marketing site) — deploy on Vercel
   backend/     FastAPI — deploy on Railway (Postgres in production, SQLite locally)
 ```
@@ -102,7 +102,7 @@ The UI shows a red banner if the Python API goes offline. All data mutations fro
 
 ## Browser support
 
-TradeOS targets **modern evergreen browsers** on desktop and mobile:
+Tradeal targets **modern evergreen browsers** on desktop and mobile:
 
 | Platform | Browsers |
 |----------|----------|
@@ -146,10 +146,13 @@ The browser calls the Railway API using `VITE_API_URL` (baked in at Vercel **bui
    |---|---|
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference the Postgres plugin) |
    | `CORS_ORIGINS` | `https://your-app.vercel.app` (add a custom domain later if you use one) |
-   | `TRADEOS_USERS` | `admin:change-me:admin:Admin` (do not ship the default `admin`/`admin`) |
+   | `TRADEAL_USERS` | `admin:change-me:admin:Admin` (seeded **once** when `users` is empty; use strong passwords) |
+   | `TRADEAL_PLATFORM_ADMIN` | `platform:change-me:Tradeal Admin` (optional; platform login for org/user APIs) |
 
 5. Generate a public domain on the API service (`xxx.up.railway.app`).
 6. Confirm `GET https://xxx.up.railway.app/api/v1/health` returns `{"status":"ok","db":"postgres"}`.
+
+On the **first deploy** after the org/RBAC update, the API runs a migration: existing Postgres `trade_state` moves into organisation **“Existing Tradeal Organisation”**; env users become DB users with roles. Everyone must **sign in again** (sessions are DB-backed now).
 
 `backend/Dockerfile` and `backend/railway.toml` define the start command and health check. Locally, leave `DATABASE_URL` unset so SQLite is still used.
 
@@ -169,14 +172,19 @@ The browser calls the Railway API using `VITE_API_URL` (baked in at Vercel **bui
 
 ### 3. First login
 
-Open the Vercel URL, sign in with the `TRADEOS_USERS` admin account, then **Settings → Load demo data** if you want seed POs/SOs.
+Open the Vercel URL (e.g. [trade-os5/tradeal on Vercel](https://vercel.com/trade-os5/tradeal)) and sign in with your **Organisation Admin** account from `TRADEAL_USERS`.
+
+- **Load demo / clear all data** — Tradeal platform admin only (`TRADEAL_PLATFORM_ADMIN`), not org admins.
+- **Create organisations or users** — platform admin via [Railway API Swagger](https://your-service.up.railway.app/docs) → `/api/v1/platform/*`, not the customer UI.
 
 ### Checklists
 
 - [ ] Railway health is `ok` and `"db":"postgres"`
 - [ ] Vercel build succeeds (`frontend` `npm run build`)
 - [ ] Browser network tab: UI calls `https://…railway.app/api/v1/…` (not `/api/v1` on Vercel)
-- [ ] Login works; creating a PO persists after a Railway redeploy
+- [ ] Login works; `/auth/me` returns `permissions`, `organisationName`
+- [ ] Creating a PO persists after a Railway redeploy
+- [ ] Operator can create but not edit POs (403 on PATCH)
 
 ## Admin
 

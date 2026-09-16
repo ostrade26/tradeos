@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
 import { FormErrorBanner, FieldValidationBanner } from '../ui/FieldError'
 import { LiftTankersForm } from './LiftTankersForm'
 import {
@@ -19,13 +18,14 @@ import {
   collectLiftTankerFieldErrors,
   type LiftTankerFieldErrorMap,
 } from '../../lib/liftTankers'
-import { applyAllocationActuals, collectAllocationActualFieldErrors, getLiftAllocations } from '../../lib/liftAllocations'
+import { applyAllocationActuals, collectAllocationActualFieldErrors, formatLiftOrderSummary, getLiftAllocations } from '../../lib/liftAllocations'
 import { getLiftPlannedQty, getLiftBalanceQty } from '../../lib/liftBalance'
 import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
 import { formatQty } from '../../lib/utils'
 import { formatLiftRef } from '../../lib/tradeRefs'
 import { DeliveryQtySummary } from './DeliveryQtySummary'
+import { DeliveryFormSection } from './DeliveryFormSection'
 
 interface MarkLiftDeliveredModalProps {
   lift: Lift | null
@@ -41,8 +41,6 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
   const [soActuals, setSoActuals] = useState<Record<string, string>>(() =>
     lift ? actualQtyDraftFromAllocations(getLiftAllocations(lift)) : {},
   )
-  const [deliveredDate, setDeliveredDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [salesInvoiceNo, setSalesInvoiceNo] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [tankerFieldErrors, setTankerFieldErrors] = useState<LiftTankerFieldErrorMap>({})
@@ -52,8 +50,6 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     if (!open || !lift) return
     setTankers(getLiftTankers(lift).map(liftTankerToForm))
     setSoActuals(actualQtyDraftFromAllocations(getLiftAllocations(lift)))
-    setDeliveredDate(new Date().toISOString().slice(0, 10))
-    setSalesInvoiceNo('')
     setError('')
     setTankerFieldErrors({})
     setSoFieldErrors({})
@@ -63,13 +59,13 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
   if (!lift) return null
 
   const allocations = getLiftAllocations(lift)
-  const hideTankerQty = tankers.length === 1
+  /** Per-SO actuals only when one tanker carries multiple orders. */
+  const hideTankerQty = tankers.length === 1 && allocations.length > 1
   const plannedQty = getLiftPlannedQty(lift)
   const actualPreview = hideTankerQty
     ? totalActualFromDraft(soActuals)
     : totalActualQtyFromForm(tankers)
   const balancePreview = actualPreview > 0 ? Math.max(0, plannedQty - actualPreview) : 0
-
   const handleConfirm = async () => {
     if (saving) return
     setError('')
@@ -87,8 +83,7 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     try {
       const payload: Parameters<typeof store.markLiftDelivered>[1] = {
         tankers: tankers.map(formToLiftTanker),
-        deliveredAt: new Date(`${deliveredDate}T12:00:00`).toISOString(),
-        ...(salesInvoiceNo.trim() ? { salesInvoiceNo: salesInvoiceNo.trim() } : {}),
+        deliveredAt: new Date().toISOString(),
       }
       if (hideTankerQty) {
         const actualBySo = parsedActualQtyDraft(soActuals)
@@ -101,10 +96,13 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
       }
       setSaving(true)
       const updated = await store.markLiftDelivered(lift.id, payload)
+      const invoiceHint = updated.salesInvoiceNo?.trim()
+        ? updated.salesInvoiceNo.replace(/, /g, ' · ')
+        : null
       toast.success(`${formatLiftRef(updated.liftRef)} marked delivered`, {
         description: getLiftBalanceQty(updated) > 0
-          ? `${formatQty(actualPreview)} actual · ${formatQty(getLiftBalanceQty(updated))} balance owed`
-          : `${formatQty(actualPreview)} actual · ${updated.salesInvoiceNo ?? 'Invoice generated'}`,
+          ? `${formatQty(actualPreview)} actual · ${formatQty(getLiftBalanceQty(updated))} balance owed${invoiceHint ? ` · ${invoiceHint}` : ''}`
+          : `${formatQty(actualPreview)} actual${invoiceHint ? ` · ${invoiceHint}` : ''}`,
       })
       onDelivered?.(updated)
       onClose()
@@ -121,7 +119,8 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     <Modal
       open={open}
       onClose={onClose}
-      title={`Mark ${formatLiftRef(lift.liftRef)} as delivered`}
+      title="Confirm delivery"
+      subtitle={`${formatLiftRef(lift.liftRef)} · ${lift.itemName} · ${formatLiftOrderSummary(lift)}`}
       size="lg"
       footer={
         <>
@@ -130,46 +129,41 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-8">
         {(Object.keys(tankerFieldErrors).length > 0 || Object.keys(soFieldErrors).length > 0) && (
           <FieldValidationBanner />
         )}
-        <DeliveryQtySummary
-          planned={plannedQty}
-          actual={actualPreview}
-          balance={balancePreview}
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Delivery date"
-            type="date"
-            value={deliveredDate}
-            onChange={e => setDeliveredDate(e.target.value)}
-          />
-          <Input
-            label="Sales invoice no."
-            value={salesInvoiceNo}
-            onChange={e => setSalesInvoiceNo(e.target.value)}
-            className="font-mono uppercase"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="Optional"
+
+        <div className="pb-6 border-b border-gray-200 dark:border-gray-700">
+          <DeliveryQtySummary
+            planned={plannedQty}
+            actual={actualPreview}
+            balance={balancePreview}
           />
         </div>
+
         {hideTankerQty && (
-          <LiftSoActualQtyForm
-            allocations={allocations}
-            orders={store.tradeOrders}
-            values={soActuals}
-            fieldErrors={soFieldErrors}
-            compact
-            hideTotals
-            onChange={values => {
-              setSoFieldErrors({})
-              setSoActuals(values)
-            }}
-          />
+          <DeliveryFormSection
+            title="Weighed quantity"
+            description="Actual MT per sales order."
+          >
+            <div className="max-w-lg">
+              <LiftSoActualQtyForm
+                allocations={allocations}
+                orders={store.tradeOrders}
+                values={soActuals}
+                fieldErrors={soFieldErrors}
+                compact
+                hideTotals
+                onChange={values => {
+                  setSoFieldErrors({})
+                  setSoActuals(values)
+                }}
+              />
+            </div>
+          </DeliveryFormSection>
         )}
+
         <LiftTankersForm
           tankers={tankers}
           qtyMode="actual"
@@ -177,12 +171,16 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
           hideTotal
           tankerNoOptional
           allowAddTanker={false}
+          showSalesInvoicePerTanker
+          compactDelivery
+          deliverySectionPerTanker
           fieldErrors={tankerFieldErrors}
           onChange={next => {
             setTankerFieldErrors({})
             setTankers(next)
           }}
         />
+
         {error && <FormErrorBanner>{error}</FormErrorBanner>}
       </div>
     </Modal>

@@ -1,5 +1,5 @@
 {
-  "name": "tradeos",
+  "name": "tradeal",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -26,7 +26,6 @@
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
     "recharts": "^3.10.1",
-    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "browserslist": [

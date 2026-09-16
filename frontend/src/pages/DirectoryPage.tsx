@@ -338,7 +338,7 @@ export function DirectoryPage() {
       <PageHeader
         title="Directory"
         subtitle="People you trade with — brokers and parties"
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Directory' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Directory' }]} />}
         actions={
           <Button size="sm" onClick={openAdd}>
             <Plus className="h-4 w-4" /> Add {tabLabels[active]}

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   type TradeOrder,
   type Lift,
@@ -33,6 +34,7 @@ import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatQty } from '../lib/utils'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
+import { useAuth } from '../hooks/useAuth'
 
 export interface CreateOrderInput {
   ref?: string
@@ -71,10 +73,6 @@ export interface CreateOrderInput {
   rateBasis?: string
   ratePerBasis?: number
   paymentTerms?: string
-  unloading?: string
-  freightCost?: number
-  loadingCost?: number
-  otherCost?: number
   remarks?: string
 }
 
@@ -305,6 +303,10 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
 }
 
 export function TradeProvider({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const { organisationSandboxTools } = useAuth()
+  const isPlatformAdminRoute = location.pathname.startsWith('/platform-admin')
+
   const [data, setData] = useState<TradeData>(defaultData)
   const [ready, setReady] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -316,7 +318,12 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     try {
       await tradeApi.health()
       let state = await tradeApi.getState()
-      if (seedIfEmpty && state.tradeOrders.length === 0 && state.brokers.length === 0) {
+      if (
+        seedIfEmpty &&
+        organisationSandboxTools &&
+        state.tradeOrders.length === 0 &&
+        state.brokers.length === 0
+      ) {
         try {
           const seeded = await tradeApi.seed()
           state = seeded.data
@@ -331,15 +338,20 @@ export function TradeProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       setReady(true)
     }
-  }, [])
+  }, [organisationSandboxTools])
 
   const refresh = useCallback(async () => {
     await loadState(false)
   }, [loadState])
 
   useEffect(() => {
+    if (isPlatformAdminRoute) {
+      setLoading(false)
+      setReady(true)
+      return
+    }
     void loadState(true)
-  }, [loadState])
+  }, [isPlatformAdminRoute, loadState])
 
   const applyMutation = useCallback(async <T,>(fn: () => Promise<{ data: TradeData; result: T }>): Promise<T> => {
     const response = await fn()
@@ -700,11 +712,16 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     pipelineData,
   }
 
-  if (!ready && loading) {
+  if (!ready && loading && !isPlatformAdminRoute) {
     return <TradeStoreLoading />
   }
 
-  if (error && data.tradeOrders.length === 0 && data.brokers.length === 0) {
+  if (
+    !isPlatformAdminRoute &&
+    error &&
+    data.tradeOrders.length === 0 &&
+    data.brokers.length === 0
+  ) {
     return <TradeStoreError message={error} onRetry={() => void refresh()} />
   }
 

@@ -87,7 +87,7 @@ export function ReportsDashboardPage() {
       <PageHeader
         title="Reports"
         subtitle="Audit and compliance views over live trading records"
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Reports' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Reports' }]} />}
         actions={
           <Button onClick={() => setPackOpen(true)}>
             <FileArchive className="h-4 w-4" /> Generate Audit Pack
@@ -137,7 +137,7 @@ export function ReportsDashboardPage() {
                   const filtered = applyReportFilters(built.rows, { ...emptyReportFilters(), dateFrom, dateTo })
                   return [{ id: def.id, built: { columns: built.columns, rows: filtered } }]
                 })
-                exportAuditSupportPack(reports, `tradeos-audit-support-pack-${fyId || 'custom'}`)
+                exportAuditSupportPack(reports, `tradeal-audit-support-pack-${fyId || 'custom'}`)
                 toast.success('Audit Support Pack downloaded')
                 setPackOpen(false)
               }}

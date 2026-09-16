@@ -62,7 +62,7 @@ export function DetailPanelColumn() {
   return (
     <aside
       className={cn(
-        'app-detail-panel shrink-0 flex-col overflow-hidden z-[1000]',
+        'app-detail-panel relative z-0 shrink-0 flex-col overflow-hidden',
         'h-viewport-under-topbar max-h-viewport-under-topbar',
         'border-l border-gray-200/80 bg-white dark:border-gray-700/50 dark:bg-card',
         dockedWidths[width],
@@ -77,4 +77,13 @@ export function DetailPanelColumn() {
 export function useDetailPanelDockedOpen() {
   const { open } = useDetailPanelSlot()
   return open
+}
+
+/**
+ * Reserved for route-level detail panel coordination.
+ * Docked columns close via `DockedPanel` unmount cleanup — do not force `setOpen(false)` here
+ * or it races with remounting registers (e.g. PO → SO → PO leaves the panel closed).
+ */
+export function DetailPanelRouteSync() {
+  return null
 }

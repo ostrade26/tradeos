@@ -22,9 +22,13 @@ export function ProfilePage() {
     setForm(prev => ({ ...prev, [key]: e.target.value }))
   }
 
-  const handleSave = () => {
-    updateProfile(form)
-    toast.success('Profile updated')
+  const handleSave = async () => {
+    try {
+      await updateProfile(form)
+      toast.success('Profile updated')
+    } catch {
+      toast.error('Could not save profile')
+    }
   }
 
   const handleReset = () => {
@@ -38,7 +42,7 @@ export function ProfilePage() {
       <PageHeader
         title="Profile"
         subtitle="Your account details shown in the header and trade documents"
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Profile' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Profile' }]} />}
       />
 
       <Card>
@@ -54,10 +58,10 @@ export function ProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Company / trader name" value={form.name} onChange={set('name')} />
-          <Input label="Location" value={form.location} onChange={set('location')} />
-          <Input label="Email" type="email" value={form.email} onChange={set('email')} />
-          <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} />
+          <Input label="Company / trader name" value={form.name} onChange={set('name')} placeholder="" />
+          <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
+          <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
+          <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
           <div className="sm:col-span-2">
             <Input label="Role" value={roleLabel || form.role} readOnly />
           </div>

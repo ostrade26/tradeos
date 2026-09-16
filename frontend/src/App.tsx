@@ -10,6 +10,11 @@ import { TradeProvider } from './store/TradeStore'
 import { AppShell } from './components/layout/AppShell'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { RequireEditOrders } from './components/auth/RequireEditOrders'
+import { RequirePlatformAdmin } from './components/auth/RequirePlatformAdmin'
+import { RequireOrganisationUser } from './components/auth/RequireOrganisationUser'
+import { PlatformAdminPage } from './pages/PlatformAdminPage'
+import { PlatformAdminProfilePage } from './pages/PlatformAdminProfilePage'
+import { PlatformAdminSettingsPage } from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ContractsPage } from './pages/ContractsPage'
@@ -24,7 +29,7 @@ import { ReportViewPage } from './pages/ReportViewPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ProfilePage } from './pages/ProfilePage'
-import { SettingsPage } from './pages/SettingsPage'
+import { SettingsHubPage, SettingsLayout, SettingsSectionPage } from './pages/SettingsPage'
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
 import { SalesOrdersPage } from './pages/SalesOrdersPage'
 import { LiftRegisterPage } from './pages/LiftRegisterPage'
@@ -52,7 +57,7 @@ function withSuspense(page: ReactNode) {
   return <Suspense fallback={<PageLoader />}>{page}</Suspense>
 }
 
-function AppLayout() {
+function ShellLayout() {
   return (
     <UserProvider>
       <TradeProvider>
@@ -65,15 +70,15 @@ function AppLayout() {
 /** App-wide providers must live inside the router tree (createBrowserRouter). */
 function RootProviders() {
   return (
-    <ThemeProvider>
-      <TableDensityProvider>
-        <AuthProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <TableDensityProvider>
           <ToastProvider>
             <Outlet />
           </ToastProvider>
-        </AuthProvider>
-      </TableDensityProvider>
-    </ThemeProvider>
+        </TableDensityProvider>
+      </ThemeProvider>
+    </AuthProvider>
   )
 }
 
@@ -86,9 +91,26 @@ const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           {
-            element: <AppLayout />,
+            element: <RequirePlatformAdmin />,
             children: [
-              { index: true, element: <DashboardPage /> },
+              {
+                element: <ShellLayout />,
+                children: [
+                  { path: 'platform-admin/profile', element: <PlatformAdminProfilePage /> },
+                  { path: 'platform-admin/settings', element: <PlatformAdminSettingsPage /> },
+                  { path: 'platform-admin', element: <Navigate to="/platform-admin/organisations" replace /> },
+                  { path: 'platform-admin/:section', element: <PlatformAdminPage /> },
+                ],
+              },
+            ],
+          },
+          {
+            element: <RequireOrganisationUser />,
+            children: [
+              {
+                element: <ShellLayout />,
+                children: [
+                  { index: true, element: <DashboardPage /> },
 
           { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
           { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },
@@ -134,9 +156,18 @@ const router = createBrowserRouter([
           { path: 'market-news', element: <Navigate to="/" replace /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'profile', element: <ProfilePage /> },
-          { path: 'settings', element: <SettingsPage /> },
+          {
+            path: 'settings',
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <SettingsHubPage /> },
+              { path: ':section', element: <SettingsSectionPage /> },
+            ],
+          },
 
-              { path: '*', element: <Navigate to="/" replace /> },
+                  { path: '*', element: <Navigate to="/" replace /> },
+                ],
+              },
             ],
           },
         ],

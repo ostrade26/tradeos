@@ -91,6 +91,37 @@ export function LiftSoActualQtyForm({
           )
         }
 
+        if (compact) {
+          return (
+            <div
+              key={key}
+              className="grid grid-cols-1 sm:grid-cols-[1fr_min(9rem,35%)] gap-3 sm:gap-4 sm:items-end pb-4 border-b border-gray-100 dark:border-gray-800 last:border-0 last:pb-0"
+            >
+              <div className="min-w-0 pb-1 sm:pb-0">
+                <p className="font-mono text-sm font-medium text-heading">{label}</p>
+                <p className="text-xs text-muted mt-0.5 truncate">
+                  {so ? `${so.partyName} · ${a.poRef}` : `Stock · ${a.poRef}`}
+                  {showPlanned ? ` · planned ${formatQty(a.qtyMt)}` : ''}
+                </p>
+                {shortfall > 0 && a.soRef && (
+                  <p className="text-xs tabular-nums text-warning mt-1">
+                    Balance {formatQty(shortfall)}
+                  </p>
+                )}
+              </div>
+              <QtyInput
+                label="Actual (MT)"
+                value={values[key] ?? ''}
+                fillQty={a.qtyMt > 0 ? a.qtyMt : undefined}
+                fillLabel="Planned"
+                error={fieldErrors?.[key]}
+                onChange={e => update(key, sanitizeQtyInput(e.target.value))}
+                placeholder="0.000"
+              />
+            </div>
+          )
+        }
+
         return (
           <div
             key={key}

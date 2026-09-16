@@ -1,62 +1,47 @@
-"""Session auth and role checks for TradeOS API."""
+"""Session auth and permission checks for Tradeal API."""
 
 from __future__ import annotations
 
 import os
-import secrets
-import time
-from dataclasses import dataclass
-from typing import Literal
+from typing import Any
 
 from fastapi import HTTPException, Request
 
-Role = Literal["admin", "operator"]
+from .identity.repository import (
+    AuthUser,
+    Session,
+    append_audit_log,
+    authenticate,
+    create_session,
+    delete_session,
+    get_session,
+    organisation_has_sandbox_tools,
+    require_permission,
+    resolve_organisation_id,
+    touch_user_login,
+    user_has_permission,
+)
 
-
-@dataclass(frozen=True)
-class UserRecord:
-    username: str
-    password: str
-    role: Role
-    name: str
-
-
-@dataclass(frozen=True)
-class Session:
-    username: str
-    role: Role
-    name: str
-    created_at: float
-
-
-_sessions: dict[str, Session] = {}
-
-
-def _load_users() -> dict[str, UserRecord]:
-    raw = (os.environ.get("TRADEOS_USERS") or "").strip()
-    users: dict[str, UserRecord] = {}
-    if raw:
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            bits = part.split(":")
-            if len(bits) < 3:
-                continue
-            username, password, role = bits[0], bits[1], bits[2]
-            if role not in ("admin", "operator"):
-                continue
-            name = bits[3] if len(bits) > 3 else username.replace("_", " ").title()
-            users[username] = UserRecord(username=username, password=password, role=role, name=name)  # type: ignore[arg-type]
-    if not users:
-        users["admin"] = UserRecord(username="admin", password="admin", role="admin", name="Admin")
-        users["operator"] = UserRecord(
-            username="operator", password="operator", role="operator", name="Operator"
-        )
-    return users
-
-
-USERS = _load_users()
+# Re-export for type hints in main.py
+__all__ = [
+    "Session",
+    "AuthUser",
+    "PUBLIC_PATHS",
+    "extract_bearer_token",
+    "login",
+    "logout",
+    "session_from_request",
+    "require_session",
+    "require_admin",
+    "require_platform",
+    "require_platform_settings",
+    "require_can_edit_orders",
+    "require_permission",
+    "user_has_permission",
+    "resolve_organisation_id",
+    "session_to_dict",
+    "append_audit_log",
+]
 
 PUBLIC_PATHS = {
     "/api/v1/health",
@@ -73,23 +58,21 @@ def extract_bearer_token(request: Request) -> str:
 
 
 def login(username: str, password: str) -> tuple[str, Session]:
-    user = USERS.get(username.strip())
-    if not user or user.password != password:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = secrets.token_urlsafe(32)
-    session = Session(username=user.username, role=user.role, name=user.name, created_at=time.time())
-    _sessions[token] = session
+    user = authenticate(username, password)
+    touch_user_login(user.id)
+    token, session = create_session(user)
+    append_audit_log(
+        organisation_id=user.organisation_id,
+        actor_user_id=user.id,
+        action="auth.login",
+        entity_type="user",
+        entity_id=str(user.id),
+    )
     return token, session
 
 
 def logout(token: str) -> None:
-    _sessions.pop(token, None)
-
-
-def get_session(token: str) -> Session | None:
-    if not token:
-        return None
-    return _sessions.get(token)
+    delete_session(token)
 
 
 def session_from_request(request: Request) -> Session | None:
@@ -104,18 +87,91 @@ def require_session(request: Request) -> Session:
 
 
 def require_admin(session: Session) -> None:
-    if session.role != "admin":
+    """Organisation-level delete/void operations (not platform user management)."""
+    if session.user.role_slug == "platform_admin":
+        return
+    if not (
+        user_has_permission(session, "purchase.delete")
+        and user_has_permission(session, "sales.delete")
+    ):
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
 def require_can_edit_orders(session: Session) -> None:
-    if session.role != "admin":
-        raise HTTPException(status_code=403, detail="Operators cannot edit existing orders")
+    if user_has_permission(session, "purchase.edit") or user_has_permission(session, "sales.edit"):
+        return
+    raise HTTPException(status_code=403, detail="You do not have permission to edit orders")
 
 
-def session_to_dict(session: Session) -> dict[str, str]:
+def require_sandbox_demo_tools(session: Session, request: Request) -> int:
+    """Org-scoped demo load/clear — only the test/sandbox organisation."""
+    require_permission(session, "organisation.edit")
+    org_id = resolve_organisation_id(session, request)
+    if not organisation_has_sandbox_tools(org_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Demo data tools are not available for this organisation",
+        )
+    return org_id
+
+
+def require_platform(session: Session) -> None:
+    """Platform console access — gated by role (same as /api/v1/platform middleware)."""
+    if session.user.role_slug != "platform_admin":
+        raise HTTPException(status_code=403, detail="Tradeal platform admin required")
+
+
+def require_platform_settings(session: Session) -> None:
+    require_platform(session)
+    if not user_has_permission(session, "platform.settings"):
+        raise HTTPException(status_code=403, detail="Platform settings permission required")
+
+
+def session_to_dict(session: Session) -> dict[str, Any]:
+    u = session.user
+    # Legacy role aliases for older clients (organisation roles only)
+    legacy_role = u.role_slug
+    if legacy_role == "platform_admin":
+        legacy_role = "platform_admin"
+    elif legacy_role == "organisation_admin":
+        legacy_role = "admin"
+    elif legacy_role == "view_only":
+        legacy_role = "view_only"
+    elif legacy_role == "operator":
+        legacy_role = "operator"
+    from .identity.repository import parse_user_preferences
+
     return {
-        "username": session.username,
-        "name": session.name,
-        "role": session.role,
+        "userId": u.id,
+        "username": u.username,
+        "email": u.email,
+        "name": u.name,
+        "phone": u.phone,
+        "location": u.location,
+        "preferences": parse_user_preferences(u.preferences_raw),
+        "role": legacy_role,
+        "roleSlug": u.role_slug,
+        "roleName": u.role_name,
+        "organisationId": u.organisation_id,
+        "organisationName": u.organisation_name,
+        "accountType": u.account_type,
+        "permissions": sorted(u.permissions),
+        "isPlatformAdmin": u.role_slug == "platform_admin",
+        "organisationSandboxTools": u.organisation_sandbox_tools,
     }
+
+
+API_TOKEN = (
+    os.environ.get("TRADEAL_API_TOKEN") or os.environ.get("TRADEOS_API_TOKEN") or ""
+).strip()
+
+
+def is_api_token_request(request: Request) -> bool:
+    if not API_TOKEN:
+        return False
+    header = request.headers.get("x-tradeal-token") or request.headers.get("x-tradeos-token") or ""
+    auth_header = request.headers.get("authorization") or ""
+    token = header.strip() or (
+        auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    )
+    return token == API_TOKEN

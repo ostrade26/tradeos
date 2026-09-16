@@ -75,7 +75,7 @@ export function AssistantPanel({
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Hi! I\'m your TradeOS assistant. Ask about earnings, balances, pending orders, or type *Create a PO*, *New sales order*, or *Record lift*.',
+      content: 'Hi! I\'m your Tradeal assistant. Ask about earnings, balances, pending orders, or type *Create a PO*, *New sales order*, or *Record lift*.',
       timestamp: new Date().toISOString(),
     },
   ])
@@ -203,7 +203,7 @@ export function AssistantPanel({
           </div>
           <div className="min-w-0 flex-1">
             <h2 id="assistant-title" className="text-base font-semibold text-heading flex items-center gap-1.5">
-              TradeOS AI
+              Tradeal AI
               <Sparkles className={cn('h-3.5 w-3.5 text-accent', thinking && 'assistant-sparkle')} />
             </h2>
             <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">

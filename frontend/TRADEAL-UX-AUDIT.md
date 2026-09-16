@@ -1,6 +1,6 @@
-# TradeOS UX Audit — Full Report
-**App:** TradeOS (commodity trading) · `http://localhost:5173/`  
-**Code:** `/Users/rahulpatil/Projects/tradeos`  
+# Tradeal UX Audit — Full Report
+**App:** Tradeal (commodity trading) · `http://localhost:5173/`  
+**Code:** `/Users/rahulpatil/Projects/tradeal`  
 **Date:** 9 Sep 2026  
 **Methods:** Live UI screenshots (desktop + mobile) + source review on your Mac
 
@@ -8,7 +8,7 @@
 
 ## Executive summary
 
-TradeOS is a strong ops shell for oil/commodity traders: clear Trading vs Platform nav, action-oriented dashboard, solid empty states, PDF contract import on PO entry, and thoughtful mobile card layouts. The biggest gaps are **mental-model mismatches** (inbox “lift pending” vs Lift Register Pending), **post-create drop-off**, **mobile truncation / desktop shortcuts on phone**, and **terminology consistency** — not a missing product foundation.
+Tradeal is a strong ops shell for oil/commodity traders: clear Trading vs Platform nav, action-oriented dashboard, solid empty states, PDF contract import on PO entry, and thoughtful mobile card layouts. The biggest gaps are **mental-model mismatches** (inbox “lift pending” vs Lift Register Pending), **post-create drop-off**, **mobile truncation / desktop shortcuts on phone**, and **terminology consistency** — not a missing product foundation.
 
 ### Top 10 (prioritized)
 
@@ -152,4 +152,4 @@ Inline create on order entry — **confirmed**. Directory still needed for full 
 ---
 
 ## Screenshot index
-`/workspace/tradeos-audit/` — desktop-home, desktop-po, desktop-po-new, desktop-lifts, mobile-home, mobile-po, mobile-po-new
+`/workspace/tradeal-audit/` — desktop-home, desktop-po, desktop-po-new, desktop-lifts, mobile-home, mobile-po, mobile-po-new

@@ -28,7 +28,7 @@ function DealNotFound({ decodedRef }: { decodedRef: string }) {
     <div className="animate-fade-in max-w-2xl mx-auto">
       <PageHeader
         title="Order not found"
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Deal' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Deal' }]} />}
       />
       <EmptyState
         card
@@ -79,7 +79,7 @@ export function OrderFlowPage() {
           title="Deal flow"
           subtitle={flowSummary}
           breadcrumb={<Breadcrumb items={[
-            { label: 'TradeOS', href: '/' },
+            { label: 'Tradeal', href: '/' },
             { label: label, href: listPath },
             { label: formatOrderRef(order.ref, order.side) },
             { label: 'Flow' },
@@ -116,7 +116,7 @@ export function OrderTimelinePage() {
         title="Deal timeline"
         subtitle={`What happened on ${formatOrderRef(order.ref, order.side)} · ${order.partyName}`}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: label, href: listPath },
           { label: formatOrderRef(order.ref, order.side) },
           { label: 'Timeline' },

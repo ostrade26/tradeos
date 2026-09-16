@@ -44,10 +44,6 @@ export function orderToFormValues(order: TradeOrder): Record<string, string> {
     brokeragePct: String(order.brokeragePct),
     brokeragePerTon: order.brokeragePerTon != null ? formatIndianAmount(order.brokeragePerTon) : '',
     paymentTerms: order.paymentTerms ?? '',
-    unloading: order.unloading ?? '',
-    freightCost: order.freightCost != null ? formatIndianAmount(order.freightCost) : '',
-    loadingCost: order.loadingCost != null ? formatIndianAmount(order.loadingCost) : '',
-    otherCost: order.otherCost != null ? formatIndianAmount(order.otherCost) : '',
     remarks: order.remarks ?? '',
   }
 }

@@ -17,9 +17,17 @@ export function getAllocatedSoQty(linkedSOs: TradeOrder[]): number {
   return linkedSOs.reduce((sum, o) => sum + o.orderQty, 0)
 }
 
+/** PO qty still active after buy backs (contract minus bought back). */
+export function effectivePoQty(po: Pick<TradeOrder, 'orderQty' | 'buyBacks'>): number {
+  return Math.max(0, po.orderQty - totalBuyBackQty(po))
+}
+
 /** Unlifted qty not allocated to linked SOs — available for buy back. */
 export function maxBuyBackQty(po: TradeOrder, linkedSOs: TradeOrder[]): number {
-  return Math.max(0, po.orderQty - getAllocatedSoQty(linkedSOs) - po.liftedQty)
+  return Math.max(
+    0,
+    po.orderQty - totalBuyBackQty(po) - getAllocatedSoQty(linkedSOs) - po.liftedQty,
+  )
 }
 
 export function totalBuyBackQty(po: Pick<TradeOrder, 'buyBacks'>): number {

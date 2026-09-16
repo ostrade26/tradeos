@@ -37,20 +37,57 @@ def normalize_lift_tankers(tankers: list[dict]) -> list[dict]:
     result = []
     for t in tankers:
         qty = t.get("actualQtyMt")
-        result.append(
-            {
-                "tankerNo": format_tanker_no(t.get("tankerNo", "")),
-                "transportName": (t.get("transportName") or "").strip(),
-                "driverMobile": (t.get("driverMobile") or "").strip(),
-                "lrNo": (t.get("lrNo") or "").strip().upper(),
-                "actualQtyMt": round_qty_mt(qty) if qty is not None else None,
-            }
-        )
+        inv = (t.get("salesInvoiceNo") or "").strip()
+        row = {
+            "tankerNo": format_tanker_no(t.get("tankerNo", "")),
+            "transportName": (t.get("transportName") or "").strip(),
+            "driverMobile": (t.get("driverMobile") or "").strip(),
+            "lrNo": (t.get("lrNo") or "").strip().upper(),
+            "actualQtyMt": round_qty_mt(qty) if qty is not None else None,
+        }
+        if inv:
+            row["salesInvoiceNo"] = inv
+        result.append(row)
     return result
 
 
 def resolve_lift_qty(tankers: list[dict]) -> float:
     return round_qty_mt(sum(t.get("actualQtyMt") or 0 for t in tankers))
+
+
+def assign_sales_invoices_to_tankers(
+    tankers: list[dict],
+    counters: dict,
+    delivered_at: str,
+    lift_level_invoice: str | None = None,
+) -> tuple[list[dict], str | None, dict]:
+    """Apply user-entered invoice numbers only (per tanker or lift-level for a single tanker)."""
+    lift_custom = (lift_level_invoice or "").strip()
+
+    if len(tankers) <= 1:
+        t = dict(tankers[0]) if tankers else {}
+        custom = lift_custom or (t.get("salesInvoiceNo") or "").strip()
+        resolved_row = dict(t)
+        if custom:
+            resolved_row["salesInvoiceNo"] = custom
+        else:
+            resolved_row.pop("salesInvoiceNo", None)
+        resolved = [resolved_row] if tankers else []
+        return resolved, custom or None, counters
+
+    resolved: list[dict] = []
+    summary_parts: list[str] = []
+    for t in tankers:
+        custom = (t.get("salesInvoiceNo") or "").strip()
+        row = dict(t)
+        if custom:
+            row["salesInvoiceNo"] = custom
+            summary_parts.append(custom)
+        else:
+            row.pop("salesInvoiceNo", None)
+        resolved.append(row)
+    lift_summary = ", ".join(summary_parts) if summary_parts else None
+    return resolved, lift_summary, counters
 
 
 def get_lift_allocations(lift: dict) -> list[dict]:
@@ -96,7 +133,10 @@ def qty_committed_on_ref(lifts: list[dict], ref: str, exclude_lift_id: str | Non
 
 
 def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | None = None) -> float:
-    remaining = order["orderQty"] - qty_committed_on_ref(lifts, order["ref"], exclude_lift_id)
+    from .buy_back import effective_po_qty
+
+    cap = effective_po_qty(order) if order.get("side") == "purchase" else float(order.get("orderQty", 0) or 0)
+    remaining = cap - qty_committed_on_ref(lifts, order["ref"], exclude_lift_id)
     return round_qty_mt(max(0, remaining))
 
 

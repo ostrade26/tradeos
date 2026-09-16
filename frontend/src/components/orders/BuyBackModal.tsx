@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -18,7 +18,7 @@ import {
   rateInputLabel,
   syncedRateFields,
 } from '../../lib/orderRate'
-import { formatCurrency, formatDate, formatQty } from '../../lib/utils'
+import { formatCurrency, formatQty } from '../../lib/utils'
 import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
 
@@ -30,7 +30,7 @@ interface BuyBackModalProps {
 }
 
 export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalProps) {
-  const store = useTradeStore()
+  const { buyBackPo, getSOsForPO, lifts, tradeOrders } = useTradeStore()
   const toast = useToast()
   const [qty, setQty] = useState('')
   const [rate, setRate] = useState('')
@@ -38,28 +38,37 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
   const [remarks, setRemarks] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const resetKeyRef = useRef<string | null>(null)
 
   const linkedSOs = useMemo(
-    () => (order ? store.getSOsForPO(order.ref) : []),
-    [order, store],
+    () => (order ? getSOsForPO(order.ref) : []),
+    [order?.id, order?.ref, getSOsForPO, tradeOrders],
   )
 
   const eligibility = useMemo(
-    () => (order ? canBuyBackPO(order, store.lifts, linkedSOs) : { ok: false }),
-    [order, store.lifts, linkedSOs],
+    () => (order ? canBuyBackPO(order, lifts, linkedSOs) : { ok: false }),
+    [order, lifts, linkedSOs],
   )
 
   const maxQty = order ? maxBuyBackQty(order, linkedSOs) : 0
   const poRate10 = order ? contractRateFromOrder(order.rate, order.rateBasis, order.ratePerBasis) : 0
 
   useEffect(() => {
-    if (!open || !order) return
-    setQty(String(maxBuyBackQty(order, linkedSOs)))
+    if (!open || !order) {
+      if (!open) resetKeyRef.current = null
+      return
+    }
+    const resetKey = order.id
+    if (resetKeyRef.current === resetKey) return
+    resetKeyRef.current = resetKey
+
+    const sos = getSOsForPO(order.ref)
+    setQty(String(maxBuyBackQty(order, sos)))
     setRate(String(suggestedBuyBackRatePer10Kg(order)))
     setDate(new Date().toISOString().slice(0, 10))
     setRemarks('')
     setError('')
-  }, [open, order, linkedSOs])
+  }, [open, order, getSOsForPO])
 
   if (!order) return null
 
@@ -96,7 +105,7 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
 
     setSaving(true)
     try {
-      await store.buyBackPo(order.id, payload)
+      await buyBackPo(order.id, payload)
       toast.success('Buy back recorded', {
         description: `${formatQty(qtyNum)} from ${order.partyName} @ ${formatContractRate(rateFields.rate, rateFields.rateBasis, rateFields.ratePerBasis)}`,
       })
@@ -117,6 +126,11 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
       open={open}
       onClose={onClose}
       title="Buy back"
+      subtitle={(
+        <span className="tabular-nums">
+          {formatQty(order.orderQty)} @ {formatContractRate(order.rate, order.rateBasis, order.ratePerBasis)}
+        </span>
+      )}
       size="md"
       footer={(
         <div className="flex justify-end gap-2">
@@ -128,19 +142,10 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
       )}
     >
       <div className="space-y-5 py-1">
-        <div className="rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50">
-          <p className="text-sm text-heading">
-            <span className="font-medium">{order.partyName}</span> can repurchase undelivered stock from this PO.
-          </p>
-          <p className="text-xs text-muted mt-1.5">
-            Original purchase: {formatQty(order.orderQty)} @ {formatContractRate(order.rate, order.rateBasis, order.ratePerBasis)}
-          </p>
-        </div>
-
         {!eligibility.ok ? (
           <p className="text-sm text-warning">{eligibility.reason}</p>
         ) : (
-          <>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <QtyInput
               label="Quantity to buy back (MT)"
               value={qty}
@@ -148,17 +153,17 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
               maxQty={maxQty}
               maxQtyMessage={`Maximum ${formatQty(maxQty)}`}
             />
-            {linkedSOs.length > 0 && (
-              <p className="text-xs text-muted -mt-3">
-                {formatQty(getAllocatedSoQty(linkedSOs))} allocated to linked sales orders.
-              </p>
-            )}
-
             <Input
               label={rateInputLabel('Buy-back', order.rateBasis)}
               value={rate}
               onChange={e => setRate(e.target.value)}
             />
+
+            {linkedSOs.length > 0 && (
+              <p className="col-span-2 text-xs text-muted -mt-2">
+                {formatQty(getAllocatedSoQty(linkedSOs))} allocated to linked sales orders.
+              </p>
+            )}
 
             <Input
               label="Date"
@@ -171,27 +176,24 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
               label="Remarks (optional)"
               value={remarks}
               onChange={e => setRemarks(e.target.value)}
-              placeholder="e.g. Market rally — seller repurchase"
+              placeholder="Optional note"
             />
 
             {qtyNum > 0 && rateNum > 0 && (
-              <div className="rounded-md border border-gray-200 dark:border-gray-700 px-4 py-3 space-y-2 text-sm">
-                <div className="flex justify-between">
+              <div className="col-span-2 rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50 space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
                   <span className="text-muted">Buy-back value</span>
-                  <span className="font-medium tabular-nums">{formatCurrency(buyBackAmount)}</span>
+                  <span className="font-semibold tabular-nums text-heading">{formatCurrency(buyBackAmount)}</span>
                 </div>
                 {premium > 0 && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-3">
                     <span className="text-muted">Premium over PO</span>
-                    <span className="font-medium tabular-nums text-success">+{formatCurrency(premium)}</span>
+                    <span className="font-semibold tabular-nums text-success">+{formatCurrency(premium)}</span>
                   </div>
                 )}
-                <p className="text-xs text-muted pt-1 border-t border-gray-200 dark:border-gray-700">
-                  Effective {formatDate(date)} · PO qty will reduce by {formatQty(qtyNum)}
-                </p>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {error && <p className="text-sm text-danger">{error}</p>}

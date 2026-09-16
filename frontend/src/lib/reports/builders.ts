@@ -92,7 +92,6 @@ function purchaseRegister(store: TradeStoreValue): BuiltReport {
     { key: 'rate', header: 'Purchase rate' },
     { key: 'gross', header: 'Gross value' },
     { key: 'brokerage', header: 'Brokerage' },
-    { key: 'otherCosts', header: 'Other costs' },
     { key: 'invoiceNo', header: 'Invoice number' },
     { key: 'invoiceDate', header: 'Invoice date' },
     { key: 'taxable', header: 'Taxable value' },
@@ -106,7 +105,6 @@ function purchaseRegister(store: TradeStoreValue): BuiltReport {
     const inv = salesInvoiceFor(lifts.filter(l => l.status === 'delivered'))
     const gross = grossOf(po)
     const gst = gstOf(po, gross)
-    const other = (po.freightCost ?? 0) + (po.loadingCost ?? 0) + (po.otherCost ?? 0)
     const brokerage = orderBrokerageTotal(po)
     const paid = paidForRef(store.payments, po.ref)
     return {
@@ -126,7 +124,6 @@ function purchaseRegister(store: TradeStoreValue): BuiltReport {
       rate: formatRateCell(po.rate, po.rateBasis, po.ratePerBasis),
       gross: formatCurrency(gross),
       brokerage: formatCurrency(brokerage),
-      otherCosts: formatCurrency(other),
       invoiceNo: inv.no || 'Missing',
       invoiceDate: inv.date ? formatDate(inv.date) : '—',
       taxable: formatCurrency(gross),
@@ -339,7 +336,7 @@ function stockReconciliation(store: TradeStoreValue): BuiltReport {
     { key: 'delivered', header: 'Delivered qty' },
     { key: 'adjustments', header: 'Adjustments' },
     { key: 'expected', header: 'Expected closing' },
-    { key: 'actual', header: 'TradeOS quantity' },
+    { key: 'actual', header: 'Tradeal quantity' },
     { key: 'variance', header: 'Variance' },
     { key: 'variancePct', header: 'Variance %' },
     { key: 'status', header: 'Status' },
@@ -816,10 +813,7 @@ function landedCost(store: TradeStoreValue): BuiltReport {
     { key: 'item', header: 'Product' },
     { key: 'qty', header: 'Quantity' },
     { key: 'purchase', header: 'Purchase value' },
-    { key: 'freight', header: 'Freight' },
-    { key: 'loading', header: 'Loading' },
     { key: 'brokerage', header: 'Brokerage' },
-    { key: 'other', header: 'Other costs' },
     { key: 'total', header: 'Total landed' },
     { key: 'perMt', header: '₹ / MT' },
   ]
@@ -838,10 +832,7 @@ function landedCost(store: TradeStoreValue): BuiltReport {
       ref: po.ref,
       qty: formatQty(po.orderQty),
       purchase: formatCurrency(p.purchaseValue),
-      freight: formatCurrency(p.freightCost),
-      loading: formatCurrency(p.loadingCost),
       brokerage: formatCurrency(p.brokerageTotal),
-      other: formatCurrency(p.otherCost),
       total: formatCurrency(p.purchaseValue + p.totalAdditionalCosts),
       perMt: formatCurrency(p.trueLandedCostPerMt),
     }

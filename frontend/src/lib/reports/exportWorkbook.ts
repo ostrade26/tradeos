@@ -24,7 +24,7 @@ export function exportReportCsv(built: BuiltReport, filename: string) {
 export function exportAuditSupportPack(reports: { id: ReportId; built: BuiltReport }[], filename: string) {
   const wb = XLSX.utils.book_new()
   const cover = [
-    ['TradeOS Audit Support Pack'],
+    ['Tradeal Audit Support Pack'],
     ['This pack supports internal review. It is not a statutory audit report.'],
     ['Generated', new Date().toISOString()],
     [],

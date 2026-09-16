@@ -8,20 +8,7 @@ import {
   parseBrokerNameFromHeaderText,
 } from './brokerNameExtraction'
 import { formatIndianAmount } from './indianAmount'
-import { ocrBrokerNameFromPdfHeader } from './pdfHeaderOcr'
-
-let pdfjsModule: typeof import('pdfjs-dist') | null = null
-
-async function getPdfJs() {
-  if (!pdfjsModule) {
-    pdfjsModule = await import('pdfjs-dist')
-    pdfjsModule.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url,
-    ).toString()
-  }
-  return pdfjsModule
-}
+import { getPdfJs } from './pdfjsClient'
 
 export interface ParsedContractPdf {
   brokerContractRef: string
@@ -286,24 +273,18 @@ function parseBrokerFromPageItems(items: PdfTextItem[]): string {
   return parseBrokerFromHeadingLines(positioned)
 }
 
-async function resolveBrokerName(
+function resolveBrokerName(
   text: string,
-  file: File,
   headerLines: string[],
   pageItems: PdfTextItem[],
-): Promise<string> {
+): string {
   const candidates = [
     parseBrokerNameFromHeader(headerLines),
     parseBrokerFromPageItems(pageItems),
     parseBrokerNameFromHeaderText(text),
   ].map(c => c.trim()).filter(Boolean)
 
-  if (candidates.length > 0) return candidates[0]
-
-  const ocrName = await ocrBrokerNameFromPdfHeader(file)
-  if (ocrName) return ocrName
-
-  return ''
+  return candidates[0] ?? ''
 }
 
 export function parseContractText(
@@ -445,7 +426,7 @@ export async function parseContractPdf(file: File): Promise<ParsedContractPdf> {
   const text = pages.map(p => p.text).join('\n')
   const pageItems = pages[0]?.items ?? []
   const headerLines = headerLinesFromPageItems(pageItems)
-  const brokerName = await resolveBrokerName(text, file, headerLines, pageItems)
+  const brokerName = resolveBrokerName(text, headerLines, pageItems)
   const parsed = parseContractText(text, headerLines, brokerName)
 
   if (!parsed.brokerContractRef && !parsed.sellerName && !parsed.buyerName) {
@@ -491,6 +472,5 @@ export function contractToFormValues(
     paymentTerms: parsed.paymentTerms,
     remarks: parsed.remarks,
     taxRate: '5',
-    unloading: '',
   }
 }

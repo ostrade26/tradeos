@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Package, FileText, FileUp } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
@@ -206,10 +206,6 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     brokeragePct: '0',
     brokeragePerTon: '',
     paymentTerms: isPO ? 'Advance' : 'Against delivery',
-    unloading: '',
-    freightCost: '',
-    loadingCost: '',
-    otherCost: '',
     remarks: '',
   })
 
@@ -217,6 +213,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   const [pdfUploadKey, setPdfUploadKey] = useState(0)
   const [createdOrder, setCreatedOrder] = useState<TradeOrder | null>(null)
   const orderBaseline = useRef('')
+  const orderBaselineReady = useRef(false)
 
   const viewCreatedOrder = (saved: TradeOrder) => {
     setCreatedOrder(null)
@@ -274,7 +271,6 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       brokeragePct: '0',
       brokeragePerTon: '',
       paymentTerms: 'Against delivery',
-      unloading: '',
       remarks: '',
       ...lockedAccountPartyFields('sale', store.companies),
     }))
@@ -284,10 +280,24 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     setSaveError('')
   }
 
+  const syncBaselineAfterAutofill = useCallback((values: Record<string, string>) => {
+    if (isEdit) {
+      orderBaseline.current = serializeOrderFormValues(values)
+      return
+    }
+    if (!pdfImported && !hasManualEntryProgress(values)) {
+      orderBaseline.current = serializeOrderFormValues(values)
+    }
+  }, [isEdit, pdfImported])
+
   useEffect(() => {
-    form.setValues(v => ({ ...v, ...lockedAccountPartyFields(side, store.companies) }))
+    form.setValues(v => {
+      const next = { ...v, ...lockedAccountPartyFields(side, store.companies) }
+      if (isEdit || orderBaselineReady.current) syncBaselineAfterAutofill(next)
+      return next
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [side, store.companies])
+  }, [side, store.companies, syncBaselineAfterAutofill])
 
   useEffect(() => {
     if (isEdit && editingOrder) {
@@ -303,13 +313,12 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side, isEdit, editingOrder?.id])
 
-  const orderBaselineReady = useRef(false)
   useEffect(() => {
     if (isEdit || orderBaselineReady.current) return
     if (!form.ref) return
-    orderBaseline.current = serializeOrderFormValues(form.values)
+    syncBaselineAfterAutofill(form.values)
     orderBaselineReady.current = true
-  }, [isEdit, form.ref, form.values])
+  }, [isEdit, form.ref, form.values, syncBaselineAfterAutofill])
 
   useEffect(() => {
     if (linkedPoRef) form.set('poRef', linkedPoRef)
@@ -397,7 +406,11 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     form.rateBasis,
   )
 
-  const formDirty = pdfImported || serializeOrderFormValues(form.values) !== orderBaseline.current
+  const formDirty = pdfImported || (
+    isEdit || orderBaselineReady.current
+      ? serializeOrderFormValues(form.values) !== orderBaseline.current
+      : hasManualEntryProgress(form.values)
+  )
   const { requestLeave, dialog: unsavedDialog } = useUnsavedChangesGuard({
     dirty: formDirty,
     message: `Your ${shortLabel} has unsaved changes. Leave without saving?`,
@@ -481,12 +494,6 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       rateBasis: rateFields.rateBasis,
       ratePerBasis: rateFields.ratePerBasis,
       paymentTerms: form.paymentTerms,
-      unloading: form.unloading,
-      ...(isPO ? {
-        freightCost: parseIndianAmount(form.freightCost) || undefined,
-        loadingCost: parseIndianAmount(form.loadingCost) || undefined,
-        otherCost: parseIndianAmount(form.otherCost) || undefined,
-      } : {}),
       remarks: form.remarks,
     }
 
@@ -515,6 +522,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         navigate(registerHref)
       } else {
         orderBaseline.current = serializeOrderFormValues(form.values)
+        orderBaselineReady.current = true
         setPdfImported(false)
         setCreatedOrder(saved)
       }
@@ -608,7 +616,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         title={isEdit ? `Edit ${label}` : `${label} Entry`}
         subtitle={isEdit ? `Update ${form.ref || editRef}` : <>Create a new purchase order<span className="hidden md:inline"> · ⌘S to save</span></>}
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: isPO ? 'Purchase Orders' : 'Sales Orders', href: pathPrefix },
           { label: isEdit ? `Edit ${shortLabel}` : `New ${shortLabel}` },
         ]} />}
@@ -808,14 +816,14 @@ function SOEntryForm({
         }
         breadcrumb={sellFromLot ? (
           <Breadcrumb items={[
-            { label: 'TradeOS', href: '/' },
+            { label: 'Tradeal', href: '/' },
             { label: 'Inventory', href: '/inventory' },
             { label: sellFromLot.lotNumber, href: `/inventory/${sellFromLot.lotId}` },
             { label: 'Sell' },
           ]} />
         ) : (
           <Breadcrumb items={[
-            { label: 'TradeOS', href: '/' },
+            { label: 'Tradeal', href: '/' },
             { label: 'Sales Orders', href: '/sales-orders' },
             { label: isEdit ? 'Edit SO' : 'New SO' },
           ]} />
@@ -1284,14 +1292,6 @@ function OrderFormFields({
               onChange={v => form.set(form.brokerageType === 'percent' ? 'brokeragePct' : 'brokeragePerTon', v)}
             />
             <Input label="Payment Terms" value={form.paymentTerms} onChange={e => form.set('paymentTerms', e.target.value)} />
-            <Input label="Unloading" value={form.unloading} onChange={e => form.set('unloading', e.target.value)} />
-            {isPO && (
-              <>
-                <AmountInput label="Freight (₹ total)" value={form.freightCost} onChange={v => form.set('freightCost', v)} placeholder="0.00" />
-                <AmountInput label="Loading (₹ total)" value={form.loadingCost} onChange={v => form.set('loadingCost', v)} placeholder="0.00" />
-                <AmountInput label="Other costs (₹ total)" value={form.otherCost} onChange={v => form.set('otherCost', v)} placeholder="0.00" />
-              </>
-            )}
             <div className="col-span-2">
               <Input label="Remarks" value={form.remarks} onChange={e => form.set('remarks', e.target.value)} />
             </div>

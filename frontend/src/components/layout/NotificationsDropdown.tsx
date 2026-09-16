@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, AlertCircle, Clock, Link2, Package, Trash2, Truck } from 'lucide-react'
+import { Bell, AlertCircle, Clock, Link2, Package, Trash2, Truck, UserPlus } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
+import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { DropdownPanel } from './DropdownPanel'
@@ -16,6 +18,7 @@ const kindIcon: Record<string, typeof Truck> = {
   low_stock: Package,
   deletion: Trash2,
   delivery: Clock,
+  seat_request: UserPlus,
 }
 
 const urgencyVariant: Record<InboxAction['urgency'], 'danger' | 'warning' | 'default'> = {
@@ -27,14 +30,23 @@ const urgencyVariant: Record<InboxAction['urgency'], 'danger' | 'warning' | 'def
 export function NotificationsDropdown() {
   const [open, setOpen] = useState(false)
   const [readTick, setReadTick] = useState(0)
+  const { isPlatformAdmin } = useAuth()
   const store = useTradeStore()
-  const actions = useMemo(() => buildActionInbox(store), [store, readTick])
+  const { actions: platformSeatActions, refresh: refreshPlatformSeats } = usePlatformSeatRequestInbox(isPlatformAdmin)
+  const tradeActions = useMemo(() => buildActionInbox(store), [store, readTick])
+  const actions = useMemo(
+    () => [...platformSeatActions, ...tradeActions],
+    [platformSeatActions, tradeActions],
+  )
   const readIds = useMemo(() => getReadNotificationIds(), [readTick])
   const unreadCount = useMemo(() => countUnread(actions.map(a => a.id)), [actions, readTick])
 
   const handleOpen = (next: boolean) => {
     setOpen(next)
-    if (next) setReadTick(t => t + 1)
+    if (next) {
+      setReadTick(t => t + 1)
+      if (isPlatformAdmin) void refreshPlatformSeats()
+    }
   }
 
   const handleItemClick = (id: string) => {
@@ -53,6 +65,8 @@ export function NotificationsDropdown() {
       open={open}
       onOpenChange={handleOpen}
       width={360}
+      placement="aboveDetailPanel"
+      zIndex={1100}
       trigger={({ ref, onClick, 'aria-expanded': expanded }) => (
         <Button
           ref={ref}
@@ -135,11 +149,13 @@ export function NotificationsDropdown() {
 
       <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2.5">
         <Link
-          to="/"
+          to={isPlatformAdmin && platformSeatActions.length > 0 ? '/platform-admin/seat-requests' : '/'}
           onClick={() => setOpen(false)}
           className="text-xs text-accent hover:underline"
         >
-          View action inbox on dashboard →
+          {isPlatformAdmin && platformSeatActions.length > 0
+            ? 'Open seat requests →'
+            : 'View action inbox on dashboard →'}
         </Link>
       </div>
     </DropdownPanel>

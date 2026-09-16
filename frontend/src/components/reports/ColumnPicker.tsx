@@ -50,7 +50,7 @@ export function ColumnPicker({
                     const next = on ? visible.filter(k => k !== col.key) : [...visible, col.key]
                     if (next.length === 0) return
                     onChange(next)
-                    storageSet(`tradeos.report-cols.${reportId}`, JSON.stringify(next))
+                    storageSet(`tradeal.report-cols.${reportId}`, JSON.stringify(next))
                   }}
                 />
               </div>
@@ -64,7 +64,7 @@ export function ColumnPicker({
 
 export function loadVisibleColumns(reportId: string, columns: ReportColumn[]): string[] {
   try {
-    const raw = storageGet(`tradeos.report-cols.${reportId}`)
+    const raw = storageGet(`tradeal.report-cols.${reportId}`)
     if (!raw) return columns.map(c => c.key)
     const parsed = JSON.parse(raw) as string[]
     const allowed = new Set(columns.map(c => c.key))

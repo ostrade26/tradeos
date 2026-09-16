@@ -5,7 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
-    exclude: ['pdfjs-dist'],
+    include: ['pdfjs-dist'],
+  },
+  worker: {
+    format: 'es',
   },
   server: {
     host: true,

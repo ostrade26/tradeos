@@ -27,7 +27,13 @@ interface SearchableSelectProps {
   emptyMessage?: string
   disabled?: boolean
   error?: string
+  className?: string
+  /** Shorter control for dense toolbars (e.g. table pagination). */
+  compact?: boolean
 }
+
+/** Above Modal/Drawer overlay (1200) so listboxes work inside dialogs. */
+const SELECT_PORTAL_Z_INDEX = 1250
 
 function matchesQuery(option: SearchableSelectOption, query: string): boolean {
   const q = query.trim().toLowerCase()
@@ -60,6 +66,8 @@ export function SearchableSelect({
   emptyMessage = 'No matches found',
   disabled = false,
   error,
+  className,
+  compact = false,
 }: SearchableSelectProps) {
   const listboxId = useId()
   const createInputId = useId()
@@ -143,6 +151,21 @@ export function SearchableSelect({
   }, [open, handleClose])
 
   useEffect(() => {
+    if (!open) return
+
+    const closeIfFocusLeft = () => {
+      requestAnimationFrame(() => {
+        const active = document.activeElement
+        if (rootRef.current?.contains(active) || panelRef.current?.contains(active)) return
+        handleClose()
+      })
+    }
+
+    document.addEventListener('focusin', closeIfFocusLeft)
+    return () => document.removeEventListener('focusin', closeIfFocusLeft)
+  }, [open, handleClose])
+
+  useEffect(() => {
     setHighlight(-1)
   }, [query, open])
 
@@ -222,7 +245,7 @@ export function SearchableSelect({
   const showSearchIcon = searchable
 
   return (
-    <div ref={rootRef} className="flex flex-col gap-1.5">
+    <div ref={rootRef} className={cn('flex flex-col', compact && !label ? 'gap-0' : 'gap-1.5', className)}>
       {label && (
         <label htmlFor={triggerId} className="text-sm font-medium text-gray-600 dark:text-gray-300">{label}</label>
       )}
@@ -269,11 +292,12 @@ export function SearchableSelect({
           }}
           onKeyDown={handleKeyDown}
           className={cn(
-            'h-11 sm:h-9 w-full rounded-md border border-gray-200 bg-white pr-9 text-sm text-heading',
+            'w-full rounded-md border border-gray-200 bg-white pr-9 text-sm text-heading',
+            compact ? 'h-8 pr-8 text-[14px] tabular-nums' : 'h-11 sm:h-9',
             'placeholder:text-muted transition-colors duration-150',
             'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
             'dark:border-gray-600 dark:bg-card dark:text-heading',
-            showSearchIcon ? 'pl-9' : 'pl-3',
+            showSearchIcon ? 'pl-9' : compact ? 'pl-2.5 text-center' : 'pl-3',
             !searchable && 'cursor-pointer',
             disabled && 'opacity-60 cursor-not-allowed',
             error && inputErrorClassName,
@@ -307,7 +331,7 @@ export function SearchableSelect({
             top: panelStyle.top,
             left: panelStyle.left,
             width: panelStyle.width,
-            zIndex: 60,
+            zIndex: SELECT_PORTAL_Z_INDEX,
           }}
           className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg overflow-hidden"
         >

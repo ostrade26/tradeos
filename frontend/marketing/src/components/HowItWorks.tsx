@@ -34,7 +34,7 @@ export function HowItWorks() {
             Three steps the desk already knows.
           </h2>
           <p className="mt-4 max-w-2xl text-white/70 leading-relaxed">
-            TradeOS does not invent a new workflow. It holds the one you run every day, without the
+            Tradeal does not invent a new workflow. It holds the one you run every day, without the
             copy-paste between tools.
           </p>
         </Reveal>

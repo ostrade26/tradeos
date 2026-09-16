@@ -1,6 +1,6 @@
 import { storageGet, storageSet } from './storage'
 
-const READ_KEY = 'tradeos-notifications-read'
+const READ_KEY = 'tradeal-notifications-read'
 
 function readIds(): Set<string> {
   try {

@@ -257,10 +257,13 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
                   <p className="text-[14px] font-semibold tabular-nums shrink-0">{formatQty(t.actualQtyMt)}</p>
                 )}
               </div>
-              {(t.lrNo || t.driverMobile) && (
+              {(t.lrNo || t.driverMobile || t.salesInvoiceNo) && (
                 <div className="flex flex-wrap gap-x-4 text-[14px] text-muted">
                   {t.lrNo && <span className="font-mono text-xs uppercase">LR {t.lrNo}</span>}
                   {t.driverMobile && <span>{t.driverMobile}</span>}
+                  {t.salesInvoiceNo && (
+                    <span className="font-mono text-xs uppercase">Inv {t.salesInvoiceNo}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -269,7 +272,11 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
 
       <DetailGroup title="Documents" icon={FileText}>
         {lift.salesInvoiceNo ? (
-          <DetailRow label="Sales invoice #" value={lift.salesInvoiceNo} mono />
+          <DetailRow
+            label={tankers.length > 1 ? 'Sales invoices' : 'Sales invoice #'}
+            value={lift.salesInvoiceNo}
+            mono
+          />
         ) : (
           <DetailRow label="Sales invoice" value="Generated on delivery" />
         )}
@@ -321,7 +328,7 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
 
   return (
     <>
-      <Drawer open={open} {...panelProps}>
+      <Drawer open={open} variant="registerDetail" {...panelProps}>
         {content}
       </Drawer>
       <MarkLiftDeliveredModal

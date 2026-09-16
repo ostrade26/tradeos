@@ -7,10 +7,7 @@ export interface PoTradeProfit {
   orderQty: number
   purchaseRatePerMt: number
   purchaseValue: number
-  freightCost: number
-  loadingCost: number
   brokerageTotal: number
-  otherCost: number
   totalAdditionalCosts: number
   trueLandedCostPerMt: number
   soldQtyMt: number
@@ -38,12 +35,9 @@ export function computePoTradeProfit(
   const purchaseRatePerMt = po.rate
   const purchaseValue = orderQty * purchaseRatePerMt
 
-  const freightCost = po.freightCost ?? 0
-  const loadingCost = po.loadingCost ?? 0
-  const otherCost = po.otherCost ?? 0
   const brokerageTotal = orderBrokerageTotal(po)
 
-  const totalAdditionalCosts = freightCost + loadingCost + brokerageTotal + otherCost
+  const totalAdditionalCosts = brokerageTotal
   const trueLandedCostPerMt = orderQty > 0 ? (purchaseValue + totalAdditionalCosts) / orderQty : 0
 
   const soldBySo = new Map<string, number>()
@@ -71,10 +65,7 @@ export function computePoTradeProfit(
     orderQty,
     purchaseRatePerMt,
     purchaseValue,
-    freightCost,
-    loadingCost,
     brokerageTotal,
-    otherCost,
     totalAdditionalCosts,
     trueLandedCostPerMt,
     soldQtyMt,

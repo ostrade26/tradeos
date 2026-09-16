@@ -21,6 +21,7 @@ from .lift_logic import (
     normalize_lift_tankers,
     resolve_lift_qty,
 )
+from .buy_back import effective_po_qty
 from .seed import build_seed_data
 
 
@@ -29,7 +30,12 @@ def order_status(order: dict) -> str:
         return "cancelled"
     if order.get("completionType") in ("cash_settled", "carried_forward", "short_closed"):
         return "completed"
-    if order.get("liftedQty", 0) >= order.get("orderQty", 0):
+    qty_cap = (
+        effective_po_qty(order)
+        if order.get("side") == "purchase"
+        else float(order.get("orderQty", 0) or 0)
+    )
+    if order.get("liftedQty", 0) >= qty_cap:
         return "completed"
     if order.get("liftedQty", 0) > 0:
         return "partial"
@@ -53,7 +59,7 @@ def get_remaining_sell_qty(orders: list[dict], po_ref: str) -> float:
         for o in orders
         if o.get("side") == "sale" and o.get("poRef") == po_ref and o.get("status") != "cancelled"
     )
-    return round_qty_mt(po.get("orderQty", 0) - sold)
+    return round_qty_mt(effective_po_qty(po) - sold)
 
 
 def _producer_to_company(producer: dict) -> dict:
@@ -103,9 +109,15 @@ def migrate_companies(data: dict) -> dict:
 def _migrate_counters(counters: dict, lifts: list[dict]) -> dict:
     invoice = counters.get("invoice") or 0
     for lift in lifts:
-        match = re.match(r"^INV-\d{4}-(\d+)$", lift.get("salesInvoiceNo") or "")
-        if match:
-            invoice = max(invoice, int(match.group(1)))
+        for inv_raw in [lift.get("salesInvoiceNo") or ""]:
+            for part in re.split(r",\s*", inv_raw):
+                match = re.match(r"^INV-\d{4}-(\d+)$", part.strip())
+                if match:
+                    invoice = max(invoice, int(match.group(1)))
+        for t in lift.get("tankers") or []:
+            match = re.match(r"^INV-\d{4}-(\d+)$", (t.get("salesInvoiceNo") or "").strip())
+            if match:
+                invoice = max(invoice, int(match.group(1)))
     return {**counters, "invoice": invoice}
 
 
@@ -243,6 +255,7 @@ def sync_lot_quantities(data: dict) -> dict:
             continue
         linked_sos = get_sos_for_po(orders, po_ref)
         allocated = sum(o.get("orderQty", 0) for o in linked_sos)
+        effective = effective_po_qty(po)
         avg_so_rate = sum(o.get("rate", 0) for o in linked_sos) / len(linked_sos) if linked_sos else 0
         margin = lot.get("margin", 0)
         if avg_so_rate > po.get("rate", 0):
@@ -253,9 +266,9 @@ def sync_lot_quantities(data: dict) -> dict:
                 "commodity": po["itemName"],
                 "purchasePrice": po["rate"],
                 "quantityPurchased": round_qty_mt(po["orderQty"]),
-                "remaining": round_qty_mt(max(0, po["orderQty"] - po.get("liftedQty", 0))),
+                "remaining": round_qty_mt(max(0, effective - po.get("liftedQty", 0))),
                 "allocated": round_qty_mt(allocated),
-                "available": round_qty_mt(po["orderQty"] - allocated),
+                "available": round_qty_mt(effective - allocated),
                 "producer": po["partyName"],
                 "broker": po["brokerName"],
                 "purchaseDate": po["date"],
@@ -279,12 +292,13 @@ def ensure_lots_for_pos(data: dict) -> dict:
     for po in missing:
         linked_sos = get_sos_for_po(orders, po["ref"])
         allocated = sum(o.get("orderQty", 0) for o in linked_sos)
+        effective = effective_po_qty(po)
         lots.append(
             {
                 **build_lot_from_po(po),
                 "allocated": allocated,
-                "available": round_qty_mt(po["orderQty"] - allocated),
-                "remaining": max(0, po["orderQty"] - po.get("liftedQty", 0)),
+                "available": round_qty_mt(effective - allocated),
+                "remaining": max(0, effective - po.get("liftedQty", 0)),
             }
         )
     return {**data, "lots": lots}
@@ -343,6 +357,20 @@ def purge_due_order_deletions(data: dict) -> dict:
     return next_data
 
 
+def migrate_po_contract_qty(data: dict) -> dict:
+    """Mark PO orderQty as original contract quantity (buy backs tracked separately)."""
+    meta = dict(data.get("meta") or {})
+    if meta.get("poContractQtyV2"):
+        return data
+    orders = []
+    for o in data.get("tradeOrders") or []:
+        if o.get("side") == "purchase" and o.get("orderQtyIsContract") is not True:
+            o = {**o, "orderQtyIsContract": True}
+        orders.append(o)
+    meta["poContractQtyV2"] = True
+    return {**data, "tradeOrders": orders, "meta": meta}
+
+
 def load_and_normalize(raw: dict | None = None) -> dict:
     from ..db import DEFAULT_STATE
 
@@ -350,7 +378,11 @@ def load_and_normalize(raw: dict | None = None) -> dict:
     if raw:
         base.update(raw)
     pipeline = purge_due_order_deletions(
-        sync_lot_quantities(ensure_lots_for_pos(migrate_lifts(migrate_companies(base))))
+        sync_lot_quantities(
+            ensure_lots_for_pos(
+                migrate_lifts(migrate_companies(migrate_po_contract_qty(base))),
+            ),
+        ),
     )
     return pipeline
 

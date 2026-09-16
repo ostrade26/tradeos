@@ -302,7 +302,7 @@ function orderRefResult(order: TradeOrder | undefined, side: 'purchase' | 'sale'
 function helpResult(): AssistantResult {
   return {
     message: [
-      'I can help you explore TradeOS. Try asking:',
+      'I can help you explore Tradeal. Try asking:',
       '',
       '• *What is today\'s earning?*',
       '• *Total sales in last 3 days*',
@@ -337,7 +337,7 @@ function statsResult(store: TradeStoreValue): AssistantResult {
 
   return {
     message: [
-      '**TradeOS snapshot**',
+      '**Tradeal snapshot**',
       `- **${poPending.length}** POs pending · ${formatQty(poPending.reduce((s, o) => s + toBeLifted(o), 0))} to lift`,
       `- **${soPending.length}** SOs pending · ${formatQty(soPending.reduce((s, o) => s + toBeLifted(o), 0))} to lift`,
       `- **${store.lifts.length}** lifts recorded`,

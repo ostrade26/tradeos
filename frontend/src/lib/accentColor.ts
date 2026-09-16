@@ -1,4 +1,4 @@
-import { storageGet, storageSet } from './storage'
+import { preferenceUserKey, readScopedPref, writeScopedPref } from './userPreferences'
 
 export interface AccentPreset {
   id: string
@@ -19,8 +19,8 @@ export const CUSTOM_ACCENT_ID = 'custom'
 export const DEFAULT_ACCENT_ID = ACCENT_PRESETS[0].id
 export const DEFAULT_CUSTOM_HEX = '#007AFF'
 
-const STORAGE_KEY = 'tradeos-accent'
-const CUSTOM_STORAGE_KEY = 'tradeos-accent-custom'
+const STORAGE_KEY = 'tradeal-accent'
+const CUSTOM_STORAGE_KEY = 'tradeal-accent-custom'
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const normalized = hex.replace('#', '')
@@ -53,12 +53,12 @@ export function accentMutedColor(accent: string, dark: boolean): string {
   return dark ? `rgba(${r}, ${g}, ${b}, 0.18)` : `rgba(${r}, ${g}, ${b}, 0.1)`
 }
 
-export function getStoredCustomHex(): string {
-  return normalizeHex(storageGet(CUSTOM_STORAGE_KEY) ?? DEFAULT_CUSTOM_HEX)
+export function getStoredCustomHex(userKey?: string | null): string {
+  return normalizeHex(readScopedPref(CUSTOM_STORAGE_KEY, userKey) ?? DEFAULT_CUSTOM_HEX)
 }
 
-export function storeCustomHex(hex: string) {
-  storageSet(CUSTOM_STORAGE_KEY, normalizeHex(hex))
+export function storeCustomHex(hex: string, userKey?: string | null) {
+  writeScopedPref(CUSTOM_STORAGE_KEY, normalizeHex(hex), userKey)
 }
 
 export function resolveAccent(id: string, customHex = getStoredCustomHex()): AccentPreset {
@@ -73,8 +73,8 @@ export function getAccentPreset(id: string): AccentPreset {
   return resolveAccent(id)
 }
 
-export function getStoredAccentId(): string {
-  const stored = storageGet(STORAGE_KEY)
+export function getStoredAccentId(userKey?: string | null): string {
+  const stored = readScopedPref(STORAGE_KEY, userKey)
   if (stored === CUSTOM_ACCENT_ID) return CUSTOM_ACCENT_ID
   return stored && ACCENT_PRESETS.some(preset => preset.id === stored) ? stored : DEFAULT_ACCENT_ID
 }
@@ -90,10 +90,11 @@ export function applyAccentColor(accentId: string, dark = false, customHex = get
 }
 
 export function initAccentColor() {
-  const dark = storageGet('tradeos-theme') === 'dark'
-  applyAccentColor(getStoredAccentId(), dark, getStoredCustomHex())
+  const userKey = preferenceUserKey()
+  const dark = readScopedPref('tradeal-theme', userKey) === 'dark'
+  applyAccentColor(getStoredAccentId(userKey), dark, getStoredCustomHex(userKey))
 }
 
-export function storeAccentId(accentId: string) {
-  storageSet(STORAGE_KEY, accentId)
+export function storeAccentId(accentId: string, userKey?: string | null) {
+  writeScopedPref(STORAGE_KEY, accentId, userKey)
 }

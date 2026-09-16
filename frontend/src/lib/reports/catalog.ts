@@ -46,7 +46,7 @@ export const REPORTS: ReportDefinition[] = [
   { id: 'purchase-vs-invoice', group: 'invoicing', title: 'Purchase vs Invoice', subtitle: 'Commercial PO versus recorded invoice / lift' },
   { id: 'sales-vs-invoice', group: 'invoicing', title: 'Sales vs Invoice', subtitle: 'SO versus sales invoice on delivered lifts' },
   { id: 'contract-summary', group: 'trading', title: 'Contract Summary', subtitle: 'Broker contract confirmations on file' },
-  { id: 'stock-reconciliation', group: 'inventory', title: 'Stock Reconciliation', subtitle: 'Book movement versus TradeOS closing inventory' },
+  { id: 'stock-reconciliation', group: 'inventory', title: 'Stock Reconciliation', subtitle: 'Book movement versus Tradeal closing inventory' },
   { id: 'inventory-movement', group: 'inventory', title: 'Inventory Movement', subtitle: 'Receipts and dispatches from lifts' },
   { id: 'lift-report', group: 'inventory', title: 'Lift Report', subtitle: 'Every lift with planned and actual qty' },
   { id: 'lift-variance', group: 'inventory', title: 'Lift Quantity Variance', subtitle: 'Planned versus actual, including carry-forward' },

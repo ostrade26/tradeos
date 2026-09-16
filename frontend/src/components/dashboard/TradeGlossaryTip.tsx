@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { storageGet, storageSet } from '../../lib/storage'
 import { X } from 'lucide-react'
 
-const STORAGE_KEY = 'tradeos.glossary-tip.dismissed'
+const STORAGE_KEY = 'tradeal.glossary-tip.dismissed'
 
 export function TradeGlossaryTip() {
   const [hidden, setHidden] = useState(() => {
@@ -28,7 +28,7 @@ export function TradeGlossaryTip() {
     <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/40">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">How TradeOS uses these words</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">How Tradeal uses these words</p>
           <dl className="mt-2 grid gap-1.5 text-sm text-heading sm:grid-cols-2">
             <div>
               <dt className="font-medium">Ready to lift</dt>

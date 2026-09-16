@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Plus, Scale, X } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
@@ -10,7 +10,8 @@ import { Badge } from '../components/ui/Badge'
 import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDeliveredModal'
 import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
 import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
-import { formatDate, formatDeliveryPeriodRange, formatMt, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
+import { cn, formatDate, formatDeliveryPeriodRange, formatMt, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
+import { REGISTER_TABLE_LAYER_Z } from '../components/ui/Drawer'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
 import { formatLiftRef } from '../lib/tradeRefs'
 import { exportToCSV } from '../lib/export'
@@ -30,6 +31,8 @@ import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../lib/orderPanelDock'
+import { loadRegisterDetailRef, saveRegisterDetailRef } from '../lib/registerDetailRef'
+import { useDetailPanelSlot } from '../components/layout/DetailPanelSlot'
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../lib/registerSort'
 import { LiftRowActions } from '../components/registers/LiftRowActions'
 
@@ -52,6 +55,7 @@ export function LiftRegisterPage() {
   const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
   const isLargeScreen = useLargeScreen()
   const effectiveDocked = panelDocked && isLargeScreen
+  const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
   const [checkedLiftIds, setCheckedLiftIds] = useState<string[]>([])
   const [bulkDeliverOpen, setBulkDeliverOpen] = useState(false)
 
@@ -69,38 +73,104 @@ export function LiftRegisterPage() {
   }, [setSearchParams])
 
   const handleDockChange = useCallback((docked: boolean) => {
+    if (!docked) setDetailPanelOpen(false)
     setPanelDocked(docked)
     saveOrderPanelDocked(docked)
-  }, [])
+  }, [setDetailPanelOpen])
 
   const urlRef = searchParams.get('ref')
   const urlQ = searchParams.get('q')
   const urlParty = searchParams.get('party')
 
-  const selected = useMemo(() => {
-    if (!urlRef) return null
-    return store.lifts.find(l => String(l.liftRef) === urlRef || l.id === urlRef) ?? null
-  }, [urlRef, store.lifts])
+  const [detailRef, setDetailRef] = useState<string | null>(urlRef)
 
-  const handleSelectLift = useCallback((lift: Lift) => {
+  useEffect(() => {
+    setDetailRef(searchParams.get('ref'))
+  }, [searchParams])
+
+  const selected = useMemo(() => {
+    if (!detailRef) return null
+    return store.lifts.find(l => String(l.liftRef) === detailRef || l.id === detailRef) ?? null
+  }, [detailRef, store.lifts])
+
+  const undockedDetailOpen = !effectiveDocked && detailRef != null && selected != null
+
+  const registerKey = '/lifts'
+  const restoredDetailRef = useRef(false)
+
+  useLayoutEffect(() => {
+    if (effectiveDocked && detailRef && selected) {
+      setDetailPanelOpen(true, 'lg')
+    } else if (effectiveDocked && !detailRef) {
+      setDetailPanelOpen(false)
+    }
+  }, [effectiveDocked, detailRef, selected, setDetailPanelOpen])
+
+  useLayoutEffect(() => {
+    if (restoredDetailRef.current) return
+    restoredDetailRef.current = true
+    if (urlRef) return
+    const persisted = loadRegisterDetailRef(registerKey)
+    if (!persisted) return
+    const lift = store.lifts.find(l => String(l.liftRef) === persisted || l.id === persisted)
+    if (!lift) {
+      saveRegisterDetailRef(registerKey, null)
+      return
+    }
+    const refKey = String(lift.liftRef)
+    setDetailRef(refKey)
+    if (effectiveDocked) setDetailPanelOpen(true, 'lg')
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
-      params.set('ref', String(lift.liftRef))
+      params.set('ref', refKey)
       const inCompleted = store.getLiftsDelivered().some(l => l.id === lift.id)
       const inPending = store.getLiftsPending().some(l => l.id === lift.id)
       if (inCompleted && !inPending) params.set('view', 'completed')
       else if (inPending) params.delete('view')
       return params
     }, { replace: true })
-  }, [setSearchParams, store])
+  }, [urlRef, store, effectiveDocked, setDetailPanelOpen, setSearchParams])
 
-  const handleCloseLift = useCallback(() => {
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev)
+  useEffect(() => {
+    if (urlRef && selected) saveRegisterDetailRef(registerKey, String(selected.liftRef))
+  }, [urlRef, selected])
+
+  const closeLiftPanel = useCallback(() => {
+    setDetailRef(null)
+    setDetailPanelOpen(false)
+    saveRegisterDetailRef(registerKey, null)
+    const params = new URLSearchParams(searchParams)
+    params.delete('ref')
+    setSearchParams(params, { replace: true })
+  }, [searchParams, setSearchParams, setDetailPanelOpen])
+
+  const syncLiftToUrl = useCallback((lift: Lift | null) => {
+    const params = new URLSearchParams(searchParams)
+    if (lift) {
+      params.set('ref', String(lift.liftRef))
+      const inCompleted = store.getLiftsDelivered().some(l => l.id === lift.id)
+      const inPending = store.getLiftsPending().some(l => l.id === lift.id)
+      if (inCompleted && !inPending) params.set('view', 'completed')
+      else if (inPending) params.delete('view')
+    } else {
       params.delete('ref')
-      return params
-    }, { replace: true })
-  }, [setSearchParams])
+    }
+    setSearchParams(params, { replace: true })
+  }, [searchParams, setSearchParams, store])
+
+  const handleSelectLift = useCallback((lift: Lift) => {
+    const refKey = String(lift.liftRef)
+    if (detailRef === refKey || detailRef === lift.id) {
+      closeLiftPanel()
+      return
+    }
+    setDetailRef(refKey)
+    saveRegisterDetailRef(registerKey, refKey)
+    if (effectiveDocked) setDetailPanelOpen(true)
+    syncLiftToUrl(lift)
+  }, [syncLiftToUrl, detailRef, setDetailPanelOpen, effectiveDocked, closeLiftPanel])
+
+  const handleCloseLift = closeLiftPanel
 
   const handleSortChange = useCallback((key: string) => {
     setSort(prev => {
@@ -367,7 +437,7 @@ export function LiftRegisterPage() {
             ? `${filtered.length} in transit · ${formatMt(totalQty)} planned`
             : `${filtered.length} delivered · ${formatMt(totalQty)} actual`
         }
-        breadcrumb={<Breadcrumb items={[{ label: 'TradeOS', href: '/' }, { label: 'Lift Register' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Lift Register' }]} />}
         actions={
           <Button to="/lifts/new" size="sm"><Plus className="h-4 w-4" /> Record Lift</Button>
         }
@@ -422,6 +492,10 @@ export function LiftRegisterPage() {
         </div>
       )}
 
+      <div
+        className={cn('min-w-0', undockedDetailOpen && 'relative')}
+        style={undockedDetailOpen ? { zIndex: REGISTER_TABLE_LAYER_Z } : undefined}
+      >
       <DataTable
         columns={tableColumns}
         data={filtered}
@@ -476,28 +550,17 @@ export function LiftRegisterPage() {
           </div>
         )}
       />
+      </div>
     </div>
 
-    {effectiveDocked && (
-      <LiftDetailDrawer
-        lift={selected}
-        open={!!selected}
-        docked
-        onClose={handleCloseLift}
-        onDockChange={handleDockChange}
-        onDelivered={() => setMode('completed')}
-      />
-    )}
-
-    {!effectiveDocked && (
-      <LiftDetailDrawer
-        lift={selected}
-        open={!!selected}
-        onClose={handleCloseLift}
-        onDockChange={handleDockChange}
-        onDelivered={() => setMode('completed')}
-      />
-    )}
+    <LiftDetailDrawer
+      lift={selected}
+      open={detailRef != null && selected != null}
+      docked={effectiveDocked}
+      onClose={handleCloseLift}
+      onDockChange={handleDockChange}
+      onDelivered={() => setMode('completed')}
+    />
 
     <BulkMarkLiftsDeliveredModal
       lifts={checkedLifts}

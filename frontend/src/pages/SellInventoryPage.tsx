@@ -17,7 +17,7 @@ export function SellInventoryPage() {
         <PageHeader
           title="Lot not found"
           breadcrumb={<Breadcrumb items={[
-            { label: 'TradeOS', href: '/' },
+            { label: 'Tradeal', href: '/' },
             { label: 'Inventory', href: '/inventory' },
             { label: 'Sell' },
           ]} />}
@@ -40,7 +40,7 @@ export function SellInventoryPage() {
           title="Nothing to sell"
           subtitle={`${lot.lotNumber} · ${lot.commodity}`}
           breadcrumb={<Breadcrumb items={[
-            { label: 'TradeOS', href: '/' },
+            { label: 'Tradeal', href: '/' },
             { label: 'Inventory', href: '/inventory' },
             { label: lot.lotNumber, href: `/inventory/${lot.id}` },
             { label: 'Sell' },

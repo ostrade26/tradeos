@@ -8,6 +8,8 @@ interface SelectProps {
   searchPlaceholder?: string
   options: { value: string; label: string; description?: string; keywords?: string }[]
   value?: string
+  /** Shown when value is not in options (e.g. legacy free-text). */
+  displayLabel?: string
   onChange?: (e: { target: { value: string } }) => void
   searchable?: boolean
   allowCustom?: boolean
@@ -18,6 +20,7 @@ interface SelectProps {
   disabled?: boolean
   className?: string
   error?: string
+  compact?: boolean
 }
 
 export function Select({
@@ -26,6 +29,7 @@ export function Select({
   searchPlaceholder,
   options,
   value = '',
+  displayLabel,
   onChange,
   searchable = true,
   allowCustom = false,
@@ -35,6 +39,8 @@ export function Select({
   emptyMessage,
   disabled,
   error,
+  className,
+  compact,
 }: SelectProps) {
   const placeholderOption = options.find(o => o.value === '')
   const listOptions: SearchableSelectOption[] = options
@@ -50,12 +56,14 @@ export function Select({
 
   return (
     <SearchableSelect
+      className={className}
+      compact={compact}
       label={label}
       placeholder={placeholder ?? placeholderOption?.label ?? 'Select...'}
       searchPlaceholder={searchPlaceholder ?? `Search${label ? ` ${label.toLowerCase()}` : ''}...`}
       options={listOptions}
       value={value}
-      displayLabel={selected?.label || value}
+      displayLabel={selected?.label || displayLabel || value}
       searchable={searchable}
       allowCustom={allowCustom}
       allowCreate={allowCreate}

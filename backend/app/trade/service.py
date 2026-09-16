@@ -17,7 +17,6 @@ from .helpers import (
     format_deletion_date,
     format_delivery_period,
     format_qty,
-    format_sales_invoice_no,
     item_matches,
     normalize_company_name,
     parse_products,
@@ -37,6 +36,7 @@ from .lift_logic import (
     get_seller_outstanding_balance,
     remaining_carry_pair,
     lift_touches_ref,
+    assign_sales_invoices_to_tankers,
     normalize_lift_tankers,
     resolve_lift_qty,
     scale_allocations,
@@ -57,12 +57,15 @@ from .loader import (
 
 
 class TradeService:
+    def __init__(self, organisation_id: int) -> None:
+        self.organisation_id = organisation_id
+
     def _read(self) -> dict:
-        return load_and_normalize(get_state())
+        return load_and_normalize(get_state(self.organisation_id))
 
     def _write(self, data: dict) -> dict:
         normalized = load_and_normalize(data)
-        save_state(normalized)
+        save_state(normalized, self.organisation_id)
         return normalized
 
     def get_state(self) -> dict:
@@ -250,16 +253,25 @@ class TradeService:
             "rateBasis": input_data.get("rateBasis"),
             "ratePerBasis": input_data.get("ratePerBasis"),
             "paymentTerms": (input_data.get("paymentTerms") or "").strip() or None,
-            "unloading": (input_data.get("unloading") or "").strip() or None,
-            "freightCost": input_data.get("freightCost") or None,
-            "loadingCost": input_data.get("loadingCost") or None,
-            "otherCost": input_data.get("otherCost") or None,
             "remarks": (input_data.get("remarks") or "").strip() or None,
             "status": "pending",
             "deleteScheduledAt": existing.get("deleteScheduledAt") if existing else None,
         }
+        if input_data.get("side") == "purchase":
+            order["orderQtyIsContract"] = (
+                existing.get("orderQtyIsContract", True) if existing else True
+            )
+            if existing:
+                order["buyBacks"] = list(existing.get("buyBacks") or [])
         if existing:
-            order["status"] = order_status({**existing, "orderQty": input_data["orderQty"], "liftedQty": lifted_qty})
+            order["status"] = order_status(
+                {
+                    **existing,
+                    **order,
+                    "orderQty": input_data["orderQty"],
+                    "liftedQty": lifted_qty,
+                },
+            )
         return order
 
     def _activity(self, activity_type: str, title: str, description: str, entity_ref: str | None = None) -> dict:
@@ -534,6 +546,15 @@ class TradeService:
             raise ValueError("Cannot change order type")
         if input_data["orderQty"] < existing.get("liftedQty", 0):
             raise ValueError(f"Quantity cannot be less than lifted qty ({format_qty(existing['liftedQty'])})")
+        if existing.get("side") == "purchase":
+            from .buy_back import total_buy_back_qty
+
+            min_qty = existing.get("liftedQty", 0) + total_buy_back_qty(existing)
+            if input_data["orderQty"] < min_qty:
+                raise ValueError(
+                    f"PO quantity cannot be less than lifted plus buy back "
+                    f"({format_qty(min_qty)})",
+                )
 
         resolved_po_ref = existing.get("poRef") or (input_data.get("poRef") or "").strip() or None
         if input_data["side"] == "sale" and resolved_po_ref:
@@ -629,10 +650,12 @@ class TradeService:
         if not po or po.get("side") != "purchase":
             raise ValueError("Purchase order not found")
 
+        from .buy_back import effective_po_qty, max_buy_back_qty
+
         linked_sos = get_sos_for_po(data["tradeOrders"], po["ref"])
         allocated = sum(o.get("orderQty", 0) for o in linked_sos)
         lifted = po.get("liftedQty", 0) or 0
-        max_buy_back = round_qty_mt(po.get("orderQty", 0) - allocated - lifted)
+        max_buy_back = max_buy_back_qty(po, linked_sos)
         if any(lift_touches_ref(l, po["ref"]) for l in data.get("lifts") or [] if l.get("status") == "pending"):
             raise ValueError("Remove or complete scheduled lifts before recording a buy back")
 
@@ -663,12 +686,12 @@ class TradeService:
 
         buy_backs = list(po.get("buyBacks") or [])
         buy_backs.append(buy_back)
-        new_order_qty = round_qty_mt(po.get("orderQty", 0) - qty)
+        effective_after = round_qty_mt(effective_po_qty(po) - qty)
+        status_po = {**po, "buyBacks": buy_backs, "liftedQty": lifted}
         updated_po = {
             **po,
-            "orderQty": new_order_qty,
             "buyBacks": buy_backs,
-            "status": "cancelled" if new_order_qty <= 0 else order_status({**po, "orderQty": new_order_qty, "liftedQty": lifted}),
+            "status": "cancelled" if effective_after <= 0 else order_status(status_po),
         }
 
         orders = [updated_po if o.get("id") == order_id else o for o in data["tradeOrders"]]
@@ -703,9 +726,16 @@ class TradeService:
             raise ValueError("Choose how to close this order")
 
         settlements = list(data.get("balanceSettlements") or [])
+        from .buy_back import effective_po_qty
+
         lifted = order.get("liftedQty", 0) or 0
         committed = order.get("committedLiftQty", lifted) or lifted
-        to_be_lifted = round_qty_mt(max(0, order.get("orderQty", 0) - committed))
+        qty_cap = (
+            effective_po_qty(order)
+            if order.get("side") == "purchase"
+            else float(order.get("orderQty", 0) or 0)
+        )
+        to_be_lifted = round_qty_mt(max(0, qty_cap - committed))
 
         po_ref = None
         so_ref = None
@@ -1199,23 +1229,20 @@ class TradeService:
         planned_qty_mt = existing.get("plannedQtyMt") or existing.get("liftedQty", 0)
         balance_qty_mt = compute_balance_qty(planned_qty_mt, lifted_qty)
         delivered_at = input_data.get("deliveredAt") or datetime.utcnow().isoformat() + "Z"
-        custom_invoice = (input_data.get("salesInvoiceNo") or "").strip()
-        if custom_invoice:
-            sales_invoice_no = custom_invoice
-            invoice_seq = data["counters"]["invoice"]
-            counters = data["counters"]
-        else:
-            invoice_seq = data["counters"]["invoice"] + 1
-            year = datetime.fromisoformat(delivered_at.replace("Z", "+00:00")).year
-            sales_invoice_no = format_sales_invoice_no(invoice_seq, year)
-            counters = {**data["counters"], "invoice": invoice_seq}
+        lift_level_invoice = (input_data.get("salesInvoiceNo") or "").strip() or None
+        tankers_resolved, sales_invoice_no, counters = assign_sales_invoices_to_tankers(
+            tankers_resolved,
+            data["counters"],
+            delivered_at,
+            lift_level_invoice=lift_level_invoice,
+        )
         order_summary = format_allocations_summary(allocations, stock_lift=stock_lift)
 
         updated = {
             **existing,
             "status": "delivered",
             "deliveredAt": delivered_at,
-            "salesInvoiceNo": sales_invoice_no,
+            "salesInvoiceNo": sales_invoice_no or None,
             "liftedQty": lifted_qty,
             "plannedQtyMt": planned_qty_mt,
             "allocations": allocations,
@@ -1224,10 +1251,11 @@ class TradeService:
             "tankers": tankers_resolved,
         }
 
+        invoice_bit = f" · {sales_invoice_no}" if sales_invoice_no else ""
         desc = (
-            f"Lift #{updated['liftRef']} — {format_qty(lifted_qty)} actual ({format_qty(balance_qty_mt)} balance owed) · {sales_invoice_no} ({order_summary})"
+            f"Lift #{updated['liftRef']} — {format_qty(lifted_qty)} actual ({format_qty(balance_qty_mt)} balance owed){invoice_bit} ({order_summary})"
             if balance_qty_mt > 0
-            else f"Lift #{updated['liftRef']} — {format_qty(lifted_qty)} actual · {sales_invoice_no} ({order_summary})"
+            else f"Lift #{updated['liftRef']} — {format_qty(lifted_qty)} actual{invoice_bit} ({order_summary})"
         )
 
         next_data = apply_lift_totals(

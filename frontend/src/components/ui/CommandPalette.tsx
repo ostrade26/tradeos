@@ -118,18 +118,25 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
   )
 }
 
-export function PageHeader({ title, subtitle, breadcrumb, actions, hideActionsOnMobile }: {
+export function PageHeader({ title, subtitle, breadcrumb, actions, hideActionsOnMobile, actionsAlign = 'start' }: {
   title: string
   subtitle?: ReactNode
   breadcrumb?: ReactNode
   actions?: ReactNode
   /** Hide page CTAs on small screens when a FAB already covers create. */
   hideActionsOnMobile?: boolean
+  /** Vertical alignment of actions vs title block on sm+ */
+  actionsAlign?: 'start' | 'end'
 }) {
   return (
     <div className="mb-5 sm:mb-6">
       {breadcrumb}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mt-2">
+      <div
+        className={cn(
+          'flex flex-col gap-3 sm:flex-row sm:justify-between mt-2',
+          actionsAlign === 'end' ? 'sm:items-end' : 'sm:items-start',
+        )}
+      >
         <div className="min-w-0">
           <h1 className="text-xl font-semibold text-heading tracking-tight">{title}</h1>
           {subtitle && <p className="text-sm text-muted mt-0.5 break-words">{subtitle}</p>}

@@ -53,7 +53,7 @@ export function CreateContractPage() {
         title="Create Contract Confirmation"
         subtitle="Multi-party trade agreement"
         breadcrumb={<Breadcrumb items={[
-          { label: 'TradeOS', href: '/' },
+          { label: 'Tradeal', href: '/' },
           { label: 'Contracts', href: '/contracts' },
           { label: 'New Contract' },
         ]} />}

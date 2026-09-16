@@ -9,7 +9,7 @@ export function Logo({ className, light = false }: { className?: string; light?:
         </svg>
       </span>
       <span className={cn('text-lg font-semibold tracking-tight', light ? 'text-white' : 'text-heading')}>
-        TradeOS
+        Tradeal
       </span>
     </a>
   )
