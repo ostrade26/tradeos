@@ -280,3 +280,67 @@ def reset_member_password(user_id: int, body: MemberPasswordBody, request: Reque
             )
             conn.commit()
     return {"ok": True}
+
+
+@router.get("/notifications", summary="In-app notifications for the signed-in user")
+def list_my_notifications(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    from .notifications_repository import list_notifications_for_user, unread_count_for_user
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            items = list_notifications_for_user(conn, session.user.id)
+            unread = unread_count_for_user(conn, session.user.id)
+            return {"notifications": items, "unread": unread}
+    with _sqlite_connect() as conn:
+        items = list_notifications_for_user(conn, session.user.id)
+        unread = unread_count_for_user(conn, session.user.id)
+        return {"notifications": items, "unread": unread}
+
+
+@router.post("/notifications/read-all", summary="Mark all notifications read")
+def mark_all_my_notifications_read(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    from .notifications_repository import mark_all_read_for_user
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            count = mark_all_read_for_user(conn, session.user.id)
+            conn.commit()
+            return {"ok": True, "updated": count}
+    with _sqlite_connect() as conn:
+        count = mark_all_read_for_user(conn, session.user.id)
+        conn.commit()
+        return {"ok": True, "updated": count}
+
+
+@router.post("/notifications/{notification_id}/read", summary="Mark a notification read")
+def mark_my_notification_read(notification_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    from .notifications_repository import mark_notification_read
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = mark_notification_read(conn, notification_id, session.user.id)
+            conn.commit()
+            return {"notification": item}
+    with _sqlite_connect() as conn:
+        item = mark_notification_read(conn, notification_id, session.user.id)
+        conn.commit()
+        return {"notification": item}
+
+
+@router.post("/notifications/{notification_id}/apply", summary="Apply a product update from a notice")
+def apply_my_notification_update(notification_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    from .notifications_repository import apply_notification_update
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = apply_notification_update(conn, notification_id, session.user.id)
+            conn.commit()
+            return {"notification": item, "applied": True}
+    with _sqlite_connect() as conn:
+        item = apply_notification_update(conn, notification_id, session.user.id)
+        conn.commit()
+        return {"notification": item, "applied": True}

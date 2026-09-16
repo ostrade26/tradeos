@@ -190,6 +190,8 @@ export interface AuthMeResponse {
   permissions?: string[]
   isPlatformAdmin?: boolean
   organisationSandboxTools?: boolean
+  appliedUpdates?: string[]
+  appliedVersion?: string
 }
 
 export const authApi = {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { Building2, RefreshCw } from 'lucide-react'
+import { Building2, CreditCard, RefreshCw, Wallet, Bell, Sparkles } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
@@ -12,19 +12,30 @@ import { useDetailPanelSlot } from '../components/layout/DetailPanelSlot'
 import { ApiError } from '../api/client'
 import {
   platformApi,
+  type OrganisationAmc,
   type OrganisationDetailResponse,
+  type OrganisationLicence,
+  type OrganisationPayment,
   type OrganisationSeat,
+  type NotificationAudience,
+  type PlatformDashboard,
   type PlatformOrganisation,
+  type PlatformRelease,
+  type PlatformUser,
   type SeatRequest,
   type SubscriptionPlan,
 } from '../api/platformApi'
 import { loadRegisterSort, saveRegisterSort, toggleSort } from '../lib/registerSort'
 import { formatDateTime } from '../lib/utils'
 import {
+  amcColumns,
   auditLogColumns,
+  licenceColumns,
   mapAuditLogs,
   organisationColumns,
+  paymentColumns,
   platformSeatColumns,
+  releaseColumns,
   seatRequestColumns,
   sortPlatformRows,
   subscriptionPlanColumns,
@@ -46,7 +57,23 @@ import {
   type SignInCredentialsPayload,
 } from '../components/platform/PlatformSignInCredentialsModal'
 import type { OrgSeatType } from '../lib/platformLabels'
-const PLATFORM_SECTIONS = ['organisations', 'seats', 'plans', 'seat-requests', 'audit'] as const
+import { PlatformPlanModal, type PlanFormPayload } from '../components/platform/PlatformPlanModal'
+import { PlatformRecordPaymentModal } from '../components/platform/PlatformRecordPaymentModal'
+import { PlatformCommercialMetrics } from '../components/platform/PlatformCommercialMetrics'
+import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
+import { PlatformReleaseModal, type ReleaseFormPayload } from '../components/platform/PlatformReleaseModal'
+import { PlatformPublishReleaseModal } from '../components/platform/PlatformPublishReleaseModal'
+const PLATFORM_SECTIONS = [
+  'organisations',
+  'seats',
+  'plans',
+  'licenses',
+  'amcs',
+  'payments',
+  'seat-requests',
+  'audit',
+  'releases',
+] as const
 type PlatformSection = (typeof PLATFORM_SECTIONS)[number]
 
 function isPlatformSection(value: string | undefined): value is PlatformSection {
@@ -59,7 +86,7 @@ const SECTION_META: Record<
 > = {
   organisations: {
     title: 'Organisations',
-    subtitle: 'Profiles, subscriptions, and seats',
+    subtitle: 'Profiles, licences, and seats',
     breadcrumb: 'Organisations',
   },
   seats: {
@@ -68,9 +95,24 @@ const SECTION_META: Record<
     breadcrumb: 'Seats',
   },
   plans: {
-    title: 'Subscription plans',
-    subtitle: 'Entitlements and add-on pricing',
-    breadcrumb: 'Plans',
+    title: 'Plans & Pricing',
+    subtitle: 'Current catalogue — existing licences keep their recorded prices',
+    breadcrumb: 'Plans & Pricing',
+  },
+  licenses: {
+    title: 'Licences',
+    subtitle: 'Organisation perpetual licences and commercial snapshots',
+    breadcrumb: 'Licences',
+  },
+  amcs: {
+    title: 'AMC / Renewals',
+    subtitle: 'Annual maintenance periods. Expiry does not lock trade data.',
+    breadcrumb: 'AMC / Renewals',
+  },
+  payments: {
+    title: 'Payments',
+    subtitle: 'Manual licence, AMC, and seat payment records',
+    breadcrumb: 'Payments',
   },
   'seat-requests': {
     title: 'Seat requests',
@@ -79,8 +121,13 @@ const SECTION_META: Record<
   },
   audit: {
     title: 'Audit log',
-    subtitle: 'Org, subscription, and seat events',
+    subtitle: 'Org, licence, AMC, and seat events',
     breadcrumb: 'Audit',
+  },
+  releases: {
+    title: 'Releases',
+    subtitle: 'Versioned what\'s new. Publish to the licences you choose.',
+    breadcrumb: 'Releases',
   },
 }
 
@@ -102,6 +149,28 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [organisations, setOrganisations] = useState<PlatformOrganisation[]>([])
   const [licensedSeats, setLicensedSeats] = useState<OrganisationSeat[]>([])
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
+  const [licenses, setLicenses] = useState<OrganisationLicence[]>([])
+  const [amcs, setAmcs] = useState<OrganisationAmc[]>([])
+  const [payments, setPayments] = useState<OrganisationPayment[]>([])
+  const [dashboard, setDashboard] = useState<PlatformDashboard | null>(null)
+  const [planModalOpen, setPlanModalOpen] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null)
+  const [savingPlan, setSavingPlan] = useState(false)
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [savingPayment, setSavingPayment] = useState(false)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyAudience, setNotifyAudience] = useState<NotificationAudience>('org')
+  const [savingNotice, setSavingNotice] = useState(false)
+  const [releases, setReleases] = useState<PlatformRelease[]>([])
+  const [nextReleaseVersion, setNextReleaseVersion] = useState('1.0.0')
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false)
+  const [editingRelease, setEditingRelease] = useState<PlatformRelease | null>(null)
+  const [savingRelease, setSavingRelease] = useState(false)
+  const [publishingReleaseRow, setPublishingReleaseRow] = useState<PlatformRelease | null>(null)
+  const [publishingRelease, setPublishingRelease] = useState(false)
+  const [orgUsers, setOrgUsers] = useState<PlatformUser[]>([])
+  const [busyLicenceId, setBusyLicenceId] = useState<number | null>(null)
+  const [busyAmcId, setBusyAmcId] = useState<number | null>(null)
 
   const [createOrgOpen, setCreateOrgOpen] = useState(false)
   const [creatingOrg, setCreatingOrg] = useState(false)
@@ -123,6 +192,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [orgSort, setOrgSort] = useState(() => loadRegisterSort('platform-orgs', 'name'))
   const [seatSort, setSeatSort] = useState(() => loadRegisterSort('platform-seats', 'organisation_name'))
   const [planSort, setPlanSort] = useState(() => loadRegisterSort('platform-plans', 'name'))
+  const [licenceSort, setLicenceSort] = useState(() => loadRegisterSort('platform-licenses', 'licence_number'))
+  const [amcSort, setAmcSort] = useState(() => loadRegisterSort('platform-amcs', 'end_date'))
+  const [paymentSort, setPaymentSort] = useState(() => loadRegisterSort('platform-payments', 'payment_date'))
+  const [releaseSort, setReleaseSort] = useState(() => loadRegisterSort('platform-releases', 'version'))
   const [auditSort, setAuditSort] = useState(() => loadRegisterSort('platform-audit', 'created_at'))
   const [seatRequests, setSeatRequests] = useState<SeatRequest[]>([])
   const [seatRequestLoading, setSeatRequestLoading] = useState(false)
@@ -164,8 +237,25 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       setOrganisations(orgRes.organisations)
       setPlans(planRes.plans)
       try {
-        const seatRes = await platformApi.listSeats()
+        const [seatRes, dashRes, licRes, amcRes, payRes, relRes] = await Promise.all([
+          platformApi.listSeats().catch(() => ({ seats: [] as OrganisationSeat[] })),
+          platformApi.dashboard().catch(() => null),
+          platformApi.listLicenses().catch(() => ({ licenses: [] as OrganisationLicence[] })),
+          platformApi.listAmcs().catch(() => ({ amcs: [] as OrganisationAmc[] })),
+          platformApi.listPayments().catch(() => ({ payments: [] as OrganisationPayment[] })),
+          platformApi.listReleases().catch(() => ({
+            releases: [] as PlatformRelease[],
+            next_version: '1.0.0',
+            latest_version: null,
+          })),
+        ])
         setLicensedSeats(seatRes.seats)
+        setDashboard(dashRes)
+        setLicenses(licRes.licenses)
+        setAmcs(amcRes.amcs)
+        setPayments(payRes.payments)
+        setReleases(relRes.releases)
+        setNextReleaseVersion(relRes.next_version || '1.0.0')
       } catch {
         setLicensedSeats([])
       }
@@ -199,6 +289,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
   const planColumns = useMemo(() => subscriptionPlanColumns(), [])
+  const payColumns = useMemo(() => paymentColumns(), [])
   const auditColumns = useMemo(() => auditLogColumns(), [])
 
   const sortedOrganisations = useMemo(
@@ -335,6 +426,245 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     })
   }, [])
 
+  const handleLicenceSortChange = useCallback((key: string) => {
+    setLicenceSort(prev => {
+      const next = toggleSort(prev, key)
+      saveRegisterSort('platform-licenses', next)
+      return next
+    })
+  }, [])
+
+  const handleAmcSortChange = useCallback((key: string) => {
+    setAmcSort(prev => {
+      const next = toggleSort(prev, key)
+      saveRegisterSort('platform-amcs', next)
+      return next
+    })
+  }, [])
+
+  const handlePaymentSortChange = useCallback((key: string) => {
+    setPaymentSort(prev => {
+      const next = toggleSort(prev, key)
+      saveRegisterSort('platform-payments', next)
+      return next
+    })
+  }, [])
+
+  const handleReleaseSortChange = useCallback((key: string) => {
+    setReleaseSort(prev => {
+      const next = toggleSort(prev, key)
+      saveRegisterSort('platform-releases', next)
+      return next
+    })
+  }, [])
+
+  const updateLicenceStatus = useCallback(
+    async (row: OrganisationLicence, status: string) => {
+      setBusyLicenceId(row.id)
+      try {
+        await platformApi.updateLicenceStatus(row.id, status)
+        toast.success(`Licence ${status}`)
+        await load()
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Could not update licence')
+      } finally {
+        setBusyLicenceId(null)
+      }
+    },
+    [load, toast],
+  )
+
+  const renewAmcRow = useCallback(
+    async (row: OrganisationAmc) => {
+      setBusyAmcId(row.id)
+      try {
+        await platformApi.renewAmc(row.licence_id, 'pending')
+        toast.success('AMC renewed at the licence’s recorded price')
+        await load()
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Could not renew AMC')
+      } finally {
+        setBusyAmcId(null)
+      }
+    },
+    [load, toast],
+  )
+
+  const licenceColumnDefs = useMemo(
+    () =>
+      licenceColumns({
+        busyId: busyLicenceId,
+        onActivate: row => void updateLicenceStatus(row, 'active'),
+        onSuspend: row => void updateLicenceStatus(row, 'suspended'),
+      }),
+    [busyLicenceId, updateLicenceStatus],
+  )
+
+  const amcColumnDefs = useMemo(
+    () =>
+      amcColumns({
+        busyId: busyAmcId,
+        onRenew: row => void renewAmcRow(row),
+      }),
+    [busyAmcId, renewAmcRow],
+  )
+
+  const sortedLicenses = useMemo(
+    () => sortPlatformRows(licenses, licenceSort, licenceColumnDefs),
+    [licenses, licenceSort, licenceColumnDefs],
+  )
+  const sortedAmcs = useMemo(() => sortPlatformRows(amcs, amcSort, amcColumnDefs), [amcs, amcSort, amcColumnDefs])
+  const sortedPayments = useMemo(
+    () => sortPlatformRows(payments, paymentSort, payColumns),
+    [payments, paymentSort, payColumns],
+  )
+
+  const submitPlan = async (form: PlanFormPayload) => {
+    setSavingPlan(true)
+    try {
+      await platformApi.upsertPlan(form)
+      toast.success(editingPlan ? 'Plan updated' : 'Plan saved')
+      setPlanModalOpen(false)
+      setEditingPlan(null)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save plan')
+    } finally {
+      setSavingPlan(false)
+    }
+  }
+
+  const submitPayment = async (payload: {
+    organisation_id: number
+    payment_type: 'licence' | 'amc' | 'additional_seat' | 'other'
+    amount_cents: number
+    payment_date: string
+    payment_reference: string
+    status: 'pending' | 'paid' | 'failed' | 'refunded'
+    notes: string
+  }) => {
+    setSavingPayment(true)
+    try {
+      await platformApi.recordPayment(payload)
+      toast.success('Payment recorded')
+      setPaymentModalOpen(false)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not record payment')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
+  const openNotify = async (audience: NotificationAudience = 'org') => {
+    setNotifyAudience(audience)
+    setNotifyOpen(true)
+    try {
+      const res = await platformApi.listUsers()
+      setOrgUsers(res.users)
+    } catch {
+      setOrgUsers([])
+    }
+  }
+
+  const submitNotice = async (payload: {
+    audience: NotificationAudience
+    organisation_id: number | null
+    recipient_user_id: number | null
+    recipient_scope: 'org_admin' | 'all_users'
+    exclude_expired_amc: boolean
+    kind: 'payment_reminder' | 'product_update' | 'feature_launch' | 'credentials' | 'release_notes'
+    title: string
+    body: string
+    feature_key?: string
+    items?: string
+  }) => {
+    setSavingNotice(true)
+    try {
+      const res = await platformApi.sendNotification({
+        ...payload,
+        payload: payload.items ? { items: payload.items } : undefined,
+      })
+      const skipped = res.skipped_expired_amc
+        ? ` · ${res.skipped_expired_amc} skipped (expired AMC)`
+        : ''
+      toast.success(`Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${skipped}`)
+      setNotifyOpen(false)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not send notice')
+    } finally {
+      setSavingNotice(false)
+    }
+  }
+
+  const openReleaseEditor = (row: PlatformRelease | null) => {
+    setEditingRelease(row)
+    setReleaseModalOpen(true)
+  }
+
+  const openReleasePublish = async (row: PlatformRelease) => {
+    setPublishingReleaseRow(row)
+    try {
+      const res = await platformApi.listUsers()
+      setOrgUsers(res.users)
+    } catch {
+      setOrgUsers([])
+    }
+  }
+
+  const submitRelease = async (payload: ReleaseFormPayload) => {
+    setSavingRelease(true)
+    try {
+      if (editingRelease) {
+        await platformApi.updateRelease(editingRelease.id, payload)
+        toast.success(`Saved ${payload.version}`)
+      } else {
+        await platformApi.createRelease(payload)
+        toast.success(`Draft ${payload.version} created`)
+      }
+      setReleaseModalOpen(false)
+      setEditingRelease(null)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save release')
+    } finally {
+      setSavingRelease(false)
+    }
+  }
+
+  const submitPublishRelease = async (payload: {
+    audience: NotificationAudience
+    organisation_id: number | null
+    recipient_user_id: number | null
+    recipient_scope: 'org_admin' | 'all_users'
+    exclude_expired_amc: boolean
+  }) => {
+    if (!publishingReleaseRow) return
+    setPublishingRelease(true)
+    try {
+      const res = await platformApi.publishRelease(publishingReleaseRow.id, payload)
+      const skipped = res.release.skipped_expired_amc
+        ? ` · ${res.release.skipped_expired_amc} skipped (expired AMC)`
+        : ''
+      toast.success(`Published ${res.release.version} to ${res.release.sent ?? 0} ${res.release.sent === 1 ? 'person' : 'people'}${skipped}`)
+      setPublishingReleaseRow(null)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not publish release')
+    } finally {
+      setPublishingRelease(false)
+    }
+  }
+
+  const relColumns = useMemo(
+    () => releaseColumns({ onEdit: openReleaseEditor, onPublish: row => void openReleasePublish(row) }),
+    [],
+  )
+  const sortedReleases = useMemo(
+    () => sortPlatformRows(releases, releaseSort, relColumns),
+    [releases, releaseSort, relColumns],
+  )
+
   const handleAuditSortChange = useCallback((key: string) => {
     setAuditSort(prev => {
       const next = toggleSort(prev, key)
@@ -370,6 +700,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         username: result.username,
         email: result.email,
         temporary_password: result.temporary_password,
+        organisation_id: orgDetail.organisation.id,
+        recipient_user_id: userId,
       })
       toast.success('New temporary password issued')
     } catch (err) {
@@ -377,7 +709,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     } finally {
       setResettingPrimarySignIn(false)
     }
-  }, [orgDetail?.primary_admin_user?.user_id, resettingPrimarySignIn, toast])
+  }, [orgDetail?.organisation.id, orgDetail?.primary_admin_user?.user_id, resettingPrimarySignIn, toast])
 
   const submitCreateOrg = async (form: OrganisationFormState) => {
     if (createOrgInFlight.current) return
@@ -410,6 +742,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           name: detail.organisation.primary_contact_name ?? undefined,
           login_id: detail.primary_admin.username,
           temporary_password: detail.primary_admin.temporary_password,
+          organisation_id: detail.organisation.id,
+          recipient_user_id: detail.primary_admin.user_id,
         })
       }
       void loadOrgDetail(detail.organisation.id)
@@ -508,14 +842,47 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
   const pageActions =
     section === 'organisations' ? (
-      <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
-        <Building2 className="h-4 w-4" aria-hidden />
-        Add organisation
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => void openNotify('active_licences')}>
+          <Bell className="h-4 w-4" aria-hidden />
+          Send notice
+        </Button>
+        <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
+          <Building2 className="h-4 w-4" aria-hidden />
+          Add organisation
+        </Button>
+      </div>
+    ) : section === 'plans' ? (
+      <Button
+        size="sm"
+        onClick={() => {
+          setEditingPlan(null)
+          setPlanModalOpen(true)
+        }}
+      >
+        <CreditCard className="h-4 w-4" aria-hidden />
+        New plan
+      </Button>
+    ) : section === 'payments' ? (
+      <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
+        <Wallet className="h-4 w-4" aria-hidden />
+        Record payment
       </Button>
     ) : section === 'seat-requests' ? (
       <Button variant="outline" size="sm" loading={seatRequestLoading} onClick={() => void loadSeatRequests()}>
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
+      </Button>
+    ) : section === 'releases' ? (
+      <Button
+        size="sm"
+        onClick={() => {
+          setEditingRelease(null)
+          setReleaseModalOpen(true)
+        }}
+      >
+        <Sparkles className="h-4 w-4" aria-hidden />
+        New release
       </Button>
     ) : section === 'audit' ? (
       <Button variant="outline" size="sm" loading={auditLoading} onClick={() => void loadAudit()}>
@@ -533,6 +900,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             ? `${organisations.length} organisations`
             : section === 'seats'
               ? `${licensedSeats.length} seat${licensedSeats.length === 1 ? '' : 's'} in use`
+            : section === 'releases'
+              ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
               : meta.subtitle
         }
         breadcrumb={
@@ -546,6 +915,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         actions={pageActions}
         hideActionsOnMobile
       />
+
+      {section === 'organisations' && dashboard && !loading ? (
+        <PlatformCommercialMetrics metrics={dashboard} />
+      ) : null}
 
       {section === 'organisations' &&
         (loading ? (
@@ -628,11 +1001,81 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={planSort.key}
             sortDirection={planSort.direction}
             onSortChange={handlePlanSortChange}
+            onRowClick={plan => {
+              setEditingPlan(plan)
+              setPlanModalOpen(true)
+            }}
             defaultPageSize={25}
             emptyState={
               <EmptyState
                 title="No plans"
                 description="No subscription plans are configured yet."
+              />
+            }
+          />
+        ))}
+
+      {section === 'licenses' &&
+        (loading ? (
+          <TableSkeleton rows={8} cols={7} />
+        ) : (
+          <DataTable
+            data={sortedLicenses}
+            columns={licenceColumnDefs}
+            getRowId={r => String(r.id)}
+            stickyFirstColumn
+            sortKey={licenceSort.key}
+            sortDirection={licenceSort.direction}
+            onSortChange={handleLicenceSortChange}
+            onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            defaultPageSize={25}
+            emptyState={
+              <EmptyState title="No licences" description="Licences are issued when an organisation is created." />
+            }
+          />
+        ))}
+
+      {section === 'amcs' &&
+        (loading ? (
+          <TableSkeleton rows={8} cols={6} />
+        ) : (
+          <DataTable
+            data={sortedAmcs}
+            columns={amcColumnDefs}
+            getRowId={r => String(r.id)}
+            stickyFirstColumn
+            sortKey={amcSort.key}
+            sortDirection={amcSort.direction}
+            onSortChange={handleAmcSortChange}
+            onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            defaultPageSize={25}
+            emptyState={<EmptyState title="No AMC records" description="AMC periods are created with each licence." />}
+          />
+        ))}
+
+      {section === 'payments' &&
+        (loading ? (
+          <TableSkeleton rows={8} cols={6} />
+        ) : (
+          <DataTable
+            data={sortedPayments}
+            columns={payColumns}
+            getRowId={r => String(r.id)}
+            stickyFirstColumn
+            sortKey={paymentSort.key}
+            sortDirection={paymentSort.direction}
+            onSortChange={handlePaymentSortChange}
+            onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            defaultPageSize={25}
+            emptyState={
+              <EmptyState
+                title="No payments"
+                description="Record licence, AMC, or seat payments received off-platform."
+                action={
+                  <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
+                    Record payment
+                  </Button>
+                }
               />
             }
           />
@@ -717,12 +1160,66 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           />
         ))}
 
+      {section === 'releases' &&
+        (loading ? (
+          <TableSkeleton rows={8} cols={5} />
+        ) : (
+          <DataTable
+            data={sortedReleases}
+            columns={relColumns}
+            getRowId={r => String(r.id)}
+            stickyFirstColumn
+            sortKey={releaseSort.key}
+            sortDirection={releaseSort.direction}
+            onSortChange={handleReleaseSortChange}
+            onRowClick={row => {
+              if (row.status === 'draft') openReleaseEditor(row)
+              else void openReleasePublish(row)
+            }}
+            defaultPageSize={25}
+            emptyState={
+              <EmptyState
+                title="No releases"
+                description="Create a versioned what’s new pack, then publish it to the licences you choose."
+                action={
+                  <Button size="sm" onClick={() => openReleaseEditor(null)}>
+                    New release
+                  </Button>
+                }
+              />
+            }
+            mobileRender={row => (
+              <div className="px-4 py-3 space-y-1">
+                <p className="font-medium text-heading font-mono tabular-nums">{row.version}</p>
+                <p className="text-xs text-muted">{row.title}</p>
+              </div>
+            )}
+          />
+        ))}
+
       <PlatformCreateOrganisationModal
         open={createOrgOpen}
         onClose={() => setCreateOrgOpen(false)}
         plans={plans}
         loading={creatingOrg}
         onSubmit={form => void submitCreateOrg(form)}
+      />
+
+      <PlatformPlanModal
+        open={planModalOpen}
+        onClose={() => !savingPlan && setPlanModalOpen(false)}
+        plan={editingPlan}
+        loading={savingPlan}
+        onSubmit={form => void submitPlan(form)}
+      />
+
+      <PlatformRecordPaymentModal
+        open={paymentModalOpen}
+        onClose={() => !savingPayment && setPaymentModalOpen(false)}
+        organisations={organisations}
+        defaultOrganisationId={selectedOrgId}
+        loading={savingPayment}
+        onSubmit={payload => void submitPayment(payload)}
       />
 
       <PlatformAddSeatModal
@@ -754,12 +1251,44 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onDelete={() => orgDetail && setDeleteOrgTarget(orgDetail.organisation)}
         onResetPrimaryAdminSignIn={() => void resetPrimaryAdminSignIn()}
         resettingPrimaryAdminSignIn={resettingPrimarySignIn}
+        onNotify={() => void openNotify('org')}
       />
 
       <PlatformSignInCredentialsModal
         open={signInCredentials != null}
         onClose={() => setSignInCredentials(null)}
         payload={signInCredentials}
+      />
+
+      <PlatformNotifyModal
+        open={notifyOpen}
+        onClose={() => !savingNotice && setNotifyOpen(false)}
+        organisations={organisations}
+        organisationId={selectedOrgId}
+        users={orgUsers}
+        defaultRecipientUserId={orgDetail?.primary_admin_user?.user_id}
+        defaultAudience={notifyAudience}
+        loading={savingNotice}
+        onSubmit={payload => void submitNotice(payload)}
+      />
+
+      <PlatformReleaseModal
+        open={releaseModalOpen}
+        onClose={() => !savingRelease && setReleaseModalOpen(false)}
+        release={editingRelease}
+        nextVersion={nextReleaseVersion}
+        loading={savingRelease}
+        onSubmit={payload => void submitRelease(payload)}
+      />
+
+      <PlatformPublishReleaseModal
+        open={publishingReleaseRow != null}
+        onClose={() => !publishingRelease && setPublishingReleaseRow(null)}
+        release={publishingReleaseRow}
+        organisations={organisations}
+        users={orgUsers}
+        loading={publishingRelease}
+        onSubmit={payload => void submitPublishRelease(payload)}
       />
 
       <PlatformSeatRequestDecisionModal

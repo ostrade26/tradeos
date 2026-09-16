@@ -1,15 +1,35 @@
 import type { ReactNode } from 'react'
 import { sortRows } from '../../lib/registerSort'
 import { Badge } from '../ui/Badge'
-import type { OrganisationSeat, PlatformOrganisation, PlatformUser, SeatRequest, SubscriptionPlan } from '../../api/platformApi'
+import type {
+  OrganisationAmc,
+  OrganisationLicence,
+  OrganisationPayment,
+  OrganisationSeat,
+  PlatformOrganisation,
+  PlatformUser,
+  SeatRequest,
+  SubscriptionPlan,
+  PlatformRelease,
+} from '../../api/platformApi'
 import { accountTypeLabel, formatInrCents, seatRequestStatusLabel, seatTypeLabel } from '../../lib/platformLabels'
 import { Button } from '../ui/Button'
 import { formatDate, formatDateTime } from '../../lib/utils'
+import { releaseCategoryLabel } from '../../lib/releaseVersion'
 
 export function platformStatusBadge(status: string) {
-  const active = status === 'active'
+  const variant =
+    status === 'active' || status === 'paid' || status === 'included'
+      ? 'success'
+      : status === 'due_soon' || status === 'pending'
+        ? 'info'
+        : status === 'grace_period' || status === 'suspended' || status === 'failed'
+          ? 'warning'
+          : status === 'expired' || status === 'cancelled' || status === 'refunded'
+            ? 'default'
+            : 'default'
   return (
-    <Badge variant={active ? 'success' : 'default'} className="capitalize">
+    <Badge variant={variant} className="capitalize">
       {status.replace(/_/g, ' ')}
     </Badge>
   )
@@ -284,48 +304,60 @@ export function subscriptionPlanColumns(): Column<SubscriptionPlan>[] {
       className: 'hidden md:table-cell',
     },
     {
+      key: 'licence_type',
+      header: 'Type',
+      sortable: true,
+      sortValue: r => r.licence_type ?? '',
+      render: r => <span className="capitalize">{r.licence_type ?? '—'}</span>,
+      className: 'hidden sm:table-cell',
+    },
+    {
+      key: 'licence_price_cents',
+      header: 'Licence',
+      sortable: true,
+      sortValue: r => r.licence_price_cents ?? 0,
+      render: r => <span className="tabular-nums text-muted">{formatInr(r.licence_price_cents)}</span>,
+      className: 'text-right',
+    },
+    {
+      key: 'amc_price_cents',
+      header: 'AMC / yr',
+      sortable: true,
+      sortValue: r => r.amc_price_cents ?? 0,
+      render: r => <span className="tabular-nums text-muted">{formatInr(r.amc_price_cents)}</span>,
+      className: 'text-right',
+    },
+    {
       key: 'included_seats',
       header: 'Seats',
       sortable: true,
       sortValue: r => r.included_seats,
-      render: r => <span className="tabular-nums">{r.included_seats}</span>,
-      className: 'text-right',
-    },
-    {
-      key: 'monthly_price_cents',
-      header: 'Monthly',
-      sortable: true,
-      sortValue: r => r.monthly_price_cents,
-      render: r => <span className="tabular-nums text-muted">{formatInr(r.monthly_price_cents)}</span>,
-      className: 'text-right',
-    },
-    {
-      key: 'annual_price_cents',
-      header: 'Annual',
-      sortable: true,
-      sortValue: r => r.annual_price_cents,
-      render: r => <span className="tabular-nums text-muted">{formatInr(r.annual_price_cents)}</span>,
-      className: 'text-right',
-    },
-    {
-      key: 'additional_seat_monthly_price_cents',
-      header: 'Seat / mo',
-      sortable: true,
-      sortValue: r => r.additional_seat_monthly_price_cents ?? 0,
       render: r => (
-        <span className="tabular-nums text-muted">{formatInr(r.additional_seat_monthly_price_cents ?? 0)}</span>
+        <span className="tabular-nums">
+          {r.included_seats}
+          <span className="text-muted text-xs">
+            {' '}
+            ({r.included_admin_seats ?? 0}A / {r.included_operator_seats ?? 0}O)
+          </span>
+        </span>
       ),
+      className: 'text-right',
+    },
+    {
+      key: 'additional_seat_licence_cents',
+      header: 'Add-on seat',
+      sortable: true,
+      sortValue: r => r.additional_seat_licence_cents ?? 0,
+      render: r => <span className="tabular-nums text-muted">{formatInr(r.additional_seat_licence_cents)}</span>,
       className: 'text-right hidden lg:table-cell',
     },
     {
-      key: 'additional_seat_annual_price_cents',
-      header: 'Seat / yr',
+      key: 'amc_grace_days',
+      header: 'Grace',
       sortable: true,
-      sortValue: r => r.additional_seat_annual_price_cents ?? 0,
-      render: r => (
-        <span className="tabular-nums text-muted">{formatInr(r.additional_seat_annual_price_cents ?? 0)}</span>
-      ),
-      className: 'text-right hidden lg:table-cell',
+      sortValue: r => r.amc_grace_days ?? 0,
+      render: r => <span className="tabular-nums text-muted">{r.amc_grace_days ?? 0}d</span>,
+      className: 'text-right hidden md:table-cell',
     },
     {
       key: 'status',
@@ -333,6 +365,243 @@ export function subscriptionPlanColumns(): Column<SubscriptionPlan>[] {
       sortable: true,
       sortValue: r => r.status,
       render: r => platformStatusBadge(r.status),
+    },
+  ]
+}
+
+export function licenceColumns(handlers: {
+  busyId: number | null
+  onActivate: (row: OrganisationLicence) => void
+  onSuspend: (row: OrganisationLicence) => void
+}): Column<OrganisationLicence>[] {
+  return [
+    {
+      key: 'organisation_name',
+      header: 'Organisation',
+      sortable: true,
+      sortValue: r => r.organisation_name ?? '',
+      render: r => (
+        <div className="min-w-[10rem]">
+          <p className="font-medium text-heading truncate">{r.organisation_name ?? '—'}</p>
+          <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{r.org_code ?? ''}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'licence_number',
+      header: 'Licence',
+      sortable: true,
+      sortValue: r => r.licence_number,
+      render: r => <span className="font-mono text-[14px] tabular-nums">{r.licence_number}</span>,
+    },
+    {
+      key: 'plan_name',
+      header: 'Plan',
+      sortable: true,
+      sortValue: r => r.plan_name,
+      render: r => <span className="truncate block max-w-[10rem]">{r.plan_name}</span>,
+    },
+    {
+      key: 'licence_price_cents',
+      header: 'Amount',
+      sortable: true,
+      sortValue: r => r.licence_price_cents,
+      render: r => <span className="tabular-nums">{formatInr(r.licence_price_cents)}</span>,
+      className: 'text-right',
+    },
+    {
+      key: 'included_seats',
+      header: 'Seats',
+      sortable: true,
+      sortValue: r => r.included_seats + r.purchased_additional_seats,
+      render: r => (
+        <span className="tabular-nums">
+          {r.included_seats}+{r.purchased_additional_seats}
+        </span>
+      ),
+      className: 'text-right',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: r => r.status,
+      render: r => platformStatusBadge(String(r.status)),
+    },
+    {
+      key: 'purchase_date',
+      header: 'Purchased',
+      sortable: true,
+      sortValue: r => r.purchase_date,
+      render: r => <span className="tabular-nums text-muted whitespace-nowrap">{formatDate(r.purchase_date)}</span>,
+      className: 'hidden md:table-cell',
+    },
+    {
+      key: 'actions',
+      header: '',
+      actionsWide: true,
+      render: r => {
+        const busy = handlers.busyId === r.id
+        return (
+          <div className="flex flex-nowrap justify-end gap-1.5">
+            {r.status !== 'active' ? (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={e => {
+                  e.stopPropagation()
+                  handlers.onActivate(r)
+                }}
+              >
+                Activate
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={e => {
+                  e.stopPropagation()
+                  handlers.onSuspend(r)
+                }}
+              >
+                Suspend
+              </Button>
+            )}
+          </div>
+        )
+      },
+      className: 'text-right',
+    },
+  ]
+}
+
+export function amcColumns(handlers: {
+  busyId: number | null
+  onRenew: (row: OrganisationAmc) => void
+}): Column<OrganisationAmc>[] {
+  return [
+    {
+      key: 'organisation_name',
+      header: 'Organisation',
+      sortable: true,
+      sortValue: r => r.organisation_name ?? '',
+      render: r => (
+        <div className="min-w-[10rem]">
+          <p className="font-medium text-heading truncate">{r.organisation_name ?? '—'}</p>
+          <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{r.licence_number ?? ''}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'plan_name',
+      header: 'Plan',
+      sortable: true,
+      sortValue: r => r.plan_name ?? '',
+      render: r => <span className="truncate block max-w-[10rem]">{r.plan_name ?? '—'}</span>,
+    },
+    {
+      key: 'amc_price_cents',
+      header: 'AMC amount',
+      sortable: true,
+      sortValue: r => r.amc_price_cents,
+      render: r => (
+        <span className="tabular-nums">
+          {r.included ? 'Included' : formatInr(r.amc_price_cents)}
+        </span>
+      ),
+      className: 'text-right',
+    },
+    {
+      key: 'end_date',
+      header: 'Period end',
+      sortable: true,
+      sortValue: r => r.end_date,
+      render: r => <span className="tabular-nums text-muted whitespace-nowrap">{formatDate(r.end_date)}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: r => r.status,
+      render: r => platformStatusBadge(String(r.status)),
+    },
+    {
+      key: 'payment_status',
+      header: 'Payment',
+      sortable: true,
+      sortValue: r => r.payment_status,
+      render: r => platformStatusBadge(r.payment_status),
+      className: 'hidden md:table-cell',
+    },
+    {
+      key: 'actions',
+      header: '',
+      actionsWide: true,
+      render: r => (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            disabled={handlers.busyId === r.id}
+            onClick={e => {
+              e.stopPropagation()
+              handlers.onRenew(r)
+            }}
+          >
+            Renew
+          </Button>
+        </div>
+      ),
+      className: 'text-right',
+    },
+  ]
+}
+
+export function paymentColumns(): Column<OrganisationPayment>[] {
+  return [
+    {
+      key: 'organisation_name',
+      header: 'Organisation',
+      sortable: true,
+      sortValue: r => r.organisation_name ?? '',
+      render: r => <span className="font-medium text-heading truncate block">{r.organisation_name ?? '—'}</span>,
+    },
+    {
+      key: 'payment_type',
+      header: 'Type',
+      sortable: true,
+      sortValue: r => r.payment_type,
+      render: r => <span className="capitalize">{String(r.payment_type).replace(/_/g, ' ')}</span>,
+    },
+    {
+      key: 'amount_cents',
+      header: 'Amount',
+      sortable: true,
+      sortValue: r => r.amount_cents,
+      render: r => <span className="tabular-nums font-medium">{formatInrCents(r.amount_cents)}</span>,
+      className: 'text-right',
+    },
+    {
+      key: 'payment_date',
+      header: 'Date',
+      sortable: true,
+      sortValue: r => r.payment_date,
+      render: r => <span className="tabular-nums text-muted whitespace-nowrap">{formatDate(r.payment_date)}</span>,
+    },
+    {
+      key: 'payment_reference',
+      header: 'Reference',
+      sortable: true,
+      sortValue: r => r.payment_reference,
+      render: r => <span className="font-mono text-[13px]">{r.payment_reference?.trim() || '—'}</span>,
+      className: 'hidden md:table-cell',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: r => r.status,
+      render: r => platformStatusBadge(String(r.status)),
     },
   ]
 }
@@ -490,6 +759,82 @@ export function mapAuditLogs(logs: Record<string, unknown>[]): AuditLogRow[] {
     organisation_id: log.organisation_id != null ? String(log.organisation_id) : '',
     actor_user_id: log.actor_user_id != null ? String(log.actor_user_id) : '',
   }))
+}
+
+
+export function releaseColumns(handlers: {
+  onEdit: (row: PlatformRelease) => void
+  onPublish: (row: PlatformRelease) => void
+}): Column<PlatformRelease>[] {
+  return [
+    {
+      key: 'version',
+      header: 'Version',
+      sortable: true,
+      sortValue: r => r.version,
+      render: r => <span className="font-mono text-[14px] tabular-nums">{r.version}</span>,
+    },
+    {
+      key: 'title',
+      header: 'Release',
+      sortable: true,
+      sortValue: r => r.title,
+      render: r => (
+        <div className="min-w-[12rem] max-w-[20rem]">
+          <p className="font-medium text-heading truncate">{r.title}</p>
+          <p className="text-xs text-muted mt-0.5 truncate">
+            {r.items.map(i => releaseCategoryLabel(i.category)).join(' · ') || 'No items'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: r => r.status,
+      render: r => (
+        <Badge variant={r.status === 'published' ? 'success' : 'info'}>
+          {r.status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'gated',
+      header: 'Apply',
+      sortable: true,
+      sortValue: r => (r.gated ? 1 : 0),
+      render: r => (
+        <span className="text-[14px] text-muted">{r.gated ? 'Update required' : 'Announcement'}</span>
+      ),
+    },
+    {
+      key: 'published_at',
+      header: 'Published',
+      sortable: true,
+      sortValue: r => r.published_at ?? '',
+      render: r => (
+        <span className="tabular-nums text-[14px]">{r.published_at ? formatDateTime(r.published_at) : '—'}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      actionsWide: true,
+      render: r => (
+        <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+          {r.status === 'draft' ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => handlers.onEdit(r)}>
+              Edit
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" onClick={() => handlers.onPublish(r)}>
+            Publish
+          </Button>
+        </div>
+      ),
+    },
+  ]
 }
 
 export function sortPlatformRows<T>(

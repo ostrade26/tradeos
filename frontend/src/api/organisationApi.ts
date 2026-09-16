@@ -5,6 +5,7 @@ import type {
   OrganisationDetailResponse,
   OrganisationSubscription,
   SeatRequest,
+  UserNotification,
 } from './platformApi'
 
 export interface OrganisationMember {
@@ -84,4 +85,21 @@ export const organisationApi = {
       username: string
       email: string
     }>(`/organisation/members/${userId}/reset-sign-in`, { method: 'POST' }),
+
+  listNotifications: () =>
+    apiFetch<{ notifications: UserNotification[]; unread: number }>('/organisation/notifications'),
+
+  markNotificationRead: (notificationId: number) =>
+    apiFetch<{ notification: UserNotification }>(`/organisation/notifications/${notificationId}/read`, {
+      method: 'POST',
+    }),
+
+  markAllNotificationsRead: () =>
+    apiFetch<{ ok: boolean; updated: number }>('/organisation/notifications/read-all', { method: 'POST' }),
+
+  applyNotificationUpdate: (notificationId: number) =>
+    apiFetch<{ notification: UserNotification; applied: boolean }>(
+      `/organisation/notifications/${notificationId}/apply`,
+      { method: 'POST' },
+    ),
 }

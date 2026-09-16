@@ -35,15 +35,11 @@ export function formatNumber(n: number): string {
   return new Intl.NumberFormat('en-IN').format(n)
 }
 
-const TABLE_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-}
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 
-const DELIVERY_PERIOD_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
-  day: 'numeric',
-  month: 'short',
+/** Calendar date — always `16 Sep 2026` (no comma, English short month). */
+function formatDayMonthYear(date: Date): string {
+  return `${date.getDate()} ${SHORT_MONTHS[date.getMonth()]} ${date.getFullYear()}`
 }
 
 function excelSerialToIso(value: number): string {
@@ -88,13 +84,10 @@ function parseDateValue(date: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-/** Page heading date — e.g. `Monday, 31 Aug`. */
+/** Page heading date — e.g. `Monday, 16 Sep`. */
 export function formatDateHeading(date: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  }).format(date)
+  const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(date)
+  return `${weekday}, ${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`
 }
 
 /** Activity group heading — e.g. `Monday, 31 August 2026`. */
@@ -111,7 +104,7 @@ export function formatDate(date: string): string {
   if (!date) return '—'
   const parsed = parseDateValue(date)
   if (!parsed) return '—'
-  return new Intl.DateTimeFormat('en-IN', TABLE_DATE_OPTIONS).format(parsed)
+  return formatDayMonthYear(parsed)
 }
 
 /** Delivery period date — no year, e.g. `6 Apr`. */
@@ -119,7 +112,7 @@ export function formatDeliveryPeriodDate(date: string): string {
   if (!date) return '—'
   const parsed = parseDateValue(date)
   if (!parsed) return '—'
-  return new Intl.DateTimeFormat('en-IN', DELIVERY_PERIOD_DATE_OPTIONS).format(parsed)
+  return `${parsed.getDate()} ${SHORT_MONTHS[parsed.getMonth()]}`
 }
 
 /** Delivery period — no year, one line, e.g. `6 Apr – 15 Aug`. */
@@ -140,12 +133,10 @@ export function formatDateRange(start: string, end: string): string {
   return formatDate(end)
 }
 
-const DATE_TIME_DISPLAY: Intl.DateTimeFormatOptions = {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
+const DATE_TIME_CLOCK: Intl.DateTimeFormatOptions = {
   hour: '2-digit',
   minute: '2-digit',
+  hour12: false,
 }
 
 function parseDateTimeValue(value: string): Date | null {
@@ -162,7 +153,8 @@ export function formatDateTime(date: string): string {
   if (!date) return '—'
   const parsed = parseDateTimeValue(date)
   if (!parsed) return '—'
-  return new Intl.DateTimeFormat('en-IN', DATE_TIME_DISPLAY).format(parsed)
+  const clock = new Intl.DateTimeFormat('en-GB', DATE_TIME_CLOCK).format(parsed)
+  return `${formatDayMonthYear(parsed)} ${clock}`
 }
 
 /** Round to 3 decimal places (MT). */

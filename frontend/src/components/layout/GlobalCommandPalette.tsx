@@ -25,8 +25,12 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     if (platformAdminMode) {
       const nav = [
         { id: 'orgs', label: 'Organisations', group: 'Navigation', action: () => navigate('/platform-admin/organisations') },
+        { id: 'plans', label: 'Plans & Pricing', group: 'Navigation', action: () => navigate('/platform-admin/plans') },
+        { id: 'licenses', label: 'Licences', group: 'Navigation', action: () => navigate('/platform-admin/licenses') },
+        { id: 'amcs', label: 'AMC / Renewals', group: 'Navigation', action: () => navigate('/platform-admin/amcs') },
         { id: 'seats', label: 'Seats', group: 'Navigation', action: () => navigate('/platform-admin/seats') },
-        { id: 'plans', label: 'Plans', group: 'Navigation', action: () => navigate('/platform-admin/plans') },
+        { id: 'payments', label: 'Payments', group: 'Navigation', action: () => navigate('/platform-admin/payments') },
+        { id: 'releases', label: 'Releases', group: 'Navigation', action: () => navigate('/platform-admin/releases') },
         {
           id: 'seat-requests',
           label: 'Seat requests',

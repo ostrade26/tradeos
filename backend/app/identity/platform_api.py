@@ -108,7 +108,16 @@ class PlanBody(BaseModel):
     annual_price_cents: int = 0
     additional_seat_monthly_price_cents: int = 0
     additional_seat_annual_price_cents: int = 0
-    included_seats: int = Field(default=1, ge=1)
+    included_seats: int = Field(default=2, ge=1)
+    licence_type: str = "perpetual"
+    licence_price_cents: int = 0
+    included_admin_seats: int = Field(default=1, ge=0)
+    included_operator_seats: int = Field(default=1, ge=0)
+    additional_seat_licence_cents: int = 0
+    amc_price_cents: int = 0
+    additional_seat_amc_cents: int = 0
+    amc_duration_months: int = Field(default=12, ge=1)
+    amc_grace_days: int = Field(default=30, ge=0)
     status: str = Field(default="active", pattern="^(active|inactive)$")
 
 
@@ -173,13 +182,16 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
     now = _now()
     if uses_postgres():
         with _pg_connect() as conn:
+            old = conn.execute("SELECT * FROM subscription_plans WHERE slug = %s", (slug,)).fetchone()
             row = conn.execute(
                 """
                 INSERT INTO subscription_plans
                 (slug, name, description, monthly_price_cents, annual_price_cents, included_seats,
                  additional_seat_monthly_price_cents, additional_seat_annual_price_cents,
-                 status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 licence_type, licence_price_cents, included_admin_seats, included_operator_seats,
+                 additional_seat_licence_cents, amc_price_cents, additional_seat_amc_cents,
+                 amc_duration_months, amc_grace_days, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (slug) DO UPDATE SET
                     name = EXCLUDED.name,
                     description = EXCLUDED.description,
@@ -188,6 +200,15 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
                     included_seats = EXCLUDED.included_seats,
                     additional_seat_monthly_price_cents = EXCLUDED.additional_seat_monthly_price_cents,
                     additional_seat_annual_price_cents = EXCLUDED.additional_seat_annual_price_cents,
+                    licence_type = EXCLUDED.licence_type,
+                    licence_price_cents = EXCLUDED.licence_price_cents,
+                    included_admin_seats = EXCLUDED.included_admin_seats,
+                    included_operator_seats = EXCLUDED.included_operator_seats,
+                    additional_seat_licence_cents = EXCLUDED.additional_seat_licence_cents,
+                    amc_price_cents = EXCLUDED.amc_price_cents,
+                    additional_seat_amc_cents = EXCLUDED.additional_seat_amc_cents,
+                    amc_duration_months = EXCLUDED.amc_duration_months,
+                    amc_grace_days = EXCLUDED.amc_grace_days,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
                 RETURNING *
@@ -201,30 +222,54 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
                     body.included_seats,
                     body.additional_seat_monthly_price_cents,
                     body.additional_seat_annual_price_cents,
+                    body.licence_type,
+                    body.licence_price_cents,
+                    body.included_admin_seats,
+                    body.included_operator_seats,
+                    body.additional_seat_licence_cents,
+                    body.amc_price_cents,
+                    body.additional_seat_amc_cents,
+                    body.amc_duration_months,
+                    body.amc_grace_days,
                     body.status,
                     now,
                     now,
                 ),
             ).fetchone()
             conn.commit()
+            action = "subscription_plan.created" if old is None else "subscription_plan.upserted"
+            if old and int(old["licence_price_cents"] or 0) != body.licence_price_cents:
+                append_audit_log(
+                    organisation_id=None,
+                    actor_user_id=session.user.id,
+                    action="plan.price.changed",
+                    entity_type="subscription_plan",
+                    entity_id=str(row["id"]),
+                    old_value={"licence_price_cents": old["licence_price_cents"], "amc_price_cents": old.get("amc_price_cents")},
+                    new_value={"licence_price_cents": body.licence_price_cents, "amc_price_cents": body.amc_price_cents},
+                )
             append_audit_log(
                 organisation_id=None,
                 actor_user_id=session.user.id,
-                action="subscription_plan.upserted",
+                action=action,
                 entity_type="subscription_plan",
                 entity_id=str(row["id"]),
+                old_value=dict(old) if old else None,
                 new_value=dict(row),
             )
             return {"plan": dict(row)}
 
     with _sqlite_connect() as conn:
+        old = conn.execute("SELECT * FROM subscription_plans WHERE slug = ?", (slug,)).fetchone()
         conn.execute(
             """
             INSERT INTO subscription_plans
             (slug, name, description, monthly_price_cents, annual_price_cents, included_seats,
              additional_seat_monthly_price_cents, additional_seat_annual_price_cents,
-             status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             licence_type, licence_price_cents, included_admin_seats, included_operator_seats,
+             additional_seat_licence_cents, amc_price_cents, additional_seat_amc_cents,
+             amc_duration_months, amc_grace_days, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(slug) DO UPDATE SET
                 name = excluded.name,
                 description = excluded.description,
@@ -233,6 +278,15 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
                 included_seats = excluded.included_seats,
                 additional_seat_monthly_price_cents = excluded.additional_seat_monthly_price_cents,
                 additional_seat_annual_price_cents = excluded.additional_seat_annual_price_cents,
+                licence_type = excluded.licence_type,
+                licence_price_cents = excluded.licence_price_cents,
+                included_admin_seats = excluded.included_admin_seats,
+                included_operator_seats = excluded.included_operator_seats,
+                additional_seat_licence_cents = excluded.additional_seat_licence_cents,
+                amc_price_cents = excluded.amc_price_cents,
+                additional_seat_amc_cents = excluded.additional_seat_amc_cents,
+                amc_duration_months = excluded.amc_duration_months,
+                amc_grace_days = excluded.amc_grace_days,
                 status = excluded.status,
                 updated_at = excluded.updated_at
             """,
@@ -245,6 +299,15 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
                 body.included_seats,
                 body.additional_seat_monthly_price_cents,
                 body.additional_seat_annual_price_cents,
+                body.licence_type,
+                body.licence_price_cents,
+                body.included_admin_seats,
+                body.included_operator_seats,
+                body.additional_seat_licence_cents,
+                body.amc_price_cents,
+                body.additional_seat_amc_cents,
+                body.amc_duration_months,
+                body.amc_grace_days,
                 body.status,
                 now,
                 now,
@@ -252,12 +315,24 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
         )
         conn.commit()
         row = conn.execute("SELECT * FROM subscription_plans WHERE slug = ?", (slug,)).fetchone()
+        action = "subscription_plan.created" if old is None else "subscription_plan.upserted"
+        if old and int(old["licence_price_cents"] or 0) != body.licence_price_cents:
+            append_audit_log(
+                organisation_id=None,
+                actor_user_id=session.user.id,
+                action="plan.price.changed",
+                entity_type="subscription_plan",
+                entity_id=str(row["id"]),
+                old_value={"licence_price_cents": old["licence_price_cents"], "amc_price_cents": old["amc_price_cents"] if "amc_price_cents" in old.keys() else None},
+                new_value={"licence_price_cents": body.licence_price_cents, "amc_price_cents": body.amc_price_cents},
+            )
         append_audit_log(
             organisation_id=None,
             actor_user_id=session.user.id,
-            action="subscription_plan.upserted",
+            action=action,
             entity_type="subscription_plan",
             entity_id=str(row["id"]),
+            old_value=dict(old) if old else None,
             new_value=dict(row),
         )
         return {"plan": dict(row)}
@@ -1088,3 +1163,346 @@ def list_audit_logs(
                 (limit,),
             ).fetchall()
         return {"logs": [dict(r) for r in rows]}
+
+
+class LicenceStatusBody(BaseModel):
+    status: str
+
+
+class RenewAmcBody(BaseModel):
+    payment_status: str = "pending"
+
+
+class PaymentBody(BaseModel):
+    organisation_id: int
+    payment_type: str
+    amount_cents: int
+    payment_date: str = ""
+    payment_reference: str = ""
+    status: str = "paid"
+    notes: str = ""
+    licence_id: int | None = None
+    amc_id: int | None = None
+
+
+class PaymentPatchBody(BaseModel):
+    status: str | None = None
+    notes: str | None = None
+    payment_reference: str | None = None
+
+
+@router.get("/dashboard", summary="Platform commercial metrics")
+def platform_dashboard(request: Request) -> dict[str, Any]:
+    auth.require_platform(_session(request))
+    auth.require_permission(_session(request), "organisations.view")
+    from .licence_repository import dashboard_metrics
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return dashboard_metrics(conn)
+    with _sqlite_connect() as conn:
+        return dashboard_metrics(conn)
+
+
+@router.get("/licenses", summary="Organisation licences")
+def list_org_licenses(request: Request) -> dict[str, Any]:
+    auth.require_platform(_session(request))
+    auth.require_permission(_session(request), "subscriptions.view")
+    from .licence_repository import list_licenses
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"licenses": list_licenses(conn)}
+    with _sqlite_connect() as conn:
+        return {"licenses": list_licenses(conn)}
+
+
+@router.patch("/licenses/{licence_id}", summary="Update licence status")
+def patch_licence(licence_id: int, body: LicenceStatusBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscriptions.manage")
+    from .licence_repository import set_licence_status
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            licence = set_licence_status(conn, licence_id, body.status, session.user.id)
+            conn.commit()
+            return {"licence": licence}
+    with _sqlite_connect() as conn:
+        licence = set_licence_status(conn, licence_id, body.status, session.user.id)
+        conn.commit()
+        return {"licence": licence}
+
+
+@router.get("/amcs", summary="AMC / renewal register")
+def list_org_amcs(request: Request) -> dict[str, Any]:
+    auth.require_platform(_session(request))
+    auth.require_permission(_session(request), "subscriptions.view")
+    from .licence_repository import list_amcs
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"amcs": list_amcs(conn)}
+    with _sqlite_connect() as conn:
+        return {"amcs": list_amcs(conn)}
+
+
+@router.post("/licenses/{licence_id}/renew-amc", summary="Start next AMC period using licence snapshot price")
+def renew_licence_amc(licence_id: int, body: RenewAmcBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscriptions.manage")
+    from .licence_repository import renew_amc
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            amc = renew_amc(conn, licence_id, session.user.id, body.payment_status)
+            conn.commit()
+            return {"amc": amc}
+    with _sqlite_connect() as conn:
+        amc = renew_amc(conn, licence_id, session.user.id, body.payment_status)
+        conn.commit()
+        return {"amc": amc}
+
+
+@router.get("/payments", summary="Licence / AMC / seat payments")
+def list_org_payments(request: Request) -> dict[str, Any]:
+    auth.require_platform(_session(request))
+    auth.require_permission(_session(request), "subscriptions.view")
+    from .licence_repository import list_payments
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"payments": list_payments(conn)}
+    with _sqlite_connect() as conn:
+        return {"payments": list_payments(conn)}
+
+
+@router.post("/payments", summary="Record a manual payment")
+def create_org_payment(body: PaymentBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscriptions.manage")
+    from .licence_repository import record_payment
+
+    payload = dict(
+        organisation_id=body.organisation_id,
+        payment_type=body.payment_type,
+        amount_cents=body.amount_cents,
+        payment_date=body.payment_date,
+        payment_reference=body.payment_reference,
+        status=body.status,
+        notes=body.notes,
+        licence_id=body.licence_id,
+        amc_id=body.amc_id,
+        actor_user_id=session.user.id,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            payment = record_payment(conn, **payload)
+            conn.commit()
+            return {"payment": payment}
+    with _sqlite_connect() as conn:
+        payment = record_payment(conn, **payload)
+        conn.commit()
+        return {"payment": payment}
+
+
+@router.patch("/payments/{payment_id}", summary="Update payment status")
+def patch_org_payment(payment_id: int, body: PaymentPatchBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscriptions.manage")
+    from .licence_repository import update_payment
+
+    patch = body.model_dump(exclude_none=True)
+    if uses_postgres():
+        with _pg_connect() as conn:
+            payment = update_payment(conn, payment_id, patch, session.user.id)
+            conn.commit()
+            return {"payment": payment}
+    with _sqlite_connect() as conn:
+        payment = update_payment(conn, payment_id, patch, session.user.id)
+        conn.commit()
+        return {"payment": payment}
+
+
+class SendNotificationBody(BaseModel):
+    audience: str = "user"
+    organisation_id: int | None = None
+    recipient_user_id: int | None = None
+    recipient_scope: str = "org_admin"
+    exclude_expired_amc: bool = False
+    kind: str
+    title: str
+    body: str = ""
+    href: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+    feature_key: str = ""
+
+
+@router.post("/notifications", summary="Send an in-app notice to a chosen audience")
+def send_org_notification(body: SendNotificationBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .notifications_repository import create_notifications_for_audience
+
+    payload = dict(body.payload or {})
+    if body.feature_key.strip():
+        payload["feature_key"] = body.feature_key.strip()
+    kwargs = dict(
+        audience=body.audience,
+        organisation_id=body.organisation_id,
+        recipient_user_id=body.recipient_user_id,
+        recipient_scope=body.recipient_scope,
+        exclude_expired_amc=body.exclude_expired_amc,
+        kind=body.kind,
+        title=body.title,
+        body=body.body,
+        payload=payload,
+        href=body.href,
+        actor_user_id=session.user.id,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            result = create_notifications_for_audience(conn, **kwargs)
+            conn.commit()
+            result.pop("notifications", None)
+            return result
+    with _sqlite_connect() as conn:
+        result = create_notifications_for_audience(conn, **kwargs)
+        conn.commit()
+        result.pop("notifications", None)
+        return result
+
+
+class ReleaseItemBody(BaseModel):
+    category: str
+    title: str
+    detail: str = ""
+    feature_key: str = ""
+
+
+class ReleaseBody(BaseModel):
+    version: str
+    title: str
+    summary: str = ""
+    items: list[ReleaseItemBody]
+
+
+class PublishReleaseBody(BaseModel):
+    audience: str = "active_licences"
+    organisation_id: int | None = None
+    recipient_user_id: int | None = None
+    recipient_scope: str = "org_admin"
+    exclude_expired_amc: bool = True
+
+
+@router.get("/releases", summary="List versioned product releases")
+def list_platform_releases(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import list_releases
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return list_releases(conn)
+    with _sqlite_connect() as conn:
+        return list_releases(conn)
+
+
+@router.post("/releases", summary="Create a draft product release")
+def create_platform_release(body: ReleaseBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import create_release
+
+    items = [item.model_dump() for item in body.items]
+    if uses_postgres():
+        with _pg_connect() as conn:
+            release = create_release(
+                conn,
+                version=body.version,
+                title=body.title,
+                summary=body.summary,
+                items=items,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"release": release}
+    with _sqlite_connect() as conn:
+        release = create_release(
+            conn,
+            version=body.version,
+            title=body.title,
+            summary=body.summary,
+            items=items,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"release": release}
+
+
+@router.patch("/releases/{release_id}", summary="Update a draft product release")
+def update_platform_release(release_id: int, body: ReleaseBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import update_release
+
+    items = [item.model_dump() for item in body.items]
+    if uses_postgres():
+        with _pg_connect() as conn:
+            release = update_release(
+                conn,
+                release_id,
+                version=body.version,
+                title=body.title,
+                summary=body.summary,
+                items=items,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"release": release}
+    with _sqlite_connect() as conn:
+        release = update_release(
+            conn,
+            release_id,
+            version=body.version,
+            title=body.title,
+            summary=body.summary,
+            items=items,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"release": release}
+
+
+@router.post("/releases/{release_id}/publish", summary="Publish a release to a chosen audience")
+def publish_platform_release(release_id: int, body: PublishReleaseBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import publish_release
+
+    kwargs = dict(
+        audience=body.audience,
+        organisation_id=body.organisation_id,
+        recipient_user_id=body.recipient_user_id,
+        recipient_scope=body.recipient_scope,
+        exclude_expired_amc=body.exclude_expired_amc,
+        actor_user_id=session.user.id,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            release = publish_release(conn, release_id, **kwargs)
+            conn.commit()
+            return {"release": release}
+    with _sqlite_connect() as conn:
+        release = publish_release(conn, release_id, **kwargs)
+        conn.commit()
+        return {"release": release}

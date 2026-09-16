@@ -140,6 +140,10 @@ def session_to_dict(session: Session) -> dict[str, Any]:
     elif legacy_role == "operator":
         legacy_role = "operator"
     from .identity.repository import parse_user_preferences
+    from .identity.notifications_repository import (
+        applied_feature_keys_for_user,
+        applied_version_for_user,
+    )
 
     return {
         "userId": u.id,
@@ -158,6 +162,8 @@ def session_to_dict(session: Session) -> dict[str, Any]:
         "permissions": sorted(u.permissions),
         "isPlatformAdmin": u.role_slug == "platform_admin",
         "organisationSandboxTools": u.organisation_sandbox_tools,
+        "appliedUpdates": applied_feature_keys_for_user(u.id, u.organisation_id),
+        "appliedVersion": applied_version_for_user(u.id, u.organisation_id),
     }
 
 

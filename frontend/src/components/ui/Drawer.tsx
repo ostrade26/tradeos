@@ -241,9 +241,22 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg'
   /** Hide the title bar — use for hero-style dialogs; pass `title` for screen readers. */
   hideHeader?: boolean
+  /** When false, Escape, overlay click, and the close button are disabled. */
+  dismissible?: boolean
 }
 
-export function Modal({ open, onClose, title, subtitle, children, footer, footerClassName, size = 'md', hideHeader = false }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  footerClassName,
+  size = 'md',
+  hideHeader = false,
+  dismissible = true,
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, open)
 
@@ -256,11 +269,11 @@ export function Modal({ open, onClose, title, subtitle, children, footer, footer
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && dismissible) onClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
+  }, [open, onClose, dismissible])
 
   if (!open) return null
 
@@ -268,7 +281,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, footer
 
   return createPortal(
     <div className="fixed inset-0 flex items-center justify-center p-5 sm:p-8" style={{ zIndex: OVERLAY_Z }}>
-      <div className={overlayClass} onClick={onClose} aria-hidden />
+      <div className={overlayClass} onClick={dismissible ? onClose : undefined} aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
@@ -284,14 +297,16 @@ export function Modal({ open, onClose, title, subtitle, children, footer, footer
           {hideHeader ? (
             <>
               <span className="sr-only">{title}</span>
-              <button
-                type="button"
-                onClick={onClose}
-                className="absolute top-4 right-4 z-10 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus"
-                aria-label="Close dialog"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {dismissible ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="absolute top-4 right-4 z-10 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
             </>
           ) : (
             <div className="flex items-start justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-5">
@@ -299,9 +314,11 @@ export function Modal({ open, onClose, title, subtitle, children, footer, footer
                 <h2 id="modal-title" className="text-lg font-semibold text-heading">{title}</h2>
                 {subtitle ? <p className="text-sm text-muted mt-0.5">{subtitle}</p> : null}
               </div>
-              <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus" aria-label="Close dialog">
-                <X className="h-4 w-4" />
-              </button>
+              {dismissible ? (
+                <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer attex-focus" aria-label="Close dialog">
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
           )}
           <div className={cn('px-6', hideHeader ? 'pt-8 pb-6' : 'py-6')}>{children}</div>

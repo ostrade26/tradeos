@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package,
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
-  Building2, Users, UserPlus, CreditCard, ScrollText,
+  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { isPlatformAdminPath } from '../../lib/appShellMode'
@@ -34,8 +34,12 @@ const platformNav = [
 
 const platformAdminNav = [
   { to: '/platform-admin/organisations', icon: Building2, label: 'Organisations', end: true },
+  { to: '/platform-admin/plans', icon: CreditCard, label: 'Plans & Pricing' },
+  { to: '/platform-admin/licenses', icon: KeyRound, label: 'Licences' },
+  { to: '/platform-admin/amcs', icon: ShieldCheck, label: 'AMC / Renewals' },
   { to: '/platform-admin/seats', icon: Users, label: 'Seats' },
-  { to: '/platform-admin/plans', icon: CreditCard, label: 'Plans' },
+  { to: '/platform-admin/payments', icon: Wallet, label: 'Payments' },
+  { to: '/platform-admin/releases', icon: Sparkles, label: 'Releases' },
   { to: '/platform-admin/seat-requests', icon: UserPlus, label: 'Seat requests' },
   { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
 ]

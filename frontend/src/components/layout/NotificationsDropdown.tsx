@@ -1,15 +1,24 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, AlertCircle, Clock, Link2, Package, Trash2, Truck, UserPlus } from 'lucide-react'
+import {
+  Bell, AlertCircle, Clock, KeyRound, Link2, Megaphone, Package, Sparkles, Trash2, Truck, UserPlus, Wallet,
+} from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
+import { useUserNotifications } from '../../hooks/useUserNotifications'
+import { organisationApi } from '../../api/organisationApi'
+import { authApi } from '../../api/tradeApi'
+import { sessionFromApi } from '../../lib/authSession'
+import { saveAuthSession } from '../../lib/auth'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { DropdownPanel } from './DropdownPanel'
+import { SystemUpdateModal } from './SystemUpdateModal'
 import { buildActionInbox, type InboxAction } from '../../lib/actionInbox'
 import { countUnread, getReadNotificationIds, markAllNotificationsRead, markNotificationRead } from '../../lib/notifications'
 import { useTradeStore } from '../../store/TradeStore'
-import { cn } from '../../lib/utils'
+import { cn, formatDateTime } from '../../lib/utils'
+import type { UserNotification } from '../../api/platformApi'
 
 const kindIcon: Record<string, typeof Truck> = {
   po_lift: Truck,
@@ -19,6 +28,11 @@ const kindIcon: Record<string, typeof Truck> = {
   deletion: Trash2,
   delivery: Clock,
   seat_request: UserPlus,
+  credentials: KeyRound,
+  payment_reminder: Wallet,
+  product_update: Megaphone,
+  feature_launch: Sparkles,
+  release_notes: Megaphone,
 }
 
 const urgencyVariant: Record<InboxAction['urgency'], 'danger' | 'warning' | 'default'> = {
@@ -27,25 +41,45 @@ const urgencyVariant: Record<InboxAction['urgency'], 'danger' | 'warning' | 'def
   low: 'default',
 }
 
+function notificationSubtitle(item: UserNotification): string {
+  if (item.kind === 'credentials') {
+    const email = item.payload.login_id || item.body
+    const password = item.payload.temporary_password
+    if (email && password) return `${email} · ${password}`
+    return item.body || email
+  }
+  return item.body || formatDateTime(item.created_at)
+}
+
 export function NotificationsDropdown() {
   const [open, setOpen] = useState(false)
   const [readTick, setReadTick] = useState(0)
-  const { isPlatformAdmin } = useAuth()
+  const [updating, setUpdating] = useState<UserNotification | null>(null)
+  const { isPlatformAdmin, isAuthenticated, session } = useAuth()
   const store = useTradeStore()
   const { actions: platformSeatActions, refresh: refreshPlatformSeats } = usePlatformSeatRequestInbox(isPlatformAdmin)
-  const tradeActions = useMemo(() => buildActionInbox(store), [store, readTick])
+  const {
+    notifications,
+    unread: storedUnread,
+    refresh: refreshStored,
+    markRead,
+    markAllRead: markStoredAllRead,
+  } = useUserNotifications(isAuthenticated && !isPlatformAdmin)
+  const tradeActions = useMemo(() => (isPlatformAdmin ? [] : buildActionInbox(store)), [store, readTick, isPlatformAdmin])
   const actions = useMemo(
     () => [...platformSeatActions, ...tradeActions],
     [platformSeatActions, tradeActions],
   )
   const readIds = useMemo(() => getReadNotificationIds(), [readTick])
-  const unreadCount = useMemo(() => countUnread(actions.map(a => a.id)), [actions, readTick])
+  const derivedUnread = useMemo(() => countUnread(actions.map(a => a.id)), [actions, readTick])
+  const unreadCount = derivedUnread + storedUnread
 
   const handleOpen = (next: boolean) => {
     setOpen(next)
     if (next) {
       setReadTick(t => t + 1)
       if (isPlatformAdmin) void refreshPlatformSeats()
+      else void refreshStored()
     }
   }
 
@@ -58,9 +92,27 @@ export function NotificationsDropdown() {
   const handleMarkAllRead = () => {
     markAllNotificationsRead(actions.map(a => a.id))
     setReadTick(t => t + 1)
+    if (!isPlatformAdmin) void markStoredAllRead()
   }
 
+  const applyNotice = useCallback(async (notificationId: number) => {
+    await organisationApi.applyNotificationUpdate(notificationId)
+    if (session?.token) {
+      const me = await authApi.me()
+      saveAuthSession(sessionFromApi(me, session.token))
+    }
+  }, [session?.token])
+
+  const handleApplyUpdate = (item: UserNotification) => {
+    if (updating) return
+    setOpen(false)
+    setUpdating(item)
+  }
+
+  const hasItems = notifications.length > 0 || actions.length > 0
+
   return (
+    <>
     <DropdownPanel
       open={open}
       onOpenChange={handleOpen}
@@ -95,7 +147,7 @@ export function NotificationsDropdown() {
             {unreadCount === 0 ? 'All caught up' : `${unreadCount} unread`}
           </p>
         </div>
-        {actions.length > 0 && unreadCount > 0 && (
+        {hasItems && unreadCount > 0 && (
           <button
             type="button"
             onClick={handleMarkAllRead}
@@ -106,13 +158,91 @@ export function NotificationsDropdown() {
         )}
       </div>
 
-      {actions.length === 0 ? (
+      {!hasItems ? (
         <div className="px-4 py-10 text-center">
           <Bell className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600 mb-2" />
           <p className="text-sm text-muted">No pending alerts right now.</p>
         </div>
       ) : (
         <div className="max-h-80 overflow-y-auto py-1">
+          {notifications.map(item => {
+            const Icon = kindIcon[item.kind] ?? AlertCircle
+            const cta = item.payload?.cta
+            const showUpdateCta =
+              cta === 'update'
+              || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))
+            const content = (
+              <>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-700/50">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-heading text-pretty">{item.title}</p>
+                  <p className={cn(
+                    'text-xs text-muted mt-0.5 leading-snug',
+                    item.kind === 'credentials' && 'font-mono tabular-nums break-all',
+                  )}>
+                    {notificationSubtitle(item)}
+                  </p>
+                  <p className="text-[11px] text-muted mt-1 tabular-nums">{formatDateTime(item.created_at)}</p>
+                  {showUpdateCta ? (
+                    item.applied || item.applied_at ? (
+                      <p className="text-xs font-medium text-muted mt-2">Updated</p>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-2"
+                        onClick={event => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          void handleApplyUpdate(item)
+                        }}
+                      >
+                        Update
+                      </Button>
+                    )
+                  ) : null}
+                </div>
+              </>
+            )
+            const className = cn(
+              'flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors w-full text-left',
+              item.unread && 'bg-accent/5 dark:bg-accent/10',
+            )
+            if (showUpdateCta) {
+              return (
+                <div key={item.id} className={className}>
+                  {content}
+                </div>
+              )
+            }
+            if (item.href) {
+              return (
+                <Link
+                  key={item.id}
+                  to={item.href}
+                  onClick={() => {
+                    void markRead(item.id)
+                    setOpen(false)
+                  }}
+                  className={className}
+                >
+                  {content}
+                </Link>
+              )
+            }
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void markRead(item.id)}
+                className={className}
+              >
+                {content}
+              </button>
+            )
+          })}
           {actions.slice(0, 10).map(action => {
             const Icon = kindIcon[action.kind] ?? AlertCircle
             const isUnread = !readIds.has(action.id)
@@ -159,5 +289,12 @@ export function NotificationsDropdown() {
         </Link>
       </div>
     </DropdownPanel>
+    <SystemUpdateModal
+      open={!!updating}
+      notification={updating}
+      onClose={() => setUpdating(null)}
+      onApply={applyNotice}
+    />
+    </>
   )
 }

@@ -398,12 +398,18 @@ def organisation_detail(conn, org_id: int) -> dict[str, Any]:
     from .org_members_repository import find_primary_admin_user
 
     primary_admin_user = find_primary_admin_user(conn, org_id)
+    from .licence_repository import commercial_summary
+
+    commercial = commercial_summary(conn, org_id)
     return {
         "organisation": org_d,
         "subscription": sub,
         "seats": seats,
         "seat_inventory": inventory,
         "primary_admin_user": primary_admin_user,
+        "licence": commercial.get("licence"),
+        "amc": commercial.get("amc"),
+        "billing": commercial.get("payments"),
     }
 
 
@@ -502,6 +508,9 @@ def add_purchased_seat(
             "seat_type": seat_type,
         },
     )
+    from .licence_repository import bump_additional_seats
+
+    bump_additional_seats(conn, organisation_id, count, actor_user_id)
     return summary
 
 
@@ -1010,6 +1019,15 @@ def create_organisation_with_primary_admin(
         plan_id=plan_id,
         billing_cycle=billing_cycle,
         status="active",
+    )
+    from .licence_repository import issue_licence_for_organisation
+
+    issue_licence_for_organisation(
+        conn,
+        organisation_id=org_id,
+        plan_id=plan_id,
+        actor_user_id=actor_user_id,
+        activate=True,
     )
 
     custom_password = primary_admin.get("password", "").strip()

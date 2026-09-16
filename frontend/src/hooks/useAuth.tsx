@@ -13,6 +13,7 @@ import {
   canEditOrders,
   clearAuthSession,
   hasPermission,
+  hasAppliedUpdate,
   isAdmin,
   loadAuthSession,
   roleLabel,
@@ -39,6 +40,7 @@ interface AuthContextValue {
   isPlatformAdmin: boolean
   organisationSandboxTools: boolean
   hasPermission: (permission: string) => boolean
+  hasAppliedUpdate: (featureKey: string) => boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -102,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isPlatformAdmin: !!session?.isPlatformAdmin,
       organisationSandboxTools: !!session?.organisationSandboxTools,
       hasPermission: perm,
+      hasAppliedUpdate: (featureKey: string) => hasAppliedUpdate(session, featureKey),
       login,
       logout,
     }

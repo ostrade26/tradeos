@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { History, PanelRight, PanelRightClose, Pencil, Trash2, Armchair } from 'lucide-react'
+import { History, PanelRight, PanelRightClose, Pencil, Trash2, Armchair, Bell } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -23,6 +23,7 @@ interface PlatformOrganisationDetailDrawerProps {
   onDelete: () => void
   onResetPrimaryAdminSignIn?: () => void
   resettingPrimaryAdminSignIn?: boolean
+  onNotify?: () => void
 }
 
 export function PlatformOrganisationDetailDrawer({
@@ -38,6 +39,7 @@ export function PlatformOrganisationDetailDrawer({
   onDelete,
   onResetPrimaryAdminSignIn,
   resettingPrimaryAdminSignIn,
+  onNotify,
 }: PlatformOrganisationDetailDrawerProps) {
   const org = detail?.organisation
   const title = org?.name ?? 'Organisation'
@@ -65,6 +67,9 @@ export function PlatformOrganisationDetailDrawer({
       },
       {
         items: [
+          ...(onNotify
+            ? [{ type: 'button' as const, label: 'Send notice', icon: Bell, onClick: onNotify }]
+            : []),
           {
             type: 'link',
             label: 'Timeline',
@@ -85,7 +90,7 @@ export function PlatformOrganisationDetailDrawer({
           }]
         : []),
     ])
-  }, [org, canDelete, onEdit, onDelete])
+  }, [org, canDelete, onEdit, onDelete, onNotify])
 
   const dockToggle = onDockChange && (
     <button
@@ -114,7 +119,7 @@ export function PlatformOrganisationDetailDrawer({
         size="sm"
         className={actionBtnClass}
         loading={addingSeat}
-        disabled={!sub}
+        disabled={!sub && !detail?.licence}
         onClick={onAddSeat}
       >
         <Armchair className="h-4 w-4" aria-hidden />

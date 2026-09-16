@@ -47,6 +47,15 @@ export interface SubscriptionPlan {
   additional_seat_monthly_price_cents: number
   additional_seat_annual_price_cents: number
   included_seats: number
+  licence_type?: string
+  licence_price_cents?: number
+  included_admin_seats?: number
+  included_operator_seats?: number
+  additional_seat_licence_cents?: number
+  amc_price_cents?: number
+  additional_seat_amc_cents?: number
+  amc_duration_months?: number
+  amc_grace_days?: number
   status: string
   created_at: string
   updated_at: string
@@ -175,6 +184,133 @@ export interface OrganisationDetailResponse {
     username: string
     temporary_password?: string | null
   }
+  licence?: OrganisationLicence | null
+  amc?: OrganisationAmc | null
+  billing?: {
+    total_paid_cents: number
+    pending_cents: number
+    last_payment_date: string | null
+    payment_status: string
+  }
+}
+
+export type LicenceStatus = 'pending' | 'active' | 'suspended' | 'cancelled'
+export type AmcStatus = 'active' | 'due_soon' | 'grace_period' | 'expired' | 'cancelled'
+export type PaymentType = 'licence' | 'amc' | 'additional_seat' | 'other'
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
+
+export interface OrganisationLicence {
+  id: number
+  organisation_id: number
+  organisation_name?: string
+  org_code?: string | null
+  plan_id: number | null
+  licence_number: string
+  plan_name: string
+  licence_type: string
+  licence_price_cents: number
+  purchase_date: string
+  activation_date: string | null
+  status: LicenceStatus | string
+  included_seats: number
+  included_admin_seats: number
+  included_operator_seats: number
+  purchased_additional_seats: number
+  additional_seat_licence_cents: number
+  additional_seat_amc_cents: number
+  amc_price_cents: number
+  amc_duration_months: number
+  amc_grace_days: number
+  amc?: OrganisationAmc | null
+}
+
+export interface OrganisationAmc {
+  id: number
+  organisation_id: number
+  organisation_name?: string
+  org_code?: string | null
+  licence_id: number
+  licence_number?: string
+  plan_name?: string
+  amc_price_cents: number
+  included: number
+  start_date: string
+  end_date: string
+  grace_until: string | null
+  renewal_date: string | null
+  status: AmcStatus | string
+  payment_status: string
+}
+
+export interface OrganisationPayment {
+  id: number
+  organisation_id: number
+  organisation_name?: string
+  org_code?: string | null
+  licence_id: number | null
+  licence_number?: string | null
+  amc_id: number | null
+  payment_type: PaymentType | string
+  amount_cents: number
+  payment_date: string
+  payment_reference: string
+  status: PaymentStatus | string
+  notes: string
+}
+
+export interface PlatformDashboard {
+  organisations: { total: number; active_licences: number }
+  amc: { active: number; due_soon: number; grace_period: number; expired: number; cancelled: number }
+  seats: { purchased: number; assigned: number; available: number }
+  revenue: { licence_cents: number; amc_cents: number; pending_cents: number }
+}
+
+export type NotificationKind = 'credentials' | 'payment_reminder' | 'product_update' | 'feature_launch' | 'release_notes'
+export type NotificationAudience = 'user' | 'org' | 'active_licences'
+export type NotificationRecipientScope = 'org_admin' | 'all_users'
+
+export interface UserNotification {
+  id: number
+  organisation_id: number
+  recipient_user_id: number
+  kind: NotificationKind | string
+  title: string
+  body: string
+  payload: Record<string, string>
+  href: string
+  read_at: string | null
+  applied_at?: string | null
+  applied?: boolean
+  feature_key?: string
+  unread: boolean
+  created_at: string
+}
+
+export type ReleaseCategory = 'bug_fix' | 'improvement' | 'cosmetic' | 'new_feature' | 'product_update'
+
+export interface PlatformReleaseItem {
+  id?: number
+  category: ReleaseCategory | string
+  title: string
+  detail: string
+  feature_key: string
+  sort_order?: number
+  gated?: boolean
+}
+
+export interface PlatformRelease {
+  id: number
+  version: string
+  title: string
+  summary: string
+  status: 'draft' | 'published' | string
+  items: PlatformReleaseItem[]
+  gated: boolean
+  created_at: string
+  updated_at: string
+  published_at: string | null
+  sent?: number
+  skipped_expired_amc?: number
 }
 
 export const platformApi = {
@@ -282,5 +418,110 @@ export const platformApi = {
     apiFetch<{ request: SeatRequest }>(`/platform/seat-requests/${requestId}/reject`, {
       method: 'POST',
       body: JSON.stringify({ admin_note: adminNote }),
+    }),
+
+  dashboard: () => apiFetch<PlatformDashboard>('/platform/dashboard'),
+
+  listLicenses: () => apiFetch<{ licenses: OrganisationLicence[] }>('/platform/licenses'),
+
+  updateLicenceStatus: (licenceId: number, status: string) =>
+    apiFetch<{ licence: OrganisationLicence }>(`/platform/licenses/${licenceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  listAmcs: () => apiFetch<{ amcs: OrganisationAmc[] }>('/platform/amcs'),
+
+  renewAmc: (licenceId: number, paymentStatus = 'pending') =>
+    apiFetch<{ amc: OrganisationAmc }>(`/platform/licenses/${licenceId}/renew-amc`, {
+      method: 'POST',
+      body: JSON.stringify({ payment_status: paymentStatus }),
+    }),
+
+  listPayments: () => apiFetch<{ payments: OrganisationPayment[] }>('/platform/payments'),
+
+  recordPayment: (body: {
+    organisation_id: number
+    payment_type: PaymentType
+    amount_cents: number
+    payment_date?: string
+    payment_reference?: string
+    status?: PaymentStatus
+    notes?: string
+    licence_id?: number | null
+    amc_id?: number | null
+  }) =>
+    apiFetch<{ payment: OrganisationPayment }>('/platform/payments', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updatePayment: (paymentId: number, body: Partial<Pick<OrganisationPayment, 'status' | 'notes' | 'payment_reference'>>) =>
+    apiFetch<{ payment: OrganisationPayment }>(`/platform/payments/${paymentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  sendNotification: (body: {
+    audience?: NotificationAudience
+    organisation_id?: number | null
+    recipient_user_id?: number | null
+    recipient_scope?: NotificationRecipientScope
+    exclude_expired_amc?: boolean
+    kind: NotificationKind
+    title: string
+    body?: string
+    href?: string
+    payload?: Record<string, string>
+    feature_key?: string
+  }) =>
+    apiFetch<{ sent: number; skipped_expired_amc: number; notification: UserNotification }>('/platform/notifications', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  listReleases: () =>
+    apiFetch<{ releases: PlatformRelease[]; latest_version: string | null; next_version: string }>(
+      '/platform/releases',
+    ),
+
+  createRelease: (body: {
+    version: string
+    title: string
+    summary?: string
+    items: Array<Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'>>
+  }) =>
+    apiFetch<{ release: PlatformRelease }>('/platform/releases', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateRelease: (
+    releaseId: number,
+    body: {
+      version: string
+      title: string
+      summary?: string
+      items: Array<Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'>>
+    },
+  ) =>
+    apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  publishRelease: (
+    releaseId: number,
+    body: {
+      audience?: NotificationAudience
+      organisation_id?: number | null
+      recipient_user_id?: number | null
+      recipient_scope?: NotificationRecipientScope
+      exclude_expired_amc?: boolean
+    },
+  ) =>
+    apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 }

@@ -767,6 +767,9 @@ def _init_billing_pg() -> None:
         _dedupe_test_organisations(conn)
         _backfill_seat_types(conn)
         _backfill_seat_labels(conn)
+        from .licence_schema import init_licence_schema
+
+        init_licence_schema(conn)
         conn.commit()
 
 
@@ -790,4 +793,7 @@ def _init_billing_sqlite() -> None:
         _dedupe_test_organisations(conn)
         _backfill_seat_types(conn)
         _backfill_seat_labels(conn)
+        from .licence_schema import init_licence_schema
+
+        init_licence_schema(conn)
         conn.commit()

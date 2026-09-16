@@ -479,6 +479,12 @@ def init_identity_schema() -> None:
             _rename_legacy_default_org(conn.execute, conn.commit)
             conn.commit()
         init_billing_schema()
+        from .notifications_schema import init_notifications_schema
+
+        init_notifications_schema()
+        from .releases_schema import init_releases_schema
+
+        init_releases_schema()
         return
 
     with _sqlite_connect() as conn:
@@ -581,3 +587,9 @@ def init_identity_schema() -> None:
         _rename_legacy_default_org(conn.execute, conn.commit)
         conn.commit()
     init_billing_schema()
+    from .notifications_schema import init_notifications_schema
+
+    init_notifications_schema()
+    from .releases_schema import init_releases_schema
+
+    init_releases_schema()

@@ -1,0 +1,34 @@
+---
+description: Never nest a card inside a card, modal, or drawer.
+alwaysApply: true
+---
+
+# No nested cards
+
+Never place a card inside another card-like surface.
+
+Card-like surfaces include: `bg-card` + `shadow-[var(--shadow-card)]`, `rounded-md` panels with their own shadow, `Modal`, `Drawer`, and `DockedPanel`.
+
+## Do
+
+- Put fields, lists, and captions directly on the parent surface.
+- Use dividers, spacing, and typography for hierarchy.
+- Use a **caption card** only as the outer unit, never inside a modal/drawer/card.
+
+## Do not
+
+```tsx
+<Modal>
+  <div className="rounded-md bg-card shadow-[var(--shadow-card)]">
+    {children}
+  </div>
+</Modal>
+```
+
+```tsx
+<div className="rounded-md bg-card shadow-[var(--shadow-card)]">
+  <div className="rounded-md bg-card shadow-[var(--shadow-card)]">
+    {children}
+  </div>
+</div>
+```

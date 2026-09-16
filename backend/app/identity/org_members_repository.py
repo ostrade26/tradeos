@@ -169,6 +169,16 @@ def set_organisation_member_status(
         old_value={"status": member["status"]},
         new_value={"status": status},
     )
+    if not active:
+        append_audit_log(
+            organisation_id=organisation_id,
+            actor_user_id=actor_user_id,
+            action="seat.deactivated",
+            entity_type="user",
+            entity_id=str(user_id),
+            old_value={"status": member["status"]},
+            new_value={"status": status},
+        )
 
 
 def set_organisation_member_password(
@@ -255,6 +265,14 @@ def create_organisation_member(
         entity_type="user",
         entity_id=str(user_id),
         new_value={"email": ident, "role": role_slug},
+    )
+    append_audit_log(
+        organisation_id=organisation_id,
+        actor_user_id=actor_user_id,
+        action="seat.assigned",
+        entity_type="user",
+        entity_id=str(user_id),
+        new_value={"role": role_slug},
     )
     return user_id
 

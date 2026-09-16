@@ -1,8 +1,11 @@
-import { useCallback, useState } from 'react'
-import { Copy, Check } from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Copy, Check, Bell } from 'lucide-react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { useToast } from '../../hooks/useToast'
+import { cn } from '../../lib/utils'
+import { ApiError } from '../../api/client'
+import { platformApi } from '../../api/platformApi'
 
 export interface SignInCredentialsPayload {
   name?: string
@@ -10,6 +13,8 @@ export interface SignInCredentialsPayload {
   username?: string
   email?: string
   temporary_password: string
+  organisation_id?: number
+  recipient_user_id?: number
 }
 
 interface PlatformSignInCredentialsModalProps {
@@ -28,6 +33,52 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+function CredentialRow({
+  label,
+  value,
+  mono,
+  copied,
+  onCopy,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  copied: boolean
+  onCopy: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 px-6 py-3.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+        <p
+          className={cn(
+            'text-sm font-semibold text-heading break-all mt-1 leading-snug',
+            mono && 'font-mono tabular-nums',
+          )}
+        >
+          {value}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onCopy}
+        className={cn(
+          'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md',
+          'text-muted hover:bg-gray-100 hover:text-heading dark:hover:bg-zinc-800',
+          'cursor-pointer attex-focus transition-colors',
+        )}
+        aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}
+      >
+        {copied ? (
+          <Check className="h-4 w-4 text-success" aria-hidden />
+        ) : (
+          <Copy className="h-4 w-4" aria-hidden />
+        )}
+      </button>
+    </div>
+  )
+}
+
 export function PlatformSignInCredentialsModal({
   open,
   onClose,
@@ -36,6 +87,15 @@ export function PlatformSignInCredentialsModal({
 }: PlatformSignInCredentialsModalProps) {
   const toast = useToast()
   const [copiedField, setCopiedField] = useState<'login' | 'password' | 'all' | null>(null)
+  const [notifying, setNotifying] = useState(false)
+  const [notified, setNotified] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setCopiedField(null)
+      setNotified(false)
+    }
+  }, [open, payload?.login_id, payload?.temporary_password])
 
   const flashCopied = useCallback((field: typeof copiedField) => {
     setCopiedField(field)
@@ -64,12 +124,9 @@ export function PlatformSignInCredentialsModal({
 
   const copyAll = async () => {
     if (!payload) return
-    const block = [
-      `Sign in to Tradeal`,
-      `Email: ${payload.login_id}`,
-      `Temporary password: ${payload.temporary_password}`,
-    ].join('\n')
-    if (await copyText(block)) {
+    const lines = [`Sign in to Tradeal`, `Email: ${payload.login_id}`, `Temporary password: ${payload.temporary_password}`]
+    if (payload.name?.trim()) lines.splice(1, 0, `Name: ${payload.name.trim()}`)
+    if (await copyText(lines.join('\n'))) {
       toast.success('Sign-in details copied')
       flashCopied('all')
     } else {
@@ -77,53 +134,92 @@ export function PlatformSignInCredentialsModal({
     }
   }
 
+  const notifyAdmin = async () => {
+    if (!payload?.organisation_id || notifying) return
+    setNotifying(true)
+    try {
+      await platformApi.sendNotification({
+        organisation_id: payload.organisation_id,
+        recipient_user_id: payload.recipient_user_id ?? null,
+        kind: 'credentials',
+        title: 'Your Tradeal sign-in details',
+        body: 'Use these details to sign in. Change your password after you log in.',
+        payload: {
+          login_id: payload.login_id,
+          temporary_password: payload.temporary_password,
+        },
+      })
+      setNotified(true)
+      toast.success('Sent to their notifications')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not send notification')
+    } finally {
+      setNotifying(false)
+    }
+  }
+
+  const recipient = payload?.name?.trim()
+  const subtitle: ReactNode = recipient ? (
+    <>
+      For <span className="font-medium text-heading">{recipient}</span>
+    </>
+  ) : (
+    'Share privately — shown once'
+  )
+
   return (
-    <Modal open={open} onClose={onClose} title={title} size="md">
-      {payload ? (
-        <div className="space-y-4">
-          <p className="text-sm text-muted leading-relaxed">
-            {payload.name ? (
-              <>
-                Share these details with <span className="font-medium text-heading">{payload.name}</span> securely
-                (email, WhatsApp, or phone). This temporary password is shown only once.
-              </>
-            ) : (
-              <>Share these details securely (email, WhatsApp, or phone). This temporary password is shown only once.</>
-            )}
-          </p>
-
-          <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/30 p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">Sign-in email</p>
-                <p className="text-sm font-medium text-heading break-all mt-0.5">{payload.login_id}</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => void copyLogin()}>
-                {copiedField === 'login' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                Copy
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      subtitle={payload ? subtitle : undefined}
+      size="md"
+      footer={
+        payload ? (
+          <>
+            {payload.organisation_id ? (
+              <Button
+                type="button"
+                variant="outline"
+                loading={notifying}
+                disabled={notified}
+                onClick={() => void notifyAdmin()}
+              >
+                <Bell className="h-4 w-4" aria-hidden />
+                {notified ? 'Sent' : 'Notify admin'}
               </Button>
-            </div>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">Temporary password</p>
-                <p className="text-sm font-mono font-semibold text-heading break-all mt-0.5 tabular-nums">
-                  {payload.temporary_password}
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => void copyPassword()}>
-                {copiedField === 'password' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                Copy
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-end">
+            ) : null}
             <Button type="button" variant="outline" onClick={() => void copyAll()}>
-              {copiedField === 'all' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copiedField === 'all' ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
               Copy all
             </Button>
-            <Button type="button" onClick={onClose}>Done</Button>
+            <Button type="button" onClick={onClose}>
+              Done
+            </Button>
+          </>
+        ) : undefined
+      }
+    >
+      {payload ? (
+        <div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700 -mx-6">
+            <CredentialRow
+              label="Sign-in email"
+              value={payload.login_id}
+              copied={copiedField === 'login'}
+              onCopy={() => void copyLogin()}
+            />
+            <CredentialRow
+              label="Temporary password"
+              value={payload.temporary_password}
+              mono
+              copied={copiedField === 'password'}
+              onCopy={() => void copyPassword()}
+            />
           </div>
+          <p className="text-xs text-muted leading-relaxed mt-4">
+            Copy to share privately, or send to their Tradeal notifications. They can open it later from the bell.
+          </p>
         </div>
       ) : null}
     </Modal>

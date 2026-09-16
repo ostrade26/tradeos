@@ -33,6 +33,8 @@ export interface AuthSession {
   permissions: string[]
   isPlatformAdmin: boolean
   organisationSandboxTools: boolean
+  appliedUpdates: string[]
+  appliedVersion: string
 }
 
 import { storageGet, storageRemove, storageSet } from './storage'
@@ -62,6 +64,8 @@ export function loadAuthSession(): AuthSession | null {
     if (typeof parsed.isPlatformAdmin !== 'boolean') {
       parsed.isPlatformAdmin = parsed.roleSlug === 'platform_admin'
     }
+    if (!Array.isArray(parsed.appliedUpdates)) parsed.appliedUpdates = []
+    if (typeof parsed.appliedVersion !== 'string') parsed.appliedVersion = ''
     return parsed
   } catch {
     return null
@@ -79,6 +83,11 @@ export function clearAuthSession() {
 export function hasPermission(session: AuthSession | null, permission: string): boolean {
   if (!session) return false
   return session.permissions.includes(permission)
+}
+
+export function hasAppliedUpdate(session: AuthSession | null, featureKey: string): boolean {
+  if (!session || !featureKey) return false
+  return session.appliedUpdates.includes(featureKey)
 }
 
 export function roleLabel(session: AuthSession | null): string {
