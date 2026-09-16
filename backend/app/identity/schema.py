@@ -289,23 +289,56 @@ def _load_env_users() -> list[tuple[str, str, str, str]]:
     return users
 
 
+def _platform_admin_spec(*, require_env: bool) -> tuple[str, str, str] | None:
+    raw = (
+        os.environ.get("TRADEAL_PLATFORM_ADMIN")
+        or os.environ.get("TRADEOS_PLATFORM_ADMIN")
+        or ""
+    ).strip()
+    if not raw:
+        if require_env:
+            return None
+        raw = "platform:platform:Tradeal Admin"
+    bits = raw.split(":")
+    if len(bits) < 2:
+        return None
+    username, password = bits[0], bits[1]
+    name = bits[2] if len(bits) > 2 else "Tradeal Admin"
+    return username, password, name
+
+
+def _sync_platform_admin_from_env(execute: Callable, fetchone: Callable, commit: Callable) -> None:
+    """When Railway sets TRADEAL_PLATFORM_ADMIN, keep that user in sync on every boot."""
+    spec = _platform_admin_spec(require_env=True)
+    if not spec:
+        return
+    username, password, name = spec
+    _upsert_user(
+        execute,
+        fetchone,
+        username=username,
+        password=password,
+        name=name,
+        email=f"{username}@tradeal.local",
+        role_slug="platform_admin",
+        organisation_id=None,
+        account_type="wholesaler_retailer",
+    )
+    commit()
+
+
 def _seed_users(conn, execute: Callable, fetchone: Callable, commit: Callable, default_org_id: int) -> None:
     if uses_postgres():
         existing = fetchone("SELECT COUNT(*) AS c FROM users", ())
     else:
         existing = fetchone("SELECT COUNT(*) AS c FROM users", ())
     if existing and int(row_get(existing, "c") or 0) > 0:
+        _sync_platform_admin_from_env(execute, fetchone, commit)
         return
 
-    platform_raw = (
-        os.environ.get("TRADEAL_PLATFORM_ADMIN")
-        or os.environ.get("TRADEOS_PLATFORM_ADMIN")
-        or "platform:platform:Tradeal Admin"
-    ).strip()
-    pb = platform_raw.split(":")
-    if len(pb) >= 2:
-        p_user, p_pass = pb[0], pb[1]
-        p_name = pb[2] if len(pb) > 2 else "Tradeal Admin"
+    spec = _platform_admin_spec(require_env=False)
+    if spec:
+        p_user, p_pass, p_name = spec
         _upsert_user(
             execute,
             fetchone,
@@ -354,6 +387,7 @@ def _upsert_user(
             SELECT %s, %s, %s, %s, %s, %s, r.id, 'active', %s, %s
             FROM roles r WHERE r.slug = %s
             ON CONFLICT (username) DO UPDATE SET
+                email = EXCLUDED.email,
                 name = EXCLUDED.name,
                 password_hash = EXCLUDED.password_hash,
                 organisation_id = EXCLUDED.organisation_id,
@@ -373,6 +407,7 @@ def _upsert_user(
         INSERT INTO users (username, email, name, password_hash, organisation_id, account_type, role_id, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
         ON CONFLICT(username) DO UPDATE SET
+            email = excluded.email,
             name = excluded.name,
             password_hash = excluded.password_hash,
             organisation_id = excluded.organisation_id,
