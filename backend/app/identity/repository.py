@@ -188,28 +188,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
         return user
 
 
-def _login_idents(raw: str) -> list[str]:
-    """Usernames plus Tradeal/TradeOS local email aliases."""
-    ident = raw.strip().lower()
-    idents: list[str] = []
-
-    def add(value: str) -> None:
-        text = value.strip().lower()
-        if text and text not in idents:
-            idents.append(text)
-
-    add(ident)
-    if "@" in ident:
-        local, _, domain = ident.partition("@")
-        add(local)
-        if domain == "tradeos.local":
-            add(f"{local}@tradeal.local")
-        elif domain == "tradeal.local":
-            add(f"{local}@tradeos.local")
-    return idents
-
-
 def authenticate(username: str, password: str) -> AuthUser:
+    ident = username.strip().lower()
     q = """
         SELECT u.id, u.username, u.name, u.email, u.password_hash, u.organisation_id,
                u.account_type, u.status, u.role_id,
@@ -221,15 +201,10 @@ def authenticate(username: str, password: str) -> AuthUser:
         LEFT JOIN organisations o ON o.id = u.organisation_id
         WHERE lower(u.username) = ? OR lower(u.email) = ?
     """
-    candidates = _login_idents(username)
     if uses_postgres():
         q = q.replace("?", "%s")
         with _pg_connect() as conn:
-            row = None
-            for ident in candidates:
-                row = conn.execute(q, (ident, ident)).fetchone()
-                if row:
-                    break
+            row = conn.execute(q, (ident, ident)).fetchone()
             if not row or row["status"] != "active":
                 raise HTTPException(status_code=401, detail="Invalid email or password")
             if not verify_password(password, row["password_hash"]):
@@ -240,11 +215,7 @@ def authenticate(username: str, password: str) -> AuthUser:
             return user
 
     with _sqlite_connect() as conn:
-        row = None
-        for ident in candidates:
-            row = conn.execute(q, (ident, ident)).fetchone()
-            if row:
-                break
+        row = conn.execute(q, (ident, ident)).fetchone()
         if not row or row["status"] != "active":
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if not verify_password(password, row["password_hash"]):
