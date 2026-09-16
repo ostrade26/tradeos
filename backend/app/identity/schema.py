@@ -395,6 +395,7 @@ def init_identity_schema() -> None:
                     account_type TEXT NOT NULL DEFAULT 'wholesaler_retailer'
                         CHECK (account_type IN ('wholesaler_retailer', 'broker')),
                     status TEXT NOT NULL DEFAULT 'active',
+                    sandbox_tools INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -472,6 +473,7 @@ def init_identity_schema() -> None:
                 """
             )
             _seed_roles_permissions(conn.execute, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit)
+            _migrate_org_sandbox_tools(conn.execute)
             _migrate_trade_state_pg(conn)
             org_id = _ensure_default_org(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone())
             _seed_users(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit, org_id)
@@ -486,7 +488,6 @@ def init_identity_schema() -> None:
                 """,
                 (org_id, json.dumps(DEFAULT_STATE)),
             )
-            _migrate_org_sandbox_tools(conn.execute)
             _rename_legacy_default_org(conn.execute, conn.commit)
             conn.commit()
         init_billing_schema()
@@ -501,6 +502,7 @@ def init_identity_schema() -> None:
                 account_type TEXT NOT NULL DEFAULT 'wholesaler_retailer'
                     CHECK (account_type IN ('wholesaler_retailer', 'broker')),
                 status TEXT NOT NULL DEFAULT 'active',
+                sandbox_tools INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -578,6 +580,7 @@ def init_identity_schema() -> None:
             """
         )
         _seed_roles_permissions(conn.execute, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit)
+        _migrate_org_sandbox_tools(conn.execute)
         _migrate_trade_state_sqlite(conn)
         org_id = _ensure_default_org(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone())
         _seed_users(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit, org_id)
@@ -587,7 +590,6 @@ def init_identity_schema() -> None:
             """,
             (org_id, json.dumps(DEFAULT_STATE)),
         )
-        _migrate_org_sandbox_tools(conn.execute)
         _rename_legacy_default_org(conn.execute, conn.commit)
         conn.commit()
     init_billing_schema()
