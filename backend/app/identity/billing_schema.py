@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from ..db import _pg_connect, _sqlite_connect, uses_postgres
+from ..db import _pg_connect, _sqlite_connect, row_dict, row_get, uses_postgres
+
 DEFAULT_ORG_NAME = "Test Organisation"
 LEGACY_DEFAULT_ORG_NAME = "Existing Tradeal Organisation"
 # Migrated single-tenant org before Tradeal rebrand (2026).
@@ -395,12 +396,7 @@ def _backfill_seat_labels(conn) -> None:
         ).fetchall()
     counters: dict[tuple[int, str], int] = {}
     for row in rows:
-        r = dict(row) if hasattr(row, "keys") else {
-            "id": row[0],
-            "organisation_id": row[1],
-            "seat_type": row[2],
-            "seat_label": row[3],
-        }
+        r = row_dict(row)
         org_id = int(r["organisation_id"])
         seat_id = int(r["id"])
         st = (r.get("seat_type") or "operator").strip()
@@ -446,7 +442,7 @@ def _backfill_seat_types(conn) -> None:
         ).fetchall()
     seen_admin: set[int] = set()
     for row in rows:
-        r = dict(row) if hasattr(row, "keys") else {"id": row[0], "organisation_id": row[1], "source": row[2]}
+        r = row_dict(row)
         org_id = int(r["organisation_id"])
         seat_id = int(r["id"])
         if org_id not in seen_admin and r.get("source") == "included":
@@ -537,7 +533,7 @@ def _seed_plans(conn, execute: Callable, fetchone: Callable, commit: Callable) -
 def _backfill_org_codes(conn, execute: Callable, fetchall: Callable, commit: Callable) -> None:
     rows = fetchall("SELECT id, org_code FROM organisations ORDER BY id")
     for row in rows:
-        r = dict(row) if not isinstance(row, dict) else row
+        r = row_dict(row)
         org_id = int(r["id"])
         code = (r.get("org_code") or "").strip()
         if code:
@@ -566,7 +562,7 @@ def _default_plan_id(fetchone: Callable) -> int:
             row = fetchone("SELECT id FROM subscription_plans ORDER BY id LIMIT 1", ())
         else:
             row = fetchone("SELECT id FROM subscription_plans ORDER BY id LIMIT 1", ())
-    return int(row["id"] if isinstance(row, dict) else row[0])
+    return int(row_get(row, "id"))
 
 
 def _ensure_subscription_for_org(
@@ -595,14 +591,14 @@ def _ensure_subscription_for_org(
             (org_id,),
         )
     if existing:
-        return int(existing["id"] if isinstance(existing, dict) else existing[0])
+        return int(row_get(existing, "id"))
 
     pid = plan_id or _default_plan_id(fetchone)
     if uses_postgres():
         plan = fetchone("SELECT included_seats FROM subscription_plans WHERE id = %s", (pid,))
     else:
         plan = fetchone("SELECT included_seats FROM subscription_plans WHERE id = ?", (pid,))
-    included = int(plan["included_seats"] if isinstance(plan, dict) else plan[0])
+    included = int(row_get(plan, "included_seats") or 0)
     now = _now()
     start = now
     renewal = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
@@ -653,7 +649,7 @@ def _backfill_memberships(conn, execute: Callable, fetchone: Callable, fetchall:
     # Legacy orgs may have more users than default plan seats — expand entitlements once.
     org_active_counts: dict[int, int] = {}
     for row in rows:
-        r = dict(row) if not isinstance(row, dict) else row
+        r = row_dict(row)
         if r["status"] != "active":
             continue
         oid = int(r["organisation_id"])
@@ -664,7 +660,7 @@ def _backfill_memberships(conn, execute: Callable, fetchone: Callable, fetchall:
         ensure_minimum_seats(conn, oid, count)
 
     for row in rows:
-        r = dict(row) if not isinstance(row, dict) else row
+        r = row_dict(row)
         org_id = int(r["organisation_id"])
         user_id = int(r["user_id"])
         role_id = int(r["role_id"])
@@ -723,7 +719,7 @@ def _backfill_memberships(conn, execute: Callable, fetchone: Callable, fetchall:
                 )
                 member_id = int(cur.lastrowid)
         else:
-            member_id = int(member["id"] if isinstance(member, dict) else member[0])
+            member_id = int(row_get(member, "id"))
 
         sync_seat_entitlements(conn, org_id, sub_id)
 
@@ -738,7 +734,7 @@ def _backfill_memberships(conn, execute: Callable, fetchone: Callable, fetchall:
                     "SELECT seat_id FROM organisation_members WHERE id = ?",
                     (member_id,),
                 )
-            if not seat_row or not (seat_row["seat_id"] if isinstance(seat_row, dict) else seat_row[0]):
+            if not seat_row or not row_get(seat_row, "seat_id"):
                 assign_available_seat(conn, org_id, member_id)
 
     commit()

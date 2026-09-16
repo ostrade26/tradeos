@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from ..db import DEFAULT_STATE, _pg_connect, _sqlite_connect, uses_postgres
+from ..db import DEFAULT_STATE, _pg_connect, _sqlite_connect, row_get, uses_postgres
 from .billing_schema import PRE_REBRAND_LEGACY_ORG_NAME, init_billing_schema
 from .permissions_data import PERMISSIONS, ROLE_DEFS, ROLE_PERMISSION_SLUGS
 from .security import hash_password
@@ -167,7 +167,7 @@ def _ensure_default_org(conn, execute: Callable, fetchone: Callable) -> int:
             _LEGACY_ORG_NAMES,
         )
         if row:
-            return int(row["id"])
+            return int(row_get(row, "id"))
         now = _now()
         row = fetchone(
             """
@@ -177,14 +177,14 @@ def _ensure_default_org(conn, execute: Callable, fetchone: Callable) -> int:
             """,
             (DEFAULT_ORG_NAME, now, now),
         )
-        return int(row["id"])
+        return int(row_get(row, "id"))
 
     row = fetchone(
         "SELECT id FROM organisations WHERE name IN (?, ?, ?) ORDER BY id LIMIT 1",
         _LEGACY_ORG_NAMES,
     )
     if row:
-        return int(row["id"])
+        return int(row_get(row, "id"))
     now = _now()
     cur = execute(
         """
@@ -207,7 +207,7 @@ def _migrate_trade_state_pg(conn) -> None:
         return
 
     legacy = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
-    payload = legacy["data"] if legacy else DEFAULT_STATE
+    payload = row_get(legacy, "data") if legacy else DEFAULT_STATE
     if isinstance(payload, str):
         payload = json.loads(payload)
 
@@ -237,7 +237,7 @@ def _migrate_trade_state_sqlite(conn) -> None:
         return
 
     legacy = conn.execute("SELECT data FROM trade_state WHERE id = 1").fetchone()
-    raw = legacy[0] if legacy else json.dumps(DEFAULT_STATE)
+    raw = row_get(legacy, "data") if legacy else json.dumps(DEFAULT_STATE)
 
     conn.execute("DROP TABLE trade_state")
     conn.execute(
@@ -294,7 +294,7 @@ def _seed_users(conn, execute: Callable, fetchone: Callable, commit: Callable, d
         existing = fetchone("SELECT COUNT(*) AS c FROM users", ())
     else:
         existing = fetchone("SELECT COUNT(*) AS c FROM users", ())
-    if existing and int(existing["c"] if isinstance(existing, dict) else existing[0]) > 0:
+    if existing and int(row_get(existing, "c") or 0) > 0:
         return
 
     platform_raw = (

@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
-from ..db import _pg_connect, _sqlite_connect, uses_postgres
+from ..db import _pg_connect, _sqlite_connect, row_dict, row_get, uses_postgres
 from .billing_repository import assert_user_org_access, user_has_org_seat_access
 from .permissions_data import ROLE_PERMISSION_SLUGS
 from .security import hash_password, verify_password
@@ -56,9 +56,7 @@ def _now_iso() -> str:
 
 
 def _mapping(row: Any) -> dict[str, Any]:
-    if isinstance(row, dict):
-        return row
-    return dict(row)
+    return row_dict(row)
 
 
 def _permissions_for_role(role_id: int, conn) -> frozenset[str]:
@@ -82,10 +80,8 @@ def _permissions_for_role(role_id: int, conn) -> frozenset[str]:
             """,
             (role_id,),
         ).fetchall()
-    role_slug = ""
-    if role_row:
-        role_slug = role_row["slug"] if isinstance(role_row, dict) else role_row[0]
-    db_perms = frozenset(r["slug"] if isinstance(r, dict) else r[0] for r in rows)
+    role_slug = str(row_get(role_row, "slug") or "") if role_row else ""
+    db_perms = frozenset(str(row_get(r, "slug") or "") for r in rows)
     code_perms = ROLE_PERMISSION_SLUGS.get(role_slug, set())
     return db_perms | frozenset(code_perms)
 

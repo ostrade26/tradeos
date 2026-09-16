@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from ..db import _pg_connect, _sqlite_connect, uses_postgres
+from ..db import _pg_connect, _sqlite_connect, row_dict, row_get, uses_postgres
 from .billing_schema import format_seat_label, org_code_for_id
 from .security import hash_password
 
@@ -20,9 +20,7 @@ def _now() -> str:
 
 
 def _mapping(row: Any) -> dict[str, Any]:
-    if isinstance(row, dict):
-        return row
-    return dict(row)
+    return row_dict(row)
 
 
 def normalize_login_email(email: str) -> str:
@@ -122,7 +120,7 @@ def _next_seat_sequence(conn, organisation_id: int, seat_type: str) -> int:
             """,
             (organisation_id, seat_type),
         ).fetchone()
-    n = int(_mapping(row).get("n", row[0] if row else 0))
+    n = int(row_get(row, "n") or 0)
     return n + 1
 
 
@@ -318,7 +316,7 @@ def seat_summary(conn, organisation_id: int) -> dict[str, int]:
             """,
             (organisation_id,),
         ).fetchone()
-    used_n = int(_mapping(used)["c"])
+    used_n = int(row_get(used, "c") or 0)
     return {
         "included_seats": included,
         "purchased_additional_seats": purchased,
@@ -770,7 +768,7 @@ def _purge_organisation_rows(conn, org_id: int) -> None:
             (org_id,),
         ).fetchall()
         for u in user_rows:
-            uid = int(u["id"])
+            uid = int(row_get(u, "id"))
             conn.execute("DELETE FROM auth_sessions WHERE user_id = %s", (uid,))
         conn.execute("DELETE FROM organisation_members WHERE organisation_id = %s", (org_id,))
         conn.execute("DELETE FROM users WHERE organisation_id = %s", (org_id,))
@@ -784,7 +782,7 @@ def _purge_organisation_rows(conn, org_id: int) -> None:
         (org_id,),
     ).fetchall()
     for u in user_rows:
-        uid = int(u[0] if not isinstance(u, dict) else u["id"])
+        uid = int(row_get(u, "id"))
         conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (uid,))
     conn.execute("DELETE FROM organisation_members WHERE organisation_id = ?", (org_id,))
     conn.execute("DELETE FROM organisation_seats WHERE organisation_id = ?", (org_id,))
@@ -806,7 +804,7 @@ def _organisation_retention_score(conn, org_id: int) -> tuple[int, int, int]:
             "SELECT COUNT(*) AS c FROM users WHERE organisation_id = %s",
             (org_id,),
         ).fetchone()
-        user_count = int(users["c"]) if users else 0
+        user_count = int(row_get(users, "c") or 0)
     else:
         ts = conn.execute(
             "SELECT data FROM trade_state WHERE organisation_id = ?",
@@ -816,10 +814,10 @@ def _organisation_retention_score(conn, org_id: int) -> tuple[int, int, int]:
             "SELECT COUNT(*) AS c FROM users WHERE organisation_id = ?",
             (org_id,),
         ).fetchone()
-        user_count = int(users[0] if users else 0)
+        user_count = int(row_get(users, "c") or 0)
 
     if ts:
-        raw = ts["data"] if isinstance(ts, dict) else ts[0]
+        raw = row_get(ts, "data")
         try:
             payload = json.loads(raw) if isinstance(raw, str) else raw
             trade_volume = len(payload.get("tradeOrders") or []) + len(payload.get("lifts") or [])

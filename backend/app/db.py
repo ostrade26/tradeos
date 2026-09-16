@@ -34,6 +34,31 @@ DEFAULT_STATE: dict[str, Any] = {
 }
 
 
+def row_dict(row: Any) -> dict[str, Any]:
+    """Normalize sqlite3.Row, psycopg dict_row, or a mapping to a plain dict.
+
+    Never index rows by integer position — Postgres dict rows raise KeyError: 0.
+    """
+    if row is None:
+        return {}
+    if isinstance(row, dict):
+        return dict(row)
+    keys_fn = getattr(row, "keys", None)
+    if callable(keys_fn):
+        return {str(k): row[k] for k in keys_fn()}
+    try:
+        return dict(row)
+    except (TypeError, ValueError):
+        return {}
+
+
+def row_get(row: Any, key: str, default: Any = None) -> Any:
+    data = row_dict(row)
+    if key in data:
+        return data[key]
+    return default
+
+
 def _database_url() -> str:
     return (os.environ.get("DATABASE_URL") or "").strip()
 
