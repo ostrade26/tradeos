@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
 import { Modal } from './Drawer'
+import { SwipeToConfirm } from './SwipeToConfirm'
 
 export type DeleteCheck = { ok: boolean; reason?: string }
 
@@ -84,7 +85,7 @@ export function ConfirmDeleteModal({
   title,
   children,
   error,
-  confirmLabel = 'Delete',
+  confirmLabel: _confirmLabel = 'Delete',
 }: ConfirmDeleteModalProps) {
   const [busy, setBusy] = useState(false)
 
@@ -104,10 +105,21 @@ export function ConfirmDeleteModal({
       open={open}
       onClose={() => { if (!busy) onClose() }}
       title={title}
+      footerClassName="flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center"
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="danger" loading={busy} disabled={busy} onClick={() => void handleConfirm()}>{confirmLabel}</Button>
+          <Button variant="outline" onClick={onClose} disabled={busy} className="sm:shrink-0">
+            Cancel
+          </Button>
+          <div className="min-w-0 flex-1">
+            <SwipeToConfirm
+              key={open ? 'open' : 'closed'}
+              label="Slide to delete"
+              onConfirm={() => void handleConfirm()}
+              disabled={busy}
+              loading={busy}
+            />
+          </div>
         </>
       }
     >

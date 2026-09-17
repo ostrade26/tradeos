@@ -51,6 +51,7 @@ import { OrderDetailFooter } from './OrderDetailFooter'
 import { OrderRelatedSection } from './OrderRelatedSection'
 import { TradeProfitSection } from '../orders/TradeProfitSection'
 import { shareOrderOnWhatsApp } from '../../lib/whatsappShare'
+import { appPath } from '../../lib/appShellMode'
 
 function formatBrokerage(order: TradeOrder): string {
   if (order.brokeragePerTon != null && order.brokeragePerTon > 0) {
@@ -100,7 +101,7 @@ export function OrderDetailDrawer({
   const panelMenuItems = useMemo((): DetailPanelMenuItem[] => {
     if (!order) return []
     const isPO = order.side === 'purchase'
-    const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
+    const pathPrefix = isPO ? appPath('/purchase-orders') : appPath('/sales-orders')
     const ref = encodeURIComponent(order.ref)
 
     return groupMenuItems([
@@ -119,7 +120,7 @@ export function OrderDetailDrawer({
                 type: 'link' as const,
                 label: store.getRemainingSellQty(order.ref) > 0 ? 'Sell available' : 'Create SO',
                 icon: Plus,
-                href: `/sales-orders/new?poRef=${ref}`,
+                href: appPath(`/sales-orders/new?poRef=${ref}`),
               }]
             : []),
         ],

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from . import auth
 from .db import init_db, insert_demo_request, ping_db
+from .identity.me_api import router as me_router
 from .identity.org_api import router as organisation_router
 from .identity.platform_api import router as platform_router
 from .trade.service import TradeService
@@ -46,6 +47,7 @@ app = FastAPI(
 )
 app.include_router(platform_router)
 app.include_router(organisation_router)
+app.include_router(me_router)
 
 
 def _integrity_error_detail(exc: BaseException) -> str:
@@ -53,7 +55,7 @@ def _integrity_error_detail(exc: BaseException) -> str:
     if "row-level security" in text:
         return "Could not save organisation trade data. Retry after deploy, or contact support."
     if "users" in text and ("username" in text or "email" in text or "unique" in text):
-        return "A user with this login email already exists."
+        return "This username or email is already in use."
     if "unique" in text or "duplicate" in text:
         return "This conflicts with an existing record."
     return "Database constraint violation."
@@ -126,6 +128,7 @@ class ProfilePatchBody(BaseModel):
     name: str | None = None
     phone: str | None = None
     location: str | None = None
+    username: str | None = None
 
 
 class PreferencesPatchBody(BaseModel):
@@ -296,6 +299,7 @@ def auth_update_profile(body: ProfilePatchBody, request: Request) -> dict:
         name=body.name,
         phone=body.phone,
         location=body.location,
+        username=body.username,
     )
     append_audit_log(
         organisation_id=session.user.organisation_id,

@@ -107,7 +107,9 @@ def issue_licence_for_organisation(
     status = "active" if activate else "pending"
     grace_days = int((plan or {}).get("amc_grace_days") or 30)
     duration_months = int((plan or {}).get("amc_duration_months") or 12)
-    included_seats = int((plan or {}).get("included_seats") or 2)
+    included_admin = int((plan or {}).get("included_admin_seats") or 1)
+    included_operator = int((plan or {}).get("included_operator_seats") or 1)
+    included_seats = max(1, included_admin + included_operator)
     number = _next_licence_number(conn, organisation_id)
     values = (
         organisation_id,
@@ -120,8 +122,8 @@ def issue_licence_for_organisation(
         activation,
         status,
         included_seats,
-        int((plan or {}).get("included_admin_seats") or 1),
-        int((plan or {}).get("included_operator_seats") or 1),
+        included_admin,
+        included_operator,
         purchased_additional_seats,
         int((plan or {}).get("additional_seat_licence_cents") or 0),
         int((plan or {}).get("additional_seat_amc_cents") or 0),
@@ -186,6 +188,7 @@ def issue_licence_for_organisation(
             entity_type="organisation_license",
             entity_id=str(licence["id"]),
             new_value=licence,
+            conn=conn,
         )
         if activate:
             append_audit_log(
@@ -195,6 +198,7 @@ def issue_licence_for_organisation(
                 entity_type="organisation_license",
                 entity_id=str(licence["id"]),
                 new_value={"status": "active"},
+                conn=conn,
             )
             append_audit_log(
                 organisation_id=organisation_id,
@@ -203,6 +207,7 @@ def issue_licence_for_organisation(
                 entity_type="organisation_amc",
                 entity_id=str(licence["id"]),
                 new_value={"included": True, "year": 1},
+                conn=conn,
             )
     return licence
 
@@ -452,6 +457,7 @@ def set_licence_status(conn, licence_id: int, status: str, actor_user_id: int) -
         entity_id=str(licence_id),
         old_value={"status": old_d.get("status")},
         new_value={"status": status},
+        conn=conn,
     )
     return dict(_mapping(row))
 
@@ -492,6 +498,7 @@ def renew_amc(conn, licence_id: int, actor_user_id: int, payment_status: str = "
         action="amc.renewed",
         entity_type="organisation_amc",
         entity_id=str(amc["id"]),
+        conn=conn,
         new_value=amc,
     )
     return amc
@@ -522,6 +529,7 @@ def bump_additional_seats(conn, organisation_id: int, count: int, actor_user_id:
             entity_id=str(licence["id"]),
             old_value={"purchased_additional_seats": licence.get("purchased_additional_seats")},
             new_value={"purchased_additional_seats": next_n, "added": count},
+            conn=conn,
         )
 
 
@@ -596,6 +604,7 @@ def record_payment(
         entity_type="organisation_payment",
         entity_id=str(payment["id"]),
         new_value=payment,
+        conn=conn,
     )
     if status == "paid" and payment_type == "amc" and amc_id:
         if uses_postgres():
@@ -649,6 +658,7 @@ def update_payment(conn, payment_id: int, patch: dict[str, Any], actor_user_id: 
         entity_id=str(payment_id),
         old_value={"status": old_d.get("status")},
         new_value={"status": status},
+        conn=conn,
     )
     return dict(_mapping(row))
 

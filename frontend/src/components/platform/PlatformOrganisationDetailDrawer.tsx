@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { History, PanelRight, PanelRightClose, Pencil, Trash2, Armchair, Bell } from 'lucide-react'
+import { History, PanelRight, PanelRightClose, Pencil, Trash2, Armchair, Bell, KeyRound } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -22,7 +22,6 @@ interface PlatformOrganisationDetailDrawerProps {
   onEdit: () => void
   onDelete: () => void
   onResetPrimaryAdminSignIn?: () => void
-  resettingPrimaryAdminSignIn?: boolean
   onNotify?: () => void
 }
 
@@ -38,7 +37,6 @@ export function PlatformOrganisationDetailDrawer({
   onEdit,
   onDelete,
   onResetPrimaryAdminSignIn,
-  resettingPrimaryAdminSignIn,
   onNotify,
 }: PlatformOrganisationDetailDrawerProps) {
   const org = detail?.organisation
@@ -63,13 +61,20 @@ export function PlatformOrganisationDetailDrawer({
     if (!org) return []
     return groupMenuItems([
       {
-        items: [{ type: 'button', label: 'Edit', icon: Pencil, onClick: onEdit }],
+        items: [
+          { type: 'button', label: 'Edit', icon: Pencil, onClick: onEdit },
+          ...(detail?.primary_admin_user && onResetPrimaryAdminSignIn
+            ? [{
+                type: 'button' as const,
+                label: 'Reset login',
+                icon: KeyRound,
+                onClick: onResetPrimaryAdminSignIn,
+              }]
+            : []),
+        ],
       },
       {
         items: [
-          ...(onNotify
-            ? [{ type: 'button' as const, label: 'Send notice', icon: Bell, onClick: onNotify }]
-            : []),
           {
             type: 'link',
             label: 'Timeline',
@@ -90,7 +95,7 @@ export function PlatformOrganisationDetailDrawer({
           }]
         : []),
     ])
-  }, [org, canDelete, onEdit, onDelete, onNotify])
+  }, [org, detail?.primary_admin_user, canDelete, onEdit, onDelete, onResetPrimaryAdminSignIn])
 
   const dockToggle = onDockChange && (
     <button
@@ -114,8 +119,19 @@ export function PlatformOrganisationDetailDrawer({
   )
 
   const footer = detail ? (
+    <div className="flex gap-2">
+      {onNotify ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          className={actionBtnClass}
+          onClick={onNotify}
+        >
+          <Bell className="h-4 w-4" aria-hidden />
+          Send update to customers
+        </Button>
+      ) : null}
       <Button
-        variant="secondary"
         size="sm"
         className={actionBtnClass}
         loading={addingSeat}
@@ -125,6 +141,7 @@ export function PlatformOrganisationDetailDrawer({
         <Armchair className="h-4 w-4" aria-hidden />
         Add seat
       </Button>
+    </div>
   ) : undefined
 
   const content = loading ? (
@@ -136,8 +153,6 @@ export function PlatformOrganisationDetailDrawer({
   ) : (
     <OrganisationSubscriptionPanel
       detail={detail}
-      onResetPrimaryAdminSignIn={onResetPrimaryAdminSignIn}
-      resettingPrimaryAdminSignIn={resettingPrimaryAdminSignIn}
     />
   )
 

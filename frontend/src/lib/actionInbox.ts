@@ -4,6 +4,8 @@ import { formatDeletionDate } from './orderDeletion'
 import { formatQty } from './utils'
 import { formatLiftOrderSummary } from './liftAllocations'
 import { formatLiftRef } from './tradeRefs'
+import type { ProductRequest, SeatRequest } from '../api/platformApi'
+import { appPath } from './appShellMode'
 
 export type InboxUrgency = 'high' | 'medium' | 'low'
 
@@ -14,6 +16,11 @@ export interface InboxAction {
   subtitle: string
   href: string
   urgency: InboxUrgency
+  from?: string
+  createdAt?: string
+  actionable?: boolean
+  productRequest?: ProductRequest
+  seatRequest?: SeatRequest
 }
 
 function soHref(ref: string) {
@@ -86,8 +93,8 @@ export function buildActionInbox(store: TradeStoreValue): InboxAction[] {
       title: `${order.ref} scheduled for deletion`,
       subtitle: `Deletes on ${formatDeletionDate(order.deleteScheduledAt)}`,
       href: order.side === 'purchase'
-        ? `/purchase-orders/${encodeURIComponent(order.ref)}/edit`
-        : `/sales-orders/${encodeURIComponent(order.ref)}/edit`,
+        ? appPath(`/purchase-orders/${encodeURIComponent(order.ref)}/edit`)
+        : appPath(`/sales-orders/${encodeURIComponent(order.ref)}/edit`),
       urgency: 'high',
     })
   }
@@ -108,11 +115,11 @@ export function buildActionInbox(store: TradeStoreValue): InboxAction[] {
 }
 
 export function orderFlowHref(order: TradeOrder) {
-  const base = order.side === 'purchase' ? '/purchase-orders' : '/sales-orders'
+  const base = order.side === 'purchase' ? appPath('/purchase-orders') : appPath('/sales-orders')
   return `${base}/${encodeURIComponent(order.ref)}/flow`
 }
 
 export function orderTimelineHref(order: TradeOrder) {
-  const base = order.side === 'purchase' ? '/purchase-orders' : '/sales-orders'
+  const base = order.side === 'purchase' ? appPath('/purchase-orders') : appPath('/sales-orders')
   return `${base}/${encodeURIComponent(order.ref)}/timeline`
 }

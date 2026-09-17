@@ -1,0 +1,30 @@
+---
+description: Standard Modal layout — header, body, footer each own their padding.
+alwaysApply: true
+---
+
+# Modal structure
+
+Every `Modal` has header, body, and footer. An optional **secondary body** may sit between body and footer. Padding lives on those parts only — never on nested sections inside a body.
+
+1. **Header** — heading, description/subtitle, header actions (close). Padding is on the header (`px-6 py-5`).
+2. **Body** — form fields, details, lists. Padding is on the Modal body (`px-6 py-6`). Children sit in that inset; they do not add `px-*`, `-mx-*`, or a second padded block.
+3. **Secondary body** (optional) — a related block that should read as a separate surface (muted background). Pass it as `secondaryBody`. Padding is on that region (`px-6 py-6`). Do not fake it with `-mx-*` inside the main body.
+4. **Footer** — submit, cancel, and other CTAs. Padding is on the footer (`px-6 py-6`).
+
+## Do
+
+- Put copy, forms, and rows directly in `{children}` of `Modal`.
+- Put a second section in `secondaryBody` when it should look distinct from the main body.
+- Use `gap`, `divide-y`, and `space-y` for internal rhythm.
+- Pass CTAs through `footer`.
+
+## Do not
+
+```tsx
+<Modal>
+  <div className="-mx-6">
+    <div className="px-6 py-3">{row}</div>
+  </div>
+</Modal>
+```

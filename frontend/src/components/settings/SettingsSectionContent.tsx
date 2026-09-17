@@ -19,6 +19,7 @@ import { cn } from '../../lib/utils'
 import { CUSTOM_ACCENT_ID } from '../../lib/accentColor'
 import type { TableDensity } from '../../lib/tableDensity'
 import type { SettingsSectionId } from '../../lib/settingsSections'
+import { appPath } from '../../lib/appShellMode'
 import { SettingsSubscriptionPanelContent } from './SettingsSubscriptionSidePanel'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
 import type { useTheme } from '../../hooks/useTheme'
@@ -216,7 +217,7 @@ export function SettingsSectionContent({
           </div>
           <div className="px-6 pb-2">
             <Link
-              to="/profile"
+              to={appPath('/profile')}
               className="flex items-center justify-between gap-4 py-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/40 -mx-2 px-2 rounded-lg transition-colors"
             >
               <div className="flex gap-3 min-w-0">

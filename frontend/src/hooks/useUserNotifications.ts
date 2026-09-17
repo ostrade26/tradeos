@@ -15,7 +15,7 @@ export function useUserNotifications(enabled: boolean) {
       return
     }
     try {
-      const res = await organisationApi.listNotifications()
+      const res = await organisationApi.listNotifications(100)
       setNotifications(res.notifications)
       setUnread(res.unread)
     } catch {

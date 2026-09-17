@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi } from '../api/tradeApi'
-import { saveAuthSession, loadAuthSession } from '../lib/auth'
+import { loadAuthSession } from '../lib/auth'
 import { sessionFromApi } from '../lib/authSession'
 import { profileFromSession } from '../lib/profileFromSession'
 import {
@@ -27,11 +27,12 @@ function mergeProfile(sessionProfile: UserProfile, stored: UserProfile): UserPro
     phone: sessionProfile.phone.trim() ? sessionProfile.phone : stored.phone,
     location: sessionProfile.location.trim() ? sessionProfile.location : stored.location,
     role: sessionProfile.role || stored.role,
+    username: sessionProfile.username?.trim() ? sessionProfile.username : stored.username || '',
   }
 }
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth()
+  const { session, applySession } = useAuth()
   const userKey = preferenceUserKey()
   const [profile, setProfile] = useState<UserProfile>(() => {
     const stored = loadUserProfile(userKey)
@@ -60,6 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = useCallback(async (patch: Partial<UserProfile>) => {
     const { role: _role, email: _email, ...writable } = patch
+    const previous = profile
     const next = { ...profile, ...patch }
     setProfile(next)
     saveUserProfile(next, userKey)
@@ -72,18 +74,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
         name: writable.name ?? profile.name,
         phone: writable.phone ?? profile.phone,
         location: writable.location ?? profile.location,
+        username: writable.username ?? profile.username,
       })
       const current = loadAuthSession()
       if (current?.token) {
-        saveAuthSession(sessionFromApi(result, current.token))
+        applySession(sessionFromApi(result, current.token))
       }
       const synced = profileFromSession(sessionFromApi(result, token))
       setProfile(prev => ({ ...synced, role: prev.role }))
       saveUserProfile({ ...next, ...synced }, preferenceUserKey())
-    } catch {
-      /* keep local optimistic state */
+    } catch (err) {
+      setProfile(previous)
+      saveUserProfile(previous, userKey)
+      throw err
     }
-  }, [profile, userKey])
+  }, [applySession, profile, userKey])
 
   const value = useMemo(
     () => ({

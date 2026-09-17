@@ -4,6 +4,10 @@ import type {
   OrgRoleSlug,
   OrganisationDetailResponse,
   OrganisationSubscription,
+  ProductRequest,
+  ProductRequestAttachment,
+  ProductRequestKind,
+  ProductRequestPriority,
   SeatRequest,
   UserNotification,
 } from './platformApi'
@@ -49,6 +53,20 @@ export const organisationApi = {
       method: 'POST',
     }),
 
+  listProductRequests: () => apiFetch<{ requests: ProductRequest[] }>('/organisation/product-requests'),
+
+  createProductRequest: (body: {
+    kind: ProductRequestKind
+    message: string
+    page_path?: string
+    priority?: ProductRequestPriority
+    attachments?: ProductRequestAttachment[]
+  }) =>
+    apiFetch<{ request: ProductRequest }>('/organisation/product-requests', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   listMembers: () => apiFetch<{ members: OrganisationMember[] }>('/organisation/members'),
 
   createMember: (body: {
@@ -70,13 +88,13 @@ export const organisationApi = {
       body: JSON.stringify({ status }),
     }),
 
-  setMemberPassword: (userId: number, password: string) =>
-    apiFetch<{ ok: boolean }>(`/organisation/members/${userId}/password`, {
+  setMemberPassword: (userId: number, body: { password?: string; username?: string }) =>
+    apiFetch<{ ok: boolean; username?: string; login_id?: string }>(`/organisation/members/${userId}/password`, {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(body),
     }),
 
-  resetMemberSignIn: (userId: number) =>
+  resetMemberSignIn: (userId: number, body?: { username?: string }) =>
     apiFetch<{
       user_id: number
       login_id: string
@@ -84,22 +102,27 @@ export const organisationApi = {
       name: string
       username: string
       email: string
-    }>(`/organisation/members/${userId}/reset-sign-in`, { method: 'POST' }),
+    }>(`/organisation/members/${userId}/reset-sign-in`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 
-  listNotifications: () =>
-    apiFetch<{ notifications: UserNotification[]; unread: number }>('/organisation/notifications'),
+  listNotifications: (limit = 100) =>
+    apiFetch<{ notifications: UserNotification[]; unread: number }>(
+      `/me/notifications?limit=${encodeURIComponent(String(limit))}`,
+    ),
 
   markNotificationRead: (notificationId: number) =>
-    apiFetch<{ notification: UserNotification }>(`/organisation/notifications/${notificationId}/read`, {
+    apiFetch<{ notification: UserNotification }>(`/me/notifications/${notificationId}/read`, {
       method: 'POST',
     }),
 
   markAllNotificationsRead: () =>
-    apiFetch<{ ok: boolean; updated: number }>('/organisation/notifications/read-all', { method: 'POST' }),
+    apiFetch<{ ok: boolean; updated: number }>('/me/notifications/read-all', { method: 'POST' }),
 
   applyNotificationUpdate: (notificationId: number) =>
     apiFetch<{ notification: UserNotification; applied: boolean }>(
-      `/organisation/notifications/${notificationId}/apply`,
+      `/me/notifications/${notificationId}/apply`,
       { method: 'POST' },
     ),
 }

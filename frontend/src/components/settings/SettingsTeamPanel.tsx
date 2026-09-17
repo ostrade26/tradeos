@@ -105,27 +105,44 @@ export function SettingsTeamPanel({
     [passwordConfiguredIds],
   )
 
-  const resetMemberSignIn = useCallback(
-    async (member: OrganisationMember) => {
-      if (resettingSignInId != null) return
-      setResettingSignInId(member.id)
-      try {
-        const result = await organisationApi.resetMemberSignIn(member.id)
-        markPasswordConfigured(member.id)
-        setSignInCredentials({
-          name: result.name,
-          login_id: result.login_id,
-          temporary_password: result.temporary_password,
-        })
-        toast.success('Temporary password issued — share it with the user')
-      } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
-      } finally {
-        setResettingSignInId(null)
-      }
-    },
-    [markPasswordConfigured, resettingSignInId, toast],
-  )
+  const openResetMemberSignIn = useCallback((member: OrganisationMember) => {
+    setSignInCredentials({
+      name: member.name,
+      login_id: member.username || member.email,
+      username: member.username,
+      email: member.email,
+      recipient_user_id: member.id,
+    })
+  }, [])
+
+  const generateMemberPassword = useCallback(async (username: string) => {
+    const userId = signInCredentials?.recipient_user_id
+    if (!userId || resettingSignInId != null) return
+    setResettingSignInId(userId)
+    try {
+      const result = await organisationApi.resetMemberSignIn(userId, { username })
+      markPasswordConfigured(userId)
+      setSignInCredentials(prev =>
+        prev
+          ? {
+              ...prev,
+              name: result.name,
+              login_id: result.login_id,
+              username: result.username,
+              temporary_password: result.temporary_password,
+              recipient_user_id: userId,
+            }
+          : null,
+      )
+      toast.success('Temporary password issued — share it with the user')
+      await load()
+      onMembersChanged?.()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
+    } finally {
+      setResettingSignInId(null)
+    }
+  }, [load, markPasswordConfigured, onMembersChanged, resettingSignInId, signInCredentials?.recipient_user_id, toast])
 
   const sessionLogin = session?.username?.trim().toLowerCase()
 
@@ -139,7 +156,7 @@ export function SettingsTeamPanel({
         render: (r: OrganisationMember) => (
           <div className="min-w-[8rem]">
             <p className="font-medium text-heading">{r.name?.trim() || '—'}</p>
-            <p className="text-xs text-muted font-mono truncate max-w-[14rem]">{r.email || r.username}</p>
+            <p className="text-xs text-muted font-mono truncate max-w-[14rem]">{r.username || r.email}</p>
           </div>
         ),
       },
@@ -217,7 +234,7 @@ export function SettingsTeamPanel({
               key: 'actions',
               header: '',
               render: (r: OrganisationMember) => {
-                const login = (r.email || r.username).trim().toLowerCase()
+                const login = (r.username || r.email).trim().toLowerCase()
                 const isSelf = sessionLogin != null && sessionLogin === login
                 const active = memberIsActive(r)
                 return (
@@ -227,7 +244,7 @@ export function SettingsTeamPanel({
                     isSelf={isSelf}
                     active={active}
                     onSetPassword={() => openPasswordModal(r)}
-                    onResetSignIn={() => void resetMemberSignIn(r)}
+                    onResetSignIn={() => openResetMemberSignIn(r)}
                     onToggleStatus={() => void toggleStatus(r)}
                   />
                 )
@@ -236,7 +253,7 @@ export function SettingsTeamPanel({
           ]
         : []),
     ],
-    [canManage, sessionLogin, toggleStatus, passwordConfiguredIds, openPasswordModal, resetMemberSignIn],
+    [canManage, sessionLogin, toggleStatus, passwordConfiguredIds, openPasswordModal, openResetMemberSignIn],
   )
 
   return (
@@ -277,12 +294,24 @@ export function SettingsTeamPanel({
         member={passwordUser}
         changeMode={passwordChangeMode}
         onClose={() => setPasswordUser(null)}
-        onSaved={userId => markPasswordConfigured(userId)}
+          onSaved={(userId, username) => {
+            markPasswordConfigured(userId)
+            if (username) {
+              void load()
+              onMembersChanged?.()
+            }
+          }}
       />
       <PlatformSignInCredentialsModal
         open={signInCredentials != null}
-        onClose={() => setSignInCredentials(null)}
+        onClose={() => resettingSignInId == null && setSignInCredentials(null)}
         payload={signInCredentials}
+        generatingPassword={resettingSignInId != null}
+        onGeneratePassword={
+          signInCredentials && !signInCredentials.temporary_password
+            ? username => void generateMemberPassword(username)
+            : undefined
+        }
       />
     </>
   )

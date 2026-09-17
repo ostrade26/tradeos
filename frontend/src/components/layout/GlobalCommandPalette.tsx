@@ -5,7 +5,7 @@ import { buildGlobalSearchItems } from '../../lib/globalSearch'
 import { useTradeStore } from '../../store/TradeStore'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { useLocation } from 'react-router-dom'
-import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface GlobalCommandPaletteProps {
   open: boolean
@@ -24,22 +24,23 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
   const items = useMemo(() => {
     if (platformAdminMode) {
       const nav = [
-        { id: 'orgs', label: 'Organisations', group: 'Navigation', action: () => navigate('/platform-admin/organisations') },
-        { id: 'plans', label: 'Plans & Pricing', group: 'Navigation', action: () => navigate('/platform-admin/plans') },
-        { id: 'licenses', label: 'Licences', group: 'Navigation', action: () => navigate('/platform-admin/licenses') },
-        { id: 'amcs', label: 'AMC / Renewals', group: 'Navigation', action: () => navigate('/platform-admin/amcs') },
-        { id: 'seats', label: 'Seats', group: 'Navigation', action: () => navigate('/platform-admin/seats') },
-        { id: 'payments', label: 'Payments', group: 'Navigation', action: () => navigate('/platform-admin/payments') },
-        { id: 'releases', label: 'Releases', group: 'Navigation', action: () => navigate('/platform-admin/releases') },
+        { id: 'orgs', label: 'Organisations', group: 'Customers', action: () => navigate('/platform-admin/organisations') },
+        { id: 'seats', label: 'Seats', group: 'Customers', action: () => navigate('/platform-admin/seats') },
         {
           id: 'seat-requests',
           label: 'Seat requests',
-          group: 'Navigation',
+          group: 'Customers',
           action: () => navigate('/platform-admin/seat-requests'),
         },
-        { id: 'audit', label: 'Audit log', group: 'Navigation', action: () => navigate('/platform-admin/audit') },
-        { id: 'profile', label: 'Profile', group: 'Navigation', action: () => navigate('/platform-admin/profile') },
-        { id: 'settings', label: 'Settings', group: 'Navigation', action: () => navigate('/platform-admin/settings') },
+        { id: 'plans', label: 'Plans & Pricing', group: 'Commerce', action: () => navigate('/platform-admin/plans') },
+        { id: 'licenses', label: 'Licences', group: 'Commerce', action: () => navigate('/platform-admin/licenses') },
+        { id: 'amcs', label: 'AMC', group: 'Commerce', action: () => navigate('/platform-admin/amcs') },
+        { id: 'payments', label: 'Payments', group: 'Commerce', action: () => navigate('/platform-admin/payments') },
+        { id: 'releases', label: 'Releases', group: 'Product', action: () => navigate('/platform-admin/releases') },
+        { id: 'inbox', label: 'Inbox', group: 'Product', action: () => navigate('/platform-admin/notifications') },
+        { id: 'audit', label: 'Audit log', group: 'Product', action: () => navigate('/platform-admin/audit') },
+        { id: 'profile', label: 'Profile', group: 'Account', action: () => navigate('/platform-admin/profile') },
+        { id: 'settings', label: 'Settings', group: 'Account', action: () => navigate('/platform-admin/settings') },
       ]
       return [
         { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
@@ -48,34 +49,30 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     }
 
     const nav = [
-      { id: 'dash', label: 'Go to Dashboard', group: 'Navigation', action: () => navigate('/') },
-      { id: 'po', label: 'Purchase Orders', group: 'Navigation', action: () => navigate('/purchase-orders') },
-      { id: 'so', label: 'Sales Orders', group: 'Navigation', action: () => navigate('/sales-orders') },
-      { id: 'lifts', label: 'Lift Register', group: 'Navigation', action: () => navigate('/lifts') },
-      { id: 'inventory', label: 'Inventory', group: 'Navigation', action: () => navigate('/inventory') },
-      { id: 'directory', label: 'Directory', group: 'Navigation', action: () => navigate('/directory') },
-      { id: 'reports', label: 'Reports', group: 'Navigation', action: () => navigate('/reports') },
-      { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate('/analytics') },
-      { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate('/activity') },
-      { id: 'contracts', label: 'Contracts', group: 'Navigation', action: () => navigate('/contracts') },
-      { id: 'settings', label: 'Settings', group: 'Navigation', action: () => navigate('/settings') },
-      { id: 'profile', label: 'Profile', group: 'Navigation', action: () => navigate('/profile') },
-    ]
-
-    const actions = [
+      { id: 'dash', label: 'Go to Dashboard', group: 'Navigation', action: () => navigate(APP_HOME) },
+      { id: 'po', label: 'Purchase Orders', group: 'Navigation', action: () => navigate(appPath('/purchase-orders')) },
+      { id: 'so', label: 'Sales Orders', group: 'Navigation', action: () => navigate(appPath('/sales-orders')) },
+      { id: 'lifts', label: 'Lift Register', group: 'Navigation', action: () => navigate(appPath('/lifts')) },
+      { id: 'inventory', label: 'Inventory', group: 'Navigation', action: () => navigate(appPath('/inventory')) },
+      { id: 'directory', label: 'Directory', group: 'Navigation', action: () => navigate(appPath('/directory')) },
+      { id: 'reports', label: 'Reports', group: 'Navigation', action: () => navigate(appPath('/reports')) },
+      { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate(appPath('/analytics')) },
+      { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate(appPath('/activity')) },
+      { id: 'inbox', label: 'Inbox', group: 'Navigation', action: () => navigate(appPath('/notifications')) },
       ...(hasPermission('purchase.create')
-        ? [{ id: 'new-po', label: 'New Purchase Order', description: 'F1', group: 'Actions', action: () => navigate('/purchase-orders/new') }]
+        ? [{ id: 'new-po', label: 'New Purchase Order', description: 'F1', group: 'Actions', action: () => navigate(appPath('/purchase-orders/new')) }]
         : []),
       ...(hasPermission('sales.create')
-        ? [{ id: 'new-so', label: 'New Sales Order', description: 'F3', group: 'Actions', action: () => navigate('/sales-orders/new') }]
+        ? [{ id: 'new-so', label: 'New Sales Order', description: 'F3', group: 'Actions', action: () => navigate(appPath('/sales-orders/new')) }]
         : []),
       ...(hasPermission('lifts.create')
-        ? [{ id: 'new-lift', label: 'Record Lift', description: 'F5', group: 'Actions', action: () => navigate('/lifts/new') }]
+        ? [{ id: 'new-lift', label: 'Record Lift', description: 'F5', group: 'Actions', action: () => navigate(appPath('/lifts/new')) }]
         : []),
       ...(hasPermission('contracts.create')
-        ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate('/contracts/new') }]
+        ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate(appPath('/contracts/new')) }]
         : []),
       { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
+      { id: 'send-tradeal', label: 'Send to Tradeal', group: 'Actions', action: () => navigate(appPath('/notifications?compose=1')) },
     ]
 
     const searchHits = buildGlobalSearchItems(store, navigate).map(item => ({
@@ -86,7 +83,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       action: item.action,
     }))
 
-    return [...actions, ...nav, ...searchHits]
+    return [...nav, ...searchHits]
   }, [hasPermission, store, navigate, onOpenAssistant, platformAdminMode])
 
   return <CommandPalette open={open} onClose={onClose} items={items} />

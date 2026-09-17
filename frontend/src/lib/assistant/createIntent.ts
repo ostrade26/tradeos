@@ -2,6 +2,7 @@ import type { TradeStoreValue } from '../../store/TradeStore'
 import { collectItemNames, resolveItemName } from '../itemResolution'
 import { collectPartyNames, resolvePartyName } from './partyMatch'
 import type { AssistantResult } from './types'
+import { appPath } from '../appShellMode'
 
 export type CreateKind = 'po' | 'so' | 'lift'
 
@@ -108,9 +109,9 @@ export function createCommandPath(draft: CreateDraft): string {
   if (draft.stock) params.set('stock', '1')
   const query = params.toString()
 
-  if (draft.kind === 'po') return query ? `/purchase-orders/new?${query}` : '/purchase-orders/new'
-  if (draft.kind === 'so') return query ? `/sales-orders/new?${query}` : '/sales-orders/new'
-  return query ? `/lifts/new?${query}` : '/lifts/new'
+  if (draft.kind === 'po') return appPath(query ? `/purchase-orders/new?${query}` : '/purchase-orders/new')
+  if (draft.kind === 'so') return appPath(query ? `/sales-orders/new?${query}` : '/sales-orders/new')
+  return appPath(query ? `/lifts/new?${query}` : '/lifts/new')
 }
 
 function kindLabel(kind: CreateKind, stock?: boolean) {

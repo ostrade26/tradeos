@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .. import auth
 from ..db import (
@@ -32,6 +32,8 @@ from .billing_repository import (
 )
 from .org_members_repository import reset_organisation_member_sign_in
 from .billing_schema import DEFAULT_ORG_NAME, LEGACY_DEFAULT_ORG_NAME, PRE_REBRAND_LEGACY_ORG_NAME
+from .email_validation import optional_contact_email
+from .login_username import require_login_username
 from .repository import append_audit_log
 from .seat_request_repository import (
     approve_seat_request,
@@ -46,9 +48,9 @@ router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
 
 class PrimaryAdminBody(BaseModel):
     name: str
-    email: str
+    username: str
+    email: str = ""
     mobile: str = ""
-    username: str = ""
     password: str = ""
 
 
@@ -119,6 +121,12 @@ class PlanBody(BaseModel):
     amc_duration_months: int = Field(default=12, ge=1)
     amc_grace_days: int = Field(default=30, ge=0)
     status: str = Field(default="active", pattern="^(active|inactive)$")
+
+    @model_validator(mode="after")
+    def included_seats_from_roles(self) -> PlanBody:
+        total = int(self.included_admin_seats) + int(self.included_operator_seats)
+        self.included_seats = max(1, total)
+        return self
 
 
 class MarkSeatRequestPaidBody(BaseModel):
@@ -396,6 +404,10 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
     ]:
         if not field.strip():
             raise HTTPException(status_code=400, detail=f"{label} is required")
+
+    if body.primary_admin:
+        body.primary_admin.username = require_login_username(body.primary_admin.username)
+        body.primary_admin.email = optional_contact_email(body.primary_admin.email)
 
     if uses_postgres():
         with _pg_connect() as conn:
@@ -789,12 +801,93 @@ def create_user(body: CreateUserBody, request: Request) -> dict[str, Any]:
         return {"id": user_id, "username": username}
 
 
+class CreatePlatformAdminBody(BaseModel):
+    username: str
+    name: str
+
+
+class ResetSignInBody(BaseModel):
+    username: str = ""
+
+
+@router.get("/admins", summary="List Tradeal platform admins")
+def list_platform_admin_accounts(request: Request) -> dict[str, Any]:
+    auth.require_platform(_session(request))
+    from .platform_admins_repository import list_platform_admins
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"admins": list_platform_admins(conn)}
+    with _sqlite_connect() as conn:
+        return {"admins": list_platform_admins(conn)}
+
+
+@router.post("/admins", summary="Create a Tradeal platform admin")
+def create_platform_admin_account(body: CreatePlatformAdminBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "users.create")
+    from .platform_admins_repository import create_platform_admin
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            admin = create_platform_admin(
+                conn,
+                username=body.username,
+                name=body.name,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"admin": admin}
+    with _sqlite_connect() as conn:
+        admin = create_platform_admin(
+            conn,
+            username=body.username,
+            name=body.name,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"admin": admin}
+
+
+@router.post("/admins/{user_id}/reset-sign-in", summary="Reset another Tradeal Admin sign-in")
+def reset_platform_admin_account(
+    user_id: int,
+    request: Request,
+    body: ResetSignInBody | None = None,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "users.create")
+    from .platform_admins_repository import reset_platform_admin_sign_in
+
+    username = (body.username if body else "") or None
+    if uses_postgres():
+        with _pg_connect() as conn:
+            result = reset_platform_admin_sign_in(
+                conn, user_id=user_id, actor_user_id=session.user.id, username=username
+            )
+            conn.commit()
+            return result
+    with _sqlite_connect() as conn:
+        result = reset_platform_admin_sign_in(
+            conn, user_id=user_id, actor_user_id=session.user.id, username=username
+        )
+        conn.commit()
+        return result
+
+
 @router.post("/users/{user_id}/reset-sign-in", summary="Reset organisation user sign-in")
-def reset_user_sign_in(user_id: int, request: Request) -> dict[str, Any]:
+def reset_user_sign_in(
+    user_id: int,
+    request: Request,
+    body: ResetSignInBody | None = None,
+) -> dict[str, Any]:
     """Issue a new temporary password for an organisation user (share securely with the customer)."""
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "users.create")
+    username = (body.username if body else "") or None
     if uses_postgres():
         with _pg_connect() as conn:
             row = conn.execute(
@@ -819,6 +912,7 @@ def reset_user_sign_in(user_id: int, request: Request) -> dict[str, Any]:
                 organisation_id=int(org_id),
                 user_id=user_id,
                 actor_user_id=session.user.id,
+                username=username,
             )
             conn.commit()
             return result
@@ -845,6 +939,7 @@ def reset_user_sign_in(user_id: int, request: Request) -> dict[str, Any]:
             organisation_id=int(org_id),
             user_id=user_id,
             actor_user_id=session.user.id,
+            username=username,
         )
         conn.commit()
         return result
@@ -1118,6 +1213,81 @@ def platform_reject_seat_request(
             request_id,
             actor_user_id=session.user.id,
             admin_note=body.admin_note,
+        )
+        conn.commit()
+        return {"request": req}
+
+
+class ProductRequestReviewBody(BaseModel):
+    status: str = Field(pattern="^(received|in_progress|done)$")
+    reply: str = ""
+
+
+@router.get("/product-requests/summary", summary="Open org requests for platform notifications")
+def product_requests_summary(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.view")
+    from .product_request_repository import count_open_product_requests, list_open_product_requests_platform
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            pending_count = count_open_product_requests(conn)
+            open_requests = list_open_product_requests_platform(conn, limit=20)
+    else:
+        with _sqlite_connect() as conn:
+            pending_count = count_open_product_requests(conn)
+            open_requests = list_open_product_requests_platform(conn, limit=20)
+    return {"pending_count": pending_count, "open_requests": open_requests}
+
+
+@router.get("/product-requests", summary="Issues, improvements, and new needs from organisations")
+def list_platform_product_requests(
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.view")
+    from .product_request_repository import list_product_requests_platform
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"requests": list_product_requests_platform(conn, status=status, limit=limit)}
+    with _sqlite_connect() as conn:
+        return {"requests": list_product_requests_platform(conn, status=status, limit=limit)}
+
+
+@router.patch("/product-requests/{request_id}", summary="Update status and reply to the requester")
+def review_platform_product_request(
+    request_id: int,
+    body: ProductRequestReviewBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .product_request_repository import review_product_request
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            req = review_product_request(
+                conn,
+                request_id,
+                status=body.status,
+                reply=body.reply,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"request": req}
+    with _sqlite_connect() as conn:
+        req = review_product_request(
+            conn,
+            request_id,
+            status=body.status,
+            reply=body.reply,
+            actor_user_id=session.user.id,
         )
         conn.commit()
         return {"request": req}

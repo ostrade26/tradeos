@@ -485,6 +485,9 @@ def init_identity_schema() -> None:
         from .releases_schema import init_releases_schema
 
         init_releases_schema()
+        from .product_requests_schema import init_product_requests_schema
+
+        init_product_requests_schema()
         return
 
     with _sqlite_connect() as conn:
@@ -593,3 +596,6 @@ def init_identity_schema() -> None:
     from .releases_schema import init_releases_schema
 
     init_releases_schema()
+    from .product_requests_schema import init_product_requests_schema
+
+    init_product_requests_schema()

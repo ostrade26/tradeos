@@ -4,6 +4,7 @@ import { getLiftTankers } from './liftTankers'
 import { formatLiftOrderSummary } from './liftAllocations'
 import { formatQty } from './utils'
 import { formatLiftRef, formatOrderRef, formatPoRef } from './tradeRefs'
+import { appPath } from './appShellMode'
 
 export interface GlobalSearchItem {
   id: string
@@ -22,7 +23,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
       label: formatOrderRef(o.ref, o.side),
       description: `PO · ${o.partyName} · ${o.itemName}`,
       group: 'Purchase Orders',
-      action: () => navigate(`/purchase-orders?ref=${encodeURIComponent(o.ref)}`),
+      action: () => navigate(appPath(`/purchase-orders?ref=${encodeURIComponent(o.ref)}`)),
     })
   }
 
@@ -32,7 +33,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
       label: formatOrderRef(o.ref, o.side),
       description: `SO · ${o.partyName} · ${o.itemName}${o.poRef ? ` · ${formatPoRef(o.poRef)}` : ''}`,
       group: 'Sales Orders',
-      action: () => navigate(`/sales-orders?ref=${encodeURIComponent(o.ref)}`),
+      action: () => navigate(appPath(`/sales-orders?ref=${encodeURIComponent(o.ref)}`)),
     })
   }
 
@@ -42,7 +43,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
       label: formatLiftRef(l.liftRef),
       description: `${formatLiftOrderSummary(l)} · ${formatQty(l.liftedQty)}`,
       group: 'Lifts',
-      action: () => navigate(`/lifts?party=${encodeURIComponent(l.buyerName)}`),
+      action: () => navigate(appPath(`/lifts?party=${encodeURIComponent(l.buyerName)}`)),
     })
     for (const tanker of getLiftTankers(l)) {
       if (!tanker.tankerNo.trim()) continue
@@ -51,7 +52,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
         label: tanker.tankerNo.toUpperCase(),
         description: `Tanker · ${formatLiftRef(l.liftRef)}${tanker.transportName ? ` · ${tanker.transportName}` : ''}`,
         group: 'Lifts',
-        action: () => navigate(`/lifts?q=${encodeURIComponent(tanker.tankerNo)}`),
+        action: () => navigate(appPath(`/lifts?q=${encodeURIComponent(tanker.tankerNo)}`)),
       })
     }
   }
@@ -62,7 +63,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
       label: lot.lotNumber,
       description: `${lot.commodity} · ${lot.producer}`,
       group: 'Inventory',
-      action: () => navigate(`/inventory/${lot.id}`),
+      action: () => navigate(appPath(`/inventory/${lot.id}`)),
     })
   }
 
@@ -77,7 +78,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
       label: name,
       description: 'Directory · view all transactions',
       group: 'Parties',
-      action: () => navigate(`/party?name=${encodeURIComponent(name)}`),
+      action: () => navigate(appPath(`/party?name=${encodeURIComponent(name)}`)),
     })
   }
 

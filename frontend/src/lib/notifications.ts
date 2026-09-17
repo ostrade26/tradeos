@@ -1,10 +1,11 @@
 import { storageGet, storageSet } from './storage'
 
 const READ_KEY = 'tradeal-notifications-read'
+const LEGACY_READ_KEY = 'tradeos-notifications-read'
 
 function readIds(): Set<string> {
   try {
-    const raw = storageGet(READ_KEY)
+    const raw = storageGet(READ_KEY) ?? storageGet(LEGACY_READ_KEY)
     if (!raw) return new Set()
     return new Set(JSON.parse(raw) as string[])
   } catch {

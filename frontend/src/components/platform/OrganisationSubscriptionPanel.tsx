@@ -1,18 +1,15 @@
-import { Building2, CreditCard, KeyRound, Shield, User, Users, Wallet } from 'lucide-react'
-import { Badge } from '../ui/Badge'
-import { Button } from '../ui/Button'
+import { useState } from 'react'
+import { Building2, Check, Copy, CreditCard, Shield, User, Users, Wallet } from 'lucide-react'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
+import { useToast } from '../../hooks/useToast'
 import { accountTypeLabel, formatInrCents, seatTypeLabel } from '../../lib/platformLabels'
-import { formatDate, formatDateRange } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
 import { platformStatusBadge } from './platformAdminRegisterColumns'
 import {
   DetailGroup,
   DetailInlineStat,
   DetailInlineStatRow,
   DetailPanelBody,
-  DetailRow,
-  DetailStat,
-  DetailStatGrid,
 } from '../registers/DetailPanelSections'
 
 function hasText(value: string | null | undefined): value is string {
@@ -28,14 +25,12 @@ function money(cents: number | null | undefined): string {
 export function OrganisationSubscriptionPanel({
   detail,
   showOrgProfile = true,
-  onResetPrimaryAdminSignIn,
-  resettingPrimaryAdminSignIn,
 }: {
   detail: OrganisationDetailResponse
   showOrgProfile?: boolean
-  onResetPrimaryAdminSignIn?: () => void
-  resettingPrimaryAdminSignIn?: boolean
 }) {
+  const toast = useToast()
+  const [copiedSeatId, setCopiedSeatId] = useState<number | null>(null)
   const org = detail.organisation
   const licence = detail.licence
   const amc = detail.amc
@@ -54,6 +49,17 @@ export function OrganisationSubscriptionPanel({
 
   const amcAmount = amc?.included ? 'Included' : money(amc?.amc_price_cents)
   const nextRenewal = amc?.renewal_date || amc?.end_date
+
+  const copySeatLabel = async (seatId: number, label: string) => {
+    try {
+      await navigator.clipboard.writeText(label)
+      setCopiedSeatId(seatId)
+      toast.success('Seat ID copied')
+      window.setTimeout(() => setCopiedSeatId(current => (current === seatId ? null : current)), 2000)
+    } catch {
+      toast.error('Could not copy seat ID')
+    }
+  }
 
   return (
     <DetailPanelBody>
@@ -81,31 +87,24 @@ export function OrganisationSubscriptionPanel({
           </DetailGroup>
 
           <DetailGroup title="Primary admin" icon={User}>
-            <p className="text-sm font-semibold text-heading leading-snug">
-              {org.primary_contact_name?.trim() || '—'}
-            </p>
-            <p className="text-sm text-muted mt-1 leading-snug">
-              {[org.primary_contact_email, org.primary_contact_mobile].filter(hasText).join(' · ') || '—'}
-            </p>
-            {detail.primary_admin_user && onResetPrimaryAdminSignIn ? (
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  loading={resettingPrimaryAdminSignIn}
-                  onClick={onResetPrimaryAdminSignIn}
-                >
-                  <KeyRound className="h-4 w-4" aria-hidden />
-                  Reset sign-in
-                </Button>
-              </div>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-semibold text-heading leading-snug min-w-0 truncate">
+                {org.primary_contact_name?.trim() || '—'}
+              </p>
+              {hasText(org.primary_contact_email) ? (
+                <p className="text-sm text-muted text-right shrink-0 max-w-[65%] truncate">
+                  {org.primary_contact_email}
+                </p>
+              ) : null}
+            </div>
+            {hasText(org.primary_contact_mobile) ? (
+              <p className="text-sm text-muted mt-1 leading-snug">{org.primary_contact_mobile}</p>
             ) : null}
           </DetailGroup>
         </>
       )}
 
-      <DetailGroup title="Licence" icon={Shield}>
+      <DetailGroup title="Licence" icon={Shield} surface="muted">
         {licence ? (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">
@@ -115,14 +114,14 @@ export function OrganisationSubscriptionPanel({
               </div>
               {platformStatusBadge(String(licence.status))}
             </div>
-            <DetailStatGrid>
-              <DetailStat label="Amount" value={money(licence.licence_price_cents)} />
-              <DetailStat label="Purchased" value={formatDate(licence.purchase_date)} />
-              <DetailStat
+            <DetailInlineStatRow>
+              <DetailInlineStat label="Amount" value={money(licence.licence_price_cents)} />
+              <DetailInlineStat label="Purchased" value={formatDate(licence.purchase_date)} />
+              <DetailInlineStat
                 label="Activated"
                 value={licence.activation_date ? formatDate(licence.activation_date) : '—'}
               />
-            </DetailStatGrid>
+            </DetailInlineStatRow>
           </div>
         ) : (
           <p className="text-sm text-muted">No licence issued.</p>
@@ -130,32 +129,42 @@ export function OrganisationSubscriptionPanel({
       </DetailGroup>
 
       <DetailGroup title="Seats" icon={Users}>
-        <DetailStatGrid>
-          <DetailStat label="Total" value={String(totalSeats)} />
-          <DetailStat label="Assigned" value={String(assignedCount)} />
-          <DetailStat
+        <DetailInlineStatRow>
+          <DetailInlineStat label="Total" value={String(totalSeats)} />
+          <DetailInlineStat label="Assigned" value={String(assignedCount)} />
+          <DetailInlineStat
             label="Available"
             value={String(availableCount)}
-            variant={availableCount > 0 ? 'success' : 'default'}
+            valueClassName={availableCount > 0 ? 'text-success' : undefined}
           />
-        </DetailStatGrid>
-        <p className="text-xs text-muted mt-3">
-          {included} included
-          {additional > 0 ? ` · ${additional} additional` : ''}
-        </p>
+        </DetailInlineStatRow>
         {assignedSeats.length > 0 ? (
           <ul className="mt-4 space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
             {assignedSeats.map(seat => (
-              <li key={seat.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+              <li key={seat.id} className="flex items-end justify-between gap-3 py-2.5 first:pt-0">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-heading truncate">
                     {seat.assigned_user_name?.trim() || seat.assigned_user_email || 'Licensed user'}
                   </p>
-                  <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{seat.seat_label}</p>
+                  <p className="text-xs text-muted mt-0.5">{seatTypeLabel(seat.seat_type)}</p>
                 </div>
-                <Badge variant="default" className="capitalize shrink-0">
-                  {seatTypeLabel(seat.seat_type)}
-                </Badge>
+                <div className="flex items-center gap-1.5 shrink-0 max-w-[55%]">
+                  <p className="text-xs text-muted font-mono tabular-nums text-right break-all">
+                    {seat.seat_label}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copySeatLabel(seat.id, seat.seat_label)}
+                    className="inline-flex items-center text-muted hover:text-heading shrink-0"
+                    aria-label={`Copy ${seat.seat_label}`}
+                  >
+                    {copiedSeatId === seat.id ? (
+                      <Check className="h-3.5 w-3.5 text-success" aria-hidden />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -164,27 +173,27 @@ export function OrganisationSubscriptionPanel({
         )}
       </DetailGroup>
 
-      <DetailGroup title="AMC" icon={CreditCard}>
+      <DetailGroup title="AMC" icon={CreditCard} surface="muted">
         {amc ? (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold tabular-nums text-heading">{amcAmount}</p>
-                <p className="text-xs text-muted mt-1">
+                <p className="text-sm font-semibold text-heading leading-snug">
                   {amc.included ? 'First year included' : 'Annual maintenance'}
                 </p>
+                {nextRenewal ? (
+                  <p className="text-xs text-muted mt-1">Renews {formatDate(nextRenewal)}</p>
+                ) : null}
               </div>
               {platformStatusBadge(String(amc.status))}
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted">Period</p>
-              <p className="text-sm font-semibold tabular-nums text-heading mt-1">
-                {formatDateRange(amc.start_date, amc.end_date)}
-              </p>
-            </div>
+            <DetailInlineStatRow>
+              <DetailInlineStat label="Amount" value={amcAmount} />
+              <DetailInlineStat label="Started" value={formatDate(amc.start_date)} />
+              <DetailInlineStat label="Ends" value={formatDate(amc.end_date)} />
+            </DetailInlineStatRow>
             <p className="text-xs text-muted leading-relaxed">
               Grace until {amc.grace_until ? formatDate(amc.grace_until) : '—'}
-              {nextRenewal ? ` · Renews ${formatDate(nextRenewal)}` : ''}
             </p>
             {String(amc.status) === 'expired' ? (
               <p className="text-xs text-muted leading-relaxed">
@@ -197,24 +206,27 @@ export function OrganisationSubscriptionPanel({
         )}
       </DetailGroup>
 
-      <DetailGroup title="Payment" icon={Wallet}>
-        <DetailStatGrid>
-          <DetailStat label="Paid" value={money(billing?.total_paid_cents ?? 0)} />
-          <DetailStat
+      <DetailGroup
+        title="Payment"
+        icon={Wallet}
+        trailing={
+          billing?.payment_status && billing.payment_status !== 'none'
+            ? platformStatusBadge(billing.payment_status)
+            : undefined
+        }
+      >
+        <DetailInlineStatRow>
+          <DetailInlineStat label="Paid" value={money(billing?.total_paid_cents ?? 0)} />
+          <DetailInlineStat
             label="Pending"
             value={money(billing?.pending_cents ?? 0)}
-            variant={(billing?.pending_cents ?? 0) > 0 ? 'warning' : 'default'}
+            valueClassName={(billing?.pending_cents ?? 0) > 0 ? 'text-warning' : undefined}
           />
-          <DetailStat
+          <DetailInlineStat
             label="Last payment"
             value={billing?.last_payment_date ? formatDate(billing.last_payment_date) : '—'}
           />
-        </DetailStatGrid>
-        {billing?.payment_status && billing.payment_status !== 'none' ? (
-          <div className="mt-3">
-            <DetailRow label="Status" value={platformStatusBadge(billing.payment_status)} />
-          </div>
-        ) : null}
+        </DetailInlineStatRow>
       </DetailGroup>
     </DetailPanelBody>
   )

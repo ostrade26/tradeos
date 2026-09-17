@@ -3,13 +3,14 @@ import {
   LayoutDashboard, Package,
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
-  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Sparkles,
+  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Sparkles, Bell,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { isPlatformAdminPath, APP_HOME, appPath } from '../../lib/appShellMode'
 import { isSettingsAreaPath, SETTINGS_SECTIONS, settingsPath } from '../../lib/settingsSections'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
+import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
 
 /** Register routes — navigate with a clean URL (no `ref` from the previous register). */
 function registerNavTo(path: string) {
@@ -17,32 +18,50 @@ function registerNavTo(path: string) {
 }
 
 const tradingNav = [
-  { to: '/app', icon: LayoutDashboard, label: 'Dashboard', end: true, clearSearch: false },
-  { to: '/purchase-orders', icon: ArrowDownToLine, label: 'Purchase Orders', clearSearch: true },
-  { to: '/sales-orders', icon: ArrowUpFromLine, label: 'Sales Orders', clearSearch: true },
-  { to: '/lifts', icon: Scale, label: 'Lift Register', clearSearch: true },
-  { to: '/inventory', icon: Package, label: 'Inventory' },
-  { to: '/contracts', icon: FileText, label: 'Contracts' },
+  { to: APP_HOME, icon: LayoutDashboard, label: 'Dashboard', end: true, clearSearch: false },
+  { to: appPath('/purchase-orders'), icon: ArrowDownToLine, label: 'Purchase Orders', clearSearch: true },
+  { to: appPath('/sales-orders'), icon: ArrowUpFromLine, label: 'Sales Orders', clearSearch: true },
+  { to: appPath('/lifts'), icon: Scale, label: 'Lift Register', clearSearch: true },
+  { to: appPath('/inventory'), icon: Package, label: 'Inventory' },
+  { to: appPath('/contracts'), icon: FileText, label: 'Contracts' },
 ]
 
 const platformNav = [
-  { to: '/directory', icon: BookUser, label: 'Directory' },
-  { to: '/reports', icon: ClipboardList, label: 'Reports' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/activity', icon: Activity, label: 'Activity' },
+  { to: appPath('/directory'), icon: BookUser, label: 'Directory' },
+  { to: appPath('/reports'), icon: ClipboardList, label: 'Reports' },
+  { to: appPath('/analytics'), icon: BarChart3, label: 'Analytics' },
+  { to: appPath('/activity'), icon: Activity, label: 'Activity' },
+  { to: appPath('/notifications'), icon: Bell, label: orgNoticesLabels.sidebarNav },
 ]
 
-const platformAdminNav = [
-  { to: '/platform-admin/organisations', icon: Building2, label: 'Organisations', end: true },
-  { to: '/platform-admin/plans', icon: CreditCard, label: 'Plans & Pricing' },
-  { to: '/platform-admin/licenses', icon: KeyRound, label: 'Licences' },
-  { to: '/platform-admin/amcs', icon: ShieldCheck, label: 'AMC / Renewals' },
-  { to: '/platform-admin/seats', icon: Users, label: 'Seats' },
-  { to: '/platform-admin/payments', icon: Wallet, label: 'Payments' },
-  { to: '/platform-admin/releases', icon: Sparkles, label: 'Releases' },
-  { to: '/platform-admin/seat-requests', icon: UserPlus, label: 'Seat requests' },
-  { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
-]
+const platformAdminNavGroups = [
+  {
+    label: 'Customers',
+    items: [
+      { to: '/platform-admin/organisations', icon: Building2, label: 'Organisations', end: true },
+      { to: '/platform-admin/seats', icon: Users, label: 'Seats' },
+      { to: '/platform-admin/seat-requests', icon: UserPlus, label: 'Seat requests' },
+    ],
+  },
+  {
+    label: 'Commerce',
+    items: [
+      { to: '/platform-admin/plans', icon: CreditCard, label: 'Plans & Pricing' },
+      { to: '/platform-admin/licenses', icon: KeyRound, label: 'Licences' },
+      { to: '/platform-admin/amcs', icon: ShieldCheck, label: 'AMC' },
+      { to: '/platform-admin/payments', icon: Wallet, label: 'Payments' },
+    ],
+  },
+  {
+    label: 'Product',
+    items: [
+      { to: '/platform-admin/releases', icon: Sparkles, label: 'Releases' },
+      { to: '/platform-admin/notifications', icon: Bell, label: platformActionInboxLabels.sidebarNav },
+      { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
+    ],
+  },
+] as const
+
 
 interface SidebarProps {
   collapsed: boolean
@@ -62,7 +81,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
     canManageOrganisation &&
     (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
   const showTeamInSettings = canManageOrganisation
-  const { pendingCount: openSeatRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
+  const { pendingCount: openSeatRequests, openProductRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanInSettings) return false
     if (s.teamSection && !showTeamInSettings) return false
@@ -149,7 +168,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               )}
               <div className="space-y-0.5 mb-3">
                 <NavLink
-                  to="/app"
+                  to={APP_HOME}
                   end
                   title={iconOnly ? 'Dashboard' : undefined}
                   className={navClass}
@@ -180,47 +199,60 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               </div>
             </>
           ) : platformAdminMode ? (
-            <>
-              {showLabels && (
-                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
-                  Administration
-                </p>
-              )}
-              <div className="space-y-0.5">
-                {platformAdminNav.map(item => {
-                  const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
-                  return (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.end}
-                      title={iconOnly ? item.label : undefined}
-                      className={navClass}
-                      onClick={onMobileClose}
-                    >
-                      <span className="relative shrink-0">
-                        <item.icon className="h-5 w-5" />
-                        {iconOnly && seatBadge && (
-                          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
-                            {openSeatRequests > 9 ? '9+' : openSeatRequests}
+            <div className="space-y-3">
+              {platformAdminNavGroups.map((group, groupIndex) => (
+                <div key={group.label}>
+                  {showLabels ? (
+                    <p className="px-2.5 py-2 text-xs font-medium text-muted">
+                      {group.label}
+                    </p>
+                  ) : groupIndex > 0 ? (
+                    <div className="mx-2 mb-2 border-t border-gray-200 dark:border-gray-700" aria-hidden />
+                  ) : null}
+                  <div className="space-y-0.5">
+                    {group.items.map(item => {
+                      const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
+                      const inboxBadge =
+                        item.to === '/platform-admin/notifications' && (openSeatRequests + openProductRequests) > 0
+                      const badgeCount = seatBadge
+                        ? openSeatRequests
+                        : inboxBadge
+                          ? openSeatRequests + openProductRequests
+                          : 0
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end={'end' in item ? item.end : undefined}
+                          title={iconOnly ? item.label : undefined}
+                          className={navClass}
+                          onClick={onMobileClose}
+                        >
+                          <span className="relative shrink-0">
+                            <item.icon className="h-5 w-5" />
+                            {iconOnly && badgeCount > 0 && (
+                              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                                {badgeCount > 9 ? '9+' : badgeCount}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                      {showLabels && (
-                        <>
-                          <span className="truncate">{item.label}</span>
-                          {seatBadge && (
-                            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white tabular-nums">
-                              {openSeatRequests > 9 ? '9+' : openSeatRequests}
-                            </span>
+                          {showLabels && (
+                            <>
+                              <span className="truncate">{item.label}</span>
+                              {badgeCount > 0 && (
+                                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white tabular-nums">
+                                  {badgeCount > 9 ? '9+' : badgeCount}
+                                </span>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </NavLink>
-                  )
-                })}
-              </div>
-            </>
+                        </NavLink>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               {showLabels && (

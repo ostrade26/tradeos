@@ -43,6 +43,7 @@ interface AuthContextValue {
   hasAppliedUpdate: (featureKey: string) => boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  applySession: (next: AuthSession) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -69,6 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  const applySession = useCallback((next: AuthSession) => {
+    saveAuthSession(next)
+    applyUserPreferences(next.preferences, preferenceUserKey())
+    setSession(next)
   }, [])
 
   const login = useCallback(async (username: string, password: string) => {
@@ -107,8 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasAppliedUpdate: (featureKey: string) => hasAppliedUpdate(session, featureKey),
       login,
       logout,
+      applySession,
     }
-  }, [login, logout, session])
+  }, [applySession, login, logout, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

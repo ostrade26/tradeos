@@ -52,7 +52,7 @@ type Column<T> = {
   className?: string
   sortable?: boolean
   sortValue?: (row: T) => string | number
-  actionsWide?: boolean
+  actionsWide?: boolean | 'compact'
 }
 
 export function organisationColumns(): Column<PlatformOrganisation>[] {
@@ -138,18 +138,6 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
           '—'
         ),
       className: 'text-right',
-    },
-    {
-      key: 'available_seats',
-      header: 'Available',
-      sortable: true,
-      sortValue: r => r.seats?.available_seats ?? 0,
-      render: r => (
-        <span className="tabular-nums text-muted">
-          {r.seats != null ? String(r.seats.available_seats) : '—'}
-        </span>
-      ),
-      className: 'text-right hidden md:table-cell',
     },
     {
       key: 'created_at',
@@ -300,7 +288,11 @@ export function subscriptionPlanColumns(): Column<SubscriptionPlan>[] {
       header: 'Description',
       sortable: true,
       sortValue: r => r.description,
-      render: r => <span className="text-muted max-w-[20rem] truncate block">{r.description?.trim() || '—'}</span>,
+      render: r => (
+        <span className="text-muted whitespace-normal leading-snug block min-w-[14rem] max-w-[36rem]">
+          {r.description?.trim() || '—'}
+        </span>
+      ),
       className: 'hidden md:table-cell',
     },
     {
@@ -331,16 +323,21 @@ export function subscriptionPlanColumns(): Column<SubscriptionPlan>[] {
       key: 'included_seats',
       header: 'Seats',
       sortable: true,
-      sortValue: r => r.included_seats,
-      render: r => (
-        <span className="tabular-nums">
-          {r.included_seats}
-          <span className="text-muted text-xs">
-            {' '}
-            ({r.included_admin_seats ?? 0}A / {r.included_operator_seats ?? 0}O)
+      sortValue: r => (r.included_admin_seats ?? 0) + (r.included_operator_seats ?? 0) || r.included_seats,
+      render: r => {
+        const admin = r.included_admin_seats ?? 0
+        const operator = r.included_operator_seats ?? 0
+        const total = admin + operator || r.included_seats
+        return (
+          <span className="tabular-nums">
+            {total}
+            <span className="text-muted text-xs">
+              {' '}
+              ({admin}A / {operator}O)
+            </span>
           </span>
-        </span>
-      ),
+        )
+      },
       className: 'text-right',
     },
     {
@@ -439,11 +436,11 @@ export function licenceColumns(handlers: {
     {
       key: 'actions',
       header: '',
-      actionsWide: true,
+      actionsWide: 'compact',
       render: r => {
         const busy = handlers.busyId === r.id
         return (
-          <div className="flex flex-nowrap justify-end gap-1.5">
+          <div className="flex flex-nowrap justify-center">
             {r.status !== 'active' ? (
               <Button
                 size="sm"
@@ -458,7 +455,7 @@ export function licenceColumns(handlers: {
             ) : (
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={busy}
                 onClick={e => {
                   e.stopPropagation()
@@ -471,7 +468,7 @@ export function licenceColumns(handlers: {
           </div>
         )
       },
-      className: 'text-right',
+      className: 'text-center',
     },
   ]
 }
@@ -537,11 +534,12 @@ export function amcColumns(handlers: {
     {
       key: 'actions',
       header: '',
-      actionsWide: true,
+      actionsWide: 'compact',
       render: r => (
-        <div className="flex justify-end">
+        <div className="flex justify-center">
           <Button
             size="sm"
+            variant="secondary"
             disabled={handlers.busyId === r.id}
             onClick={e => {
               e.stopPropagation()
@@ -552,7 +550,7 @@ export function amcColumns(handlers: {
           </Button>
         </div>
       ),
-      className: 'text-right',
+      className: 'text-center',
     },
   ]
 }

@@ -12,7 +12,6 @@ import {
   type PlatformOrganisation,
   type PlatformUser,
 } from '../../api/platformApi'
-
 const KIND_OPTIONS: { value: NotificationKind; label: string; title: string; body: string }[] = [
   {
     value: 'payment_reminder',

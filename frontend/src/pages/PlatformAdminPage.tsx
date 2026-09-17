@@ -18,6 +18,7 @@ import {
   type OrganisationPayment,
   type OrganisationSeat,
   type NotificationAudience,
+  type NotificationKind,
   type PlatformDashboard,
   type PlatformOrganisation,
   type PlatformRelease,
@@ -61,6 +62,7 @@ import { PlatformPlanModal, type PlanFormPayload } from '../components/platform/
 import { PlatformRecordPaymentModal } from '../components/platform/PlatformRecordPaymentModal'
 import { PlatformCommercialMetrics } from '../components/platform/PlatformCommercialMetrics'
 import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
+import { platformBroadcastLabels } from '../lib/inboxLabels'
 import { PlatformReleaseModal, type ReleaseFormPayload } from '../components/platform/PlatformReleaseModal'
 import { PlatformPublishReleaseModal } from '../components/platform/PlatformPublishReleaseModal'
 import { PlatformWhatsNewModal } from '../components/platform/PlatformWhatsNewModal'
@@ -90,47 +92,47 @@ const SECTION_META: Record<
 > = {
   organisations: {
     title: 'Organisations',
-    subtitle: 'Profiles, licences, and seats',
+    subtitle: '',
     breadcrumb: 'Organisations',
   },
   seats: {
-    title: 'Licensed seats',
-    subtitle: 'Seats assigned to active organisation users',
+    title: 'Seats',
+    subtitle: '',
     breadcrumb: 'Seats',
   },
   plans: {
     title: 'Plans & Pricing',
-    subtitle: 'Current catalogue — existing licences keep their recorded prices',
+    subtitle: '',
     breadcrumb: 'Plans & Pricing',
   },
   licenses: {
     title: 'Licences',
-    subtitle: 'Organisation perpetual licences and commercial snapshots',
+    subtitle: '',
     breadcrumb: 'Licences',
   },
   amcs: {
-    title: 'AMC / Renewals',
-    subtitle: 'Annual maintenance periods. Expiry does not lock trade data.',
-    breadcrumb: 'AMC / Renewals',
+    title: 'AMC',
+    subtitle: '',
+    breadcrumb: 'AMC',
   },
   payments: {
     title: 'Payments',
-    subtitle: 'Manual licence, AMC, and seat payment records',
+    subtitle: '',
     breadcrumb: 'Payments',
   },
   'seat-requests': {
     title: 'Seat requests',
-    subtitle: 'Approve after off-platform payment',
+    subtitle: '',
     breadcrumb: 'Seat requests',
   },
   audit: {
-    title: 'Audit log',
-    subtitle: 'Org, licence, AMC, and seat events',
+    title: 'Audit',
+    subtitle: '',
     breadcrumb: 'Audit',
   },
   releases: {
     title: 'Releases',
-    subtitle: 'Versioned what\'s new. Publish to the licences you choose.',
+    subtitle: '',
     breadcrumb: 'Releases',
   },
 }
@@ -139,6 +141,9 @@ export function PlatformAdminPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
   if (sectionParam === 'users') {
     return <Navigate to="/platform-admin/seats" replace />
+  }
+  if (sectionParam === 'requests') {
+    return <Navigate to="/platform-admin/notifications" replace />
   }
   if (!isPlatformSection(sectionParam)) {
     return <Navigate to="/platform-admin/organisations" replace />
@@ -226,6 +231,12 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setOrgDetail(null)
     setSelectedOrgId(null)
   }, [setDetailPanelOpen])
+
+  useEffect(() => {
+    if (section === 'plans' || section === 'releases' || section === 'audit') {
+      closeOrgDetail()
+    }
+  }, [section, closeOrgDetail])
 
   const handleDockChange = useCallback((docked: boolean) => {
     if (!docked) setDetailPanelOpen(false)
@@ -398,6 +409,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       return next
     })
   }, [])
+
   const auditRows = useMemo(() => mapAuditLogs(auditLogs), [auditLogs])
   const sortedAuditRows = useMemo(
     () => sortPlatformRows(auditRows, auditSort, auditColumns),
@@ -593,7 +605,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     recipient_user_id: number | null
     recipient_scope: 'org_admin' | 'all_users'
     exclude_expired_amc: boolean
-    kind: 'payment_reminder' | 'product_update' | 'feature_launch' | 'credentials' | 'release_notes'
+    kind: NotificationKind
     title: string
     body: string
     feature_key?: string
@@ -708,28 +720,48 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }, [toast])
 
-  const resetPrimaryAdminSignIn = useCallback(async () => {
-    const userId = orgDetail?.primary_admin_user?.user_id
+  const openResetPrimaryAdminSignIn = useCallback(() => {
+    const admin = orgDetail?.primary_admin_user
+    if (!admin) return
+    setSignInCredentials({
+      name: admin.name,
+      login_id: admin.login_id || admin.email || admin.username,
+      username: admin.username,
+      email: admin.email,
+      organisation_id: orgDetail.organisation.id,
+      recipient_user_id: admin.user_id,
+    })
+  }, [orgDetail?.organisation.id, orgDetail?.primary_admin_user])
+
+  const generatePrimaryAdminPassword = useCallback(async (username: string) => {
+    const userId = signInCredentials?.recipient_user_id
     if (!userId || resettingPrimarySignIn) return
     setResettingPrimarySignIn(true)
     try {
-      const result = await platformApi.resetUserSignIn(userId)
-      setSignInCredentials({
-        name: result.name,
-        login_id: result.login_id,
-        username: result.username,
-        email: result.email,
-        temporary_password: result.temporary_password,
-        organisation_id: orgDetail.organisation.id,
-        recipient_user_id: userId,
-      })
+      const result = await platformApi.resetUserSignIn(userId, { username })
+      setSignInCredentials(prev =>
+        prev
+          ? {
+              ...prev,
+              name: result.name,
+              login_id: result.login_id,
+              username: result.username,
+              email: result.email,
+              temporary_password: result.temporary_password,
+              recipient_user_id: userId,
+            }
+          : null,
+      )
       toast.success('New temporary password issued')
+      if (orgDetail?.organisation.id) {
+        void loadOrgDetail(orgDetail.organisation.id)
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
     } finally {
       setResettingPrimarySignIn(false)
     }
-  }, [orgDetail?.organisation.id, orgDetail?.primary_admin_user?.user_id, resettingPrimarySignIn, toast])
+  }, [loadOrgDetail, orgDetail?.organisation.id, resettingPrimarySignIn, signInCredentials?.recipient_user_id, toast])
 
   const submitCreateOrg = async (form: OrganisationFormState) => {
     if (createOrgInFlight.current) return
@@ -750,6 +782,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         billing_cycle: form.billing_cycle,
         primary_admin: {
           name: form.admin_name.trim(),
+          username: form.admin_username.trim(),
           email: form.admin_email.trim(),
           mobile: form.admin_mobile.trim(),
         },
@@ -860,12 +893,16 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }
 
+  const selectedOrgRowActive = orgDetailOpen && selectedOrgId != null
+  const isSelectedOrgRow = (row: { organisation_id: number }) =>
+    selectedOrgRowActive && row.organisation_id === selectedOrgId
+
   const pageActions =
     section === 'organisations' ? (
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => void openNotify('active_licences')}>
           <Bell className="h-4 w-4" aria-hidden />
-          Send notice
+          {platformBroadcastLabels.licencesAction}
         </Button>
         <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
           <Building2 className="h-4 w-4" aria-hidden />
@@ -917,12 +954,24 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         title={meta.title}
         subtitle={
           section === 'organisations'
-            ? `${organisations.length} organisations`
+            ? `${organisations.length} organisation${organisations.length === 1 ? '' : 's'}`
             : section === 'seats'
-              ? `${licensedSeats.length} seat${licensedSeats.length === 1 ? '' : 's'} in use`
-            : section === 'releases'
-              ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
-              : meta.subtitle
+              ? `${licensedSeats.length} in use`
+              : section === 'plans'
+                ? `${plans.length} plan${plans.length === 1 ? '' : 's'}`
+                : section === 'licenses'
+                  ? `${licenses.length} licence${licenses.length === 1 ? '' : 's'}`
+                  : section === 'amcs'
+                    ? `${amcs.length} period${amcs.length === 1 ? '' : 's'}`
+                    : section === 'payments'
+                      ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
+                      : section === 'seat-requests'
+                        ? `${seatRequests.length} request${seatRequests.length === 1 ? '' : 's'}`
+                          : section === 'releases'
+                          ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
+                          : section === 'audit'
+                            ? `${filteredAuditRows.length} event${filteredAuditRows.length === 1 ? '' : 's'}`
+                            : undefined
         }
         breadcrumb={
           <Breadcrumb
@@ -933,7 +982,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           />
         }
         actions={pageActions}
-        hideActionsOnMobile
+        actionsAlign="end"
       />
 
       {section === 'organisations' && dashboard && !loading ? (
@@ -958,7 +1007,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             emptyState={
               <EmptyState
                 title="No organisations yet"
-                description="Add an org with a plan and primary admin."
+                description="Add one with a plan and a primary admin."
                 action={
                   <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
                     <Building2 className="h-4 w-4" aria-hidden />
@@ -991,11 +1040,12 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortDirection={seatSort.direction}
             onSortChange={handleSeatSortChange}
             onRowClick={seat => void loadOrgDetail(seat.organisation_id)}
+            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
             emptyState={
               <EmptyState
                 title="No seats in use"
-                description="Assigned seats appear here when organisation users hold an active license."
+                description="Assigned seats appear here."
               />
             }
             mobileRender={seat => (
@@ -1029,7 +1079,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             emptyState={
               <EmptyState
                 title="No plans"
-                description="No subscription plans are configured yet."
+                description="Create a plan before adding organisations."
               />
             }
           />
@@ -1048,9 +1098,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortDirection={licenceSort.direction}
             onSortChange={handleLicenceSortChange}
             onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
             emptyState={
-              <EmptyState title="No licences" description="Licences are issued when an organisation is created." />
+              <EmptyState title="No licences" description="Issued when an organisation is created." />
             }
           />
         ))}
@@ -1068,8 +1119,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortDirection={amcSort.direction}
             onSortChange={handleAmcSortChange}
             onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
-            emptyState={<EmptyState title="No AMC records" description="AMC periods are created with each licence." />}
+            emptyState={<EmptyState title="No AMC records" description="Created with each licence." />}
           />
         ))}
 
@@ -1086,11 +1138,12 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortDirection={paymentSort.direction}
             onSortChange={handlePaymentSortChange}
             onRowClick={row => void loadOrgDetail(row.organisation_id)}
+            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
             emptyState={
               <EmptyState
                 title="No payments"
-                description="Record licence, AMC, or seat payments received off-platform."
+                description="Record licence, AMC, or seat payments."
                 action={
                   <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
                     Record payment
@@ -1113,11 +1166,12 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={seatRequestSort.key}
             sortDirection={seatRequestSort.direction}
             onSortChange={handleSeatRequestSortChange}
+            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
             emptyState={
               <EmptyState
                 title="No seat requests"
-                description="Submitted from org Settings after off-platform payment."
+                description="Orgs submit these from Settings after payment."
                 action={
                   <Button variant="outline" size="sm" onClick={() => void loadSeatRequests()}>
                     Refresh
@@ -1130,19 +1184,21 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                 <p className="font-medium text-heading">{row.organisation_name ?? `Org #${row.organisation_id}`}</p>
                 <p className="text-xs text-muted capitalize">{row.status.replace(/_/g, ' ')}</p>
               </div>
-            )}
+            )            }
           />
         ))}
 
       {section === 'audit' && (auditOrgFilter || auditUserFilter) && (
-        <p className="text-sm text-muted flex flex-wrap items-center gap-2">
+        <p className="text-sm text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>
-            Timeline filter
-            {auditOrgFilter ? ` · organisation #${auditOrgFilter}` : ''}
-            {auditUserFilter ? ` · user #${auditUserFilter}` : ''}
+            {auditOrgFilter
+              ? organisations.find(o => String(o.id) === auditOrgFilter)?.name ?? `Organisation ${auditOrgFilter}`
+              : null}
+            {auditOrgFilter && auditUserFilter ? ' · ' : null}
+            {auditUserFilter ? `User ${auditUserFilter}` : null}
           </span>
           <Link to="/platform-admin/audit" className="text-accent font-medium hover:underline">
-            Clear filter
+            Clear
           </Link>
         </p>
       )}
@@ -1163,7 +1219,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             emptyState={
               <EmptyState
                 title="No audit entries"
-                description="Events appear as orgs and subscriptions change."
+                description="Activity appears as organisations change."
                 action={
                   <Button variant="outline" size="sm" onClick={() => void loadAudit()}>
                     Refresh
@@ -1200,7 +1256,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             emptyState={
               <EmptyState
                 title="No releases"
-                description="Create a versioned what’s new pack, then publish it to the licences you choose."
+                description="Create a version, then publish it to licences."
                 action={
                   <Button size="sm" onClick={() => openReleaseEditor(null)}>
                     New release
@@ -1269,15 +1325,20 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         addingSeat={addingSeat}
         onEdit={() => setEditOrgOpen(true)}
         onDelete={() => orgDetail && setDeleteOrgTarget(orgDetail.organisation)}
-        onResetPrimaryAdminSignIn={() => void resetPrimaryAdminSignIn()}
-        resettingPrimaryAdminSignIn={resettingPrimarySignIn}
+        onResetPrimaryAdminSignIn={openResetPrimaryAdminSignIn}
         onNotify={() => void openNotify('org')}
       />
 
       <PlatformSignInCredentialsModal
         open={signInCredentials != null}
-        onClose={() => setSignInCredentials(null)}
+        onClose={() => !resettingPrimarySignIn && setSignInCredentials(null)}
         payload={signInCredentials}
+        generatingPassword={resettingPrimarySignIn}
+        onGeneratePassword={
+          signInCredentials && !signInCredentials.temporary_password
+            ? username => void generatePrimaryAdminPassword(username)
+            : undefined
+        }
       />
 
       <PlatformNotifyModal

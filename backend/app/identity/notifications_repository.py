@@ -14,7 +14,14 @@ from .org_members_repository import find_primary_admin_user
 from .repository import append_audit_log
 
 NOTIFICATION_KINDS = frozenset(
-    {"credentials", "payment_reminder", "product_update", "feature_launch", "release_notes"}
+    {
+        "credentials",
+        "payment_reminder",
+        "product_update",
+        "feature_launch",
+        "release_notes",
+        "product_request",
+    }
 )
 UPDATE_KINDS = frozenset({"product_update", "feature_launch"})
 

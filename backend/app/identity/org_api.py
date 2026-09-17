@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import auth
@@ -13,7 +13,7 @@ from .org_members_repository import (
     create_organisation_member,
     list_organisation_members,
     reset_organisation_member_sign_in,
-    set_organisation_member_password,
+    set_organisation_member_sign_in,
     set_organisation_member_status,
 )
 from .seat_request_repository import (
@@ -119,6 +119,72 @@ def cancel_seat_request_route(request_id: int, request: Request) -> dict[str, An
         return {"request": req}
 
 
+class ProductRequestAttachmentBody(BaseModel):
+    name: str = ""
+    mime: str
+    data: str
+
+
+class ProductRequestBody(BaseModel):
+    kind: str = Field(pattern="^(issue|improvement|requirement)$")
+    message: str = Field(min_length=8, max_length=2000)
+    page_path: str = Field(default="", max_length=500)
+    priority: str = Field(default="p3", pattern="^(p1|p2|p3)$")
+    attachments: list[ProductRequestAttachmentBody] = Field(default_factory=list)
+
+
+@router.get("/product-requests", summary="Your requests to Tradeal")
+def list_my_product_requests(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .product_request_repository import list_product_requests_for_user
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"requests": list_product_requests_for_user(conn, org_id, session.user.id)}
+    with _sqlite_connect() as conn:
+        return {"requests": list_product_requests_for_user(conn, org_id, session.user.id)}
+
+
+@router.post("/product-requests", summary="Send an issue, improvement, or new need to Tradeal")
+def submit_product_request(body: ProductRequestBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .product_request_repository import create_product_request
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            req = create_product_request(
+                conn,
+                organisation_id=org_id,
+                user_id=session.user.id,
+                kind=body.kind,
+                message=body.message,
+                page_path=body.page_path,
+                priority=body.priority,
+                attachments=[item.model_dump() for item in body.attachments],
+            )
+            conn.commit()
+            return {"request": req}
+    with _sqlite_connect() as conn:
+        req = create_product_request(
+            conn,
+            organisation_id=org_id,
+            user_id=session.user.id,
+            kind=body.kind,
+            message=body.message,
+            page_path=body.page_path,
+            priority=body.priority,
+            attachments=[item.model_dump() for item in body.attachments],
+        )
+        conn.commit()
+        return {"request": req}
+
+
 class CreateMemberBody(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     name: str = ""
@@ -133,7 +199,12 @@ class MemberStatusBody(BaseModel):
 
 
 class MemberPasswordBody(BaseModel):
-    password: str = Field(min_length=4)
+    password: str = ""
+    username: str = ""
+
+
+class ResetSignInBody(BaseModel):
+    username: str = ""
 
 
 @router.get("/members", summary="Licensed organisation users")
@@ -219,8 +290,12 @@ def update_member_status(user_id: int, body: MemberStatusBody, request: Request)
 
 
 @router.post("/members/{user_id}/reset-sign-in", summary="Reset member sign-in (org admin)")
-def reset_member_sign_in(user_id: int, request: Request) -> dict[str, Any]:
-    """Generate a temporary password for a team member. Share it securely — shown once in the response."""
+def reset_member_sign_in(
+    user_id: int,
+    request: Request,
+    body: ResetSignInBody | None = None,
+) -> dict[str, Any]:
+    """Optionally set a new username, then generate a temporary password."""
     session = _session(request)
     auth.require_permission(session, "organisation.edit")
     org_id = session.user.organisation_id
@@ -231,6 +306,7 @@ def reset_member_sign_in(user_id: int, request: Request) -> dict[str, Any]:
             status_code=400,
             detail="Ask another organisation admin or Tradeal support to reset your own sign-in",
         )
+    username = (body.username if body else "") or None
     if uses_postgres():
         with _pg_connect() as conn:
             result = reset_organisation_member_sign_in(
@@ -238,6 +314,7 @@ def reset_member_sign_in(user_id: int, request: Request) -> dict[str, Any]:
                 organisation_id=org_id,
                 user_id=user_id,
                 actor_user_id=session.user.id,
+                username=username,
             )
             conn.commit()
             return result
@@ -247,12 +324,13 @@ def reset_member_sign_in(user_id: int, request: Request) -> dict[str, Any]:
             organisation_id=org_id,
             user_id=user_id,
             actor_user_id=session.user.id,
+            username=username,
         )
         conn.commit()
         return result
 
 
-@router.post("/members/{user_id}/password", summary="Set member password (org admin)")
+@router.post("/members/{user_id}/password", summary="Set member username and/or password (org admin)")
 def reset_member_password(user_id: int, body: MemberPasswordBody, request: Request) -> dict[str, Any]:
     session = _session(request)
     auth.require_permission(session, "organisation.edit")
@@ -261,39 +339,44 @@ def reset_member_password(user_id: int, body: MemberPasswordBody, request: Reque
         raise HTTPException(status_code=403, detail="Organisation context required")
     if uses_postgres():
         with _pg_connect() as conn:
-            set_organisation_member_password(
+            result = set_organisation_member_sign_in(
                 conn,
                 organisation_id=org_id,
                 user_id=user_id,
-                password=body.password,
                 actor_user_id=session.user.id,
+                password=body.password,
+                username=body.username,
             )
             conn.commit()
     else:
         with _sqlite_connect() as conn:
-            set_organisation_member_password(
+            result = set_organisation_member_sign_in(
                 conn,
                 organisation_id=org_id,
                 user_id=user_id,
-                password=body.password,
                 actor_user_id=session.user.id,
+                password=body.password,
+                username=body.username,
             )
             conn.commit()
-    return {"ok": True}
+    return result
 
 
 @router.get("/notifications", summary="In-app notifications for the signed-in user")
-def list_my_notifications(request: Request) -> dict[str, Any]:
+def list_my_notifications(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, Any]:
     session = _session(request)
     from .notifications_repository import list_notifications_for_user, unread_count_for_user
 
     if uses_postgres():
         with _pg_connect() as conn:
-            items = list_notifications_for_user(conn, session.user.id)
+            items = list_notifications_for_user(conn, session.user.id, limit=limit)
             unread = unread_count_for_user(conn, session.user.id)
             return {"notifications": items, "unread": unread}
     with _sqlite_connect() as conn:
-        items = list_notifications_for_user(conn, session.user.id)
+        items = list_notifications_for_user(conn, session.user.id, limit=limit)
         unread = unread_count_for_user(conn, session.user.id)
         return {"notifications": items, "unread": unread}
 

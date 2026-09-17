@@ -36,6 +36,7 @@ import { formatDeletionDate } from '../lib/orderDeletion'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
 import { shareOrderOnWhatsApp } from '../lib/whatsappShare'
 import { partyMatches } from '../lib/assistant/partyMatch'
+import { appPath } from '../lib/appShellMode'
 import { useTradeStore } from '../store/TradeStore'
 import { orderDropdownOption } from '../lib/orderSelectOptions'
 
@@ -158,7 +159,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   const editingOrder = isEdit ? store.getOrderByRef(editRef, side) : undefined
   const label = isPO ? 'Purchase Order' : 'Sales Order'
   const shortLabel = isPO ? 'PO' : 'SO'
-  const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
+  const pathPrefix = isPO ? appPath('/purchase-orders') : appPath('/sales-orders')
 
   const lastEntry = store.getLastOrder(side)
   const [saveError, setSaveError] = useState('')
@@ -418,7 +419,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
 
   const handleCancel = () => {
     requestLeave(() => {
-      navigate(sellFromLot ? `/inventory/${sellFromLot.lotId}` : pathPrefix)
+      navigate(sellFromLot ? appPath(`/inventory/${sellFromLot.lotId}`) : pathPrefix)
     })
   }
 
@@ -817,14 +818,14 @@ function SOEntryForm({
         breadcrumb={sellFromLot ? (
           <Breadcrumb items={[
             { label: 'Tradeal', href: '/' },
-            { label: 'Inventory', href: '/inventory' },
-            { label: sellFromLot.lotNumber, href: `/inventory/${sellFromLot.lotId}` },
+            { label: 'Inventory', href: appPath('/inventory') },
+            { label: sellFromLot.lotNumber, href: appPath(`/inventory/${sellFromLot.lotId}`) },
             { label: 'Sell' },
           ]} />
         ) : (
           <Breadcrumb items={[
             { label: 'Tradeal', href: '/' },
-            { label: 'Sales Orders', href: '/sales-orders' },
+            { label: 'Sales Orders', href: appPath('/sales-orders') },
             { label: isEdit ? 'Edit SO' : 'New SO' },
           ]} />
         )}

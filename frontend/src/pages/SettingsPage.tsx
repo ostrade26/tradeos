@@ -29,6 +29,7 @@ import {
   settingsPath,
   type SettingsSectionId,
 } from '../lib/settingsSections'
+import { APP_HOME, appPath } from '../lib/appShellMode'
 import {
   SettingsSectionContent,
   type SettingsSectionHandlers,
@@ -254,6 +255,7 @@ export function SettingsLayout() {
         title="Clear all data?"
         confirmLabel="Clear everything"
         variant="danger"
+        slideLabel="Slide to clear"
       >
         <p className="text-sm text-gray-600 dark:text-muted">
           This removes all orders, lifts, inventory, and directory entries. This cannot be undone.
@@ -290,7 +292,7 @@ export function SettingsHubPage() {
       <PageHeader
         title="Settings"
         subtitle="Choose a category"
-        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Settings' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: APP_HOME }, { label: 'Settings' }]} />}
       />
       <div className="grid gap-3 sm:grid-cols-2">
         {sections.map(section => {
@@ -320,15 +322,15 @@ export function SettingsSectionPage() {
   const { sectionHandlers, showPlanSection, showTeamSection } = useSettingsOutlet()
 
   if (!sectionParam || !isSettingsSectionId(sectionParam)) {
-    return <Navigate to="/settings" replace />
+    return <Navigate to={appPath('/settings')} replace />
   }
 
   const section = sectionParam as SettingsSectionId
   if (section === 'plan' && !showPlanSection) {
-    return <Navigate to="/settings" replace />
+    return <Navigate to={appPath('/settings')} replace />
   }
   if (section === 'team' && !showTeamSection) {
-    return <Navigate to="/settings" replace />
+    return <Navigate to={appPath('/settings')} replace />
   }
 
   const meta = SETTINGS_SECTIONS.find(s => s.id === section)
@@ -338,8 +340,8 @@ export function SettingsSectionPage() {
   const breadcrumb = (
     <Breadcrumb
       items={[
-        { label: 'Tradeal', href: '/' },
-        { label: 'Settings', href: '/settings' },
+        { label: 'Tradeal', href: APP_HOME },
+        { label: 'Settings', href: appPath('/settings') },
         { label: meta?.label ?? section },
       ]}
     />

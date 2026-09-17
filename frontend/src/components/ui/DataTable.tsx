@@ -20,7 +20,7 @@ interface Column<T> {
   sortable?: boolean
   sortValue?: (row: T) => string | number
   /** Multi-button row actions (e.g. Approve / Reject) — wider sticky column than the ⋯ menu. */
-  actionsWide?: boolean
+  actionsWide?: boolean | 'compact'
 }
 
 interface DataTableProps<T> {
@@ -30,6 +30,8 @@ interface DataTableProps<T> {
   selectedRows?: string[]
   /** Highlight this row without checking its box (e.g. open detail). */
   activeRowId?: string
+  /** Extra highlight (e.g. all rows for the open organisation). */
+  isRowActive?: (row: T) => boolean
   onSelectRow?: (id: string) => void
   onSelectAllVisible?: (select: boolean, visibleIds: string[]) => void
   getRowId?: (row: T) => string
@@ -163,6 +165,8 @@ const STICKY_ACTIONS_SHADOW = 'table-sticky-actions'
 /** ⋯ control — horizontal sizing; vertical padding comes from table density. */
 const STICKY_ACTIONS_COL =
   'px-2 w-[3.75rem] min-w-[3.75rem] max-w-[3.75rem] text-center'
+const STICKY_ACTIONS_COL_COMPACT =
+  'px-2 min-w-[7rem] w-[7rem] max-w-[7rem] text-center whitespace-nowrap'
 const STICKY_ACTIONS_COL_WIDE =
   'px-3 min-w-[11.75rem] w-[11.75rem] max-w-[11.75rem] text-right whitespace-nowrap'
 
@@ -176,6 +180,7 @@ export function DataTable<T extends { id?: string | number }>({
   onRowClick,
   selectedRows = [],
   activeRowId,
+  isRowActive,
   onSelectRow,
   onSelectAllVisible,
   getRowId,
@@ -200,7 +205,11 @@ export function DataTable<T extends { id?: string | number }>({
   const lastColumn = columns[lastColIndex]
   const stickActions = stickyLastColumn ?? lastColumn?.key === 'actions'
   const stickyActionsColClass =
-    lastColumn?.actionsWide ? STICKY_ACTIONS_COL_WIDE : STICKY_ACTIONS_COL
+    lastColumn?.actionsWide === 'compact'
+      ? STICKY_ACTIONS_COL_COMPACT
+      : lastColumn?.actionsWide
+        ? STICKY_ACTIONS_COL_WIDE
+        : STICKY_ACTIONS_COL
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(defaultPageSize)
@@ -260,7 +269,7 @@ export function DataTable<T extends { id?: string | number }>({
           {visibleData.map((row, i) => {
             const id = getRowId?.(row) || (row as { id?: string }).id || String(i)
             const checked = selectedRows.includes(id)
-            const highlighted = checked || activeRowId === id
+            const highlighted = checked || activeRowId === id || Boolean(isRowActive?.(row))
             return (
               <div
                 key={id}
@@ -379,7 +388,7 @@ export function DataTable<T extends { id?: string | number }>({
             {visibleData.map((row, i) => {
               const id = getRowId?.(row) || (row as { id?: string }).id || String(i)
               const checked = selectedRows.includes(id)
-              const highlighted = checked || activeRowId === id
+              const highlighted = checked || activeRowId === id || Boolean(isRowActive?.(row))
               return (
                 <tr
                   key={id}

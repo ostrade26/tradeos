@@ -43,6 +43,7 @@ import { useToast } from '../../hooks/useToast'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { REGISTER_TABLE_LAYER_Z } from '../ui/Drawer'
+import { appPath } from '../../lib/appShellMode'
 
 export type OrderListMode = 'pending' | 'completed'
 
@@ -85,7 +86,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const label = isPO ? 'Purchase Order' : 'Sales Order'
   const shortLabel = isPO ? 'PO' : 'SO'
   const partyColumn = isPO ? 'Seller' : 'Buyer'
-  const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
+  const pathPrefix = isPO ? appPath('/purchase-orders') : appPath('/sales-orders')
 
   const handleDockChange = useCallback((docked: boolean) => {
     if (!docked) setDetailPanelOpen(false)
@@ -378,7 +379,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       render: (r: TradeOrder) => {
         const poRef = r.poRef
         if (!poRef) return <span className="text-muted">Not linked</span>
-        const poHref = `/purchase-orders?ref=${encodeURIComponent(poRef)}`
+        const poHref = appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)
         return (
           <Link
             to={poHref}

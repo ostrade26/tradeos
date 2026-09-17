@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { NotificationsDropdown } from './NotificationsDropdown'
 import { UserMenu } from './UserMenu'
 import { cn } from '../../lib/utils'
-import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface HeaderProps {
   onOpenCommand: () => void
@@ -21,7 +21,7 @@ export function Header({
 }: HeaderProps) {
   const location = useLocation()
   const platformAdminMode = isPlatformAdminPath(location.pathname)
-  const settingsPath = platformAdminMode ? '/platform-admin/settings' : '/settings'
+  const settingsPath = platformAdminMode ? '/platform-admin/settings' : appPath('/settings')
 
   return (
     <header className="z-30 flex h-14 sm:h-[70px] shrink-0 items-center gap-1.5 sm:gap-3 bg-white dark:bg-card border-b border-gray-200/80 dark:border-gray-700/50 px-2.5 sm:px-6 pt-[env(safe-area-inset-top)] shadow-sm">

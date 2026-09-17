@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { CreditCard, Database, Keyboard, Palette, User, Users } from 'lucide-react'
+import { appPath } from './appShellMode'
 
 export type SettingsSectionId = 'appearance' | 'account' | 'data' | 'plan' | 'team' | 'shortcuts'
 
@@ -67,9 +68,10 @@ export function isSettingsSectionId(value: string | undefined): value is Setting
 }
 
 export function settingsPath(segment: string) {
-  return `/settings/${segment}`
+  return appPath(`/settings/${segment}`)
 }
 
 export function isSettingsAreaPath(pathname: string) {
-  return pathname === '/settings' || pathname.startsWith('/settings/')
+  const base = appPath('/settings')
+  return pathname === base || pathname.startsWith(`${base}/`)
 }

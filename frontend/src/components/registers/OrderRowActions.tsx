@@ -5,6 +5,7 @@ import type { TradeOrder } from '../../data/mockData'
 import { usePermissions } from '../../hooks/useAuth'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { DetailPanelMenu, groupMenuItems, type DetailPanelMenuItem } from '../ui/DetailPanelMenu'
+import { appPath } from '../../lib/appShellMode'
 
 interface OrderRowActionsProps {
   order: TradeOrder
@@ -36,7 +37,7 @@ export function OrderRowActions({
   const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
   const { classes: density } = useTableDensity()
   const isPO = order.side === 'purchase'
-  const pathPrefix = isPO ? '/purchase-orders' : '/sales-orders'
+  const pathPrefix = isPO ? appPath('/purchase-orders') : appPath('/sales-orders')
   const ref = encodeURIComponent(order.ref)
 
   const items = useMemo((): DetailPanelMenuItem[] => groupMenuItems([
@@ -50,7 +51,7 @@ export function OrderRowActions({
               type: 'link' as const,
               label: (sellAvailableQty ?? 0) > 0 ? 'Sell available' : 'Create SO',
               icon: Plus,
-              href: `/sales-orders/new?poRef=${ref}`,
+              href: appPath(`/sales-orders/new?poRef=${ref}`),
             }]
           : []),
       ],

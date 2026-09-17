@@ -238,11 +238,14 @@ interface ModalProps {
   children: ReactNode
   footer?: ReactNode
   footerClassName?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   /** Hide the title bar — use for hero-style dialogs; pass `title` for screen readers. */
   hideHeader?: boolean
   /** When false, Escape, overlay click, and the close button are disabled. */
   dismissible?: boolean
+  bodyClassName?: string
+  /** Optional second body below the main one — muted surface, same padding as body. */
+  secondaryBody?: ReactNode
 }
 
 export function Modal({
@@ -256,6 +259,8 @@ export function Modal({
   size = 'md',
   hideHeader = false,
   dismissible = true,
+  bodyClassName,
+  secondaryBody,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, open)
@@ -277,7 +282,7 @@ export function Modal({
 
   if (!open) return null
 
-  const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' }
+  const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-5xl' }
 
   return createPortal(
     <div className="fixed inset-0 flex items-center justify-center p-5 sm:p-8" style={{ zIndex: OVERLAY_Z }}>
@@ -289,7 +294,8 @@ export function Modal({
         aria-labelledby={hideHeader ? undefined : 'modal-title'}
         aria-label={hideHeader ? title : undefined}
         className={cn(
-          'relative z-10 w-full max-h-modal overflow-y-auto rounded-xl bg-white dark:bg-card shadow-xl animate-fade-in overscroll-contain',
+          'relative z-10 w-full max-h-modal rounded-xl bg-white dark:bg-card shadow-xl animate-fade-in overscroll-contain',
+          bodyClassName?.includes('split-pane') ? 'flex flex-col overflow-hidden' : 'overflow-y-auto',
           sizes[size],
         )}
         onMouseDown={e => e.stopPropagation()}
@@ -309,7 +315,7 @@ export function Modal({
               ) : null}
             </>
           ) : (
-            <div className="flex items-start justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-5">
+            <div className="flex shrink-0 items-start justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-5">
               <div className="min-w-0 pr-3">
                 <h2 id="modal-title" className="text-lg font-semibold text-heading">{title}</h2>
                 {subtitle ? <p className="text-sm text-muted mt-0.5">{subtitle}</p> : null}
@@ -321,10 +327,15 @@ export function Modal({
               ) : null}
             </div>
           )}
-          <div className={cn('px-6', hideHeader ? 'pt-8 pb-6' : 'py-6')}>{children}</div>
+          <div className={cn('px-6', hideHeader ? 'pt-8 pb-6' : 'py-6', bodyClassName)}>{children}</div>
+          {secondaryBody ? (
+            <div className="border-t border-gray-200 bg-gray-100/80 px-6 py-6 dark:border-gray-700 dark:bg-gray-800/40">
+              {secondaryBody}
+            </div>
+          ) : null}
           {footer && (
             <div className={cn(
-              'flex border-t border-gray-200 dark:border-gray-700 px-6 py-6',
+              'flex shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-6',
               footerClassName ?? 'items-center justify-end gap-3',
             )}>
               {footer}

@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { lazy, Suspense, type ReactNode } from 'react'
 import { TableSkeleton } from './components/ui/DataTable'
 import { ThemeProvider } from './hooks/useTheme'
@@ -16,8 +16,10 @@ import { PlatformAdminPage } from './pages/PlatformAdminPage'
 import { PlatformAdminProfilePage } from './pages/PlatformAdminProfilePage'
 import { PlatformAdminSettingsPage } from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
+import { APP_HOME, appPath, isAppPath } from './lib/appShellMode'
 import { MarketingPage } from './pages/MarketingPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { InboxPage } from './pages/InboxPage'
 import { ContractsPage } from './pages/ContractsPage'
 import { CreateContractPage } from './pages/CreateContractPage'
 import { ContractDetailsPage } from './pages/ContractDetailsPage'
@@ -68,6 +70,13 @@ function ShellLayout() {
   )
 }
 
+/** Old org URLs (`/purchase-orders`) move under `/app`. */
+function RedirectIntoApp() {
+  const { pathname, search, hash } = useLocation()
+  if (isAppPath(pathname)) return <Navigate to={APP_HOME} replace />
+  return <Navigate to={`${APP_HOME}${pathname}${search}${hash}`} replace />
+}
+
 /** App-wide providers must live inside the router tree (createBrowserRouter). */
 function RootProviders() {
   return (
@@ -100,6 +109,7 @@ const router = createBrowserRouter([
                 children: [
                   { path: 'platform-admin/profile', element: <PlatformAdminProfilePage /> },
                   { path: 'platform-admin/settings', element: <PlatformAdminSettingsPage /> },
+                  { path: 'platform-admin/notifications', element: <InboxPage /> },
                   { path: 'platform-admin', element: <Navigate to="/platform-admin/organisations" replace /> },
                   { path: 'platform-admin/:section', element: <PlatformAdminPage /> },
                 ],
@@ -110,66 +120,66 @@ const router = createBrowserRouter([
             element: <RequireOrganisationUser />,
             children: [
               {
+                path: 'app',
                 element: <ShellLayout />,
                 children: [
-                  { path: 'app', element: <DashboardPage /> },
-
-          { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
-          { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },
-          { path: 'purchase-orders/register', element: <Navigate to="/purchase-orders?view=completed" replace /> },
-          { path: 'purchase-orders/new', element: withSuspense(<POEntryPage />) },
-          { path: 'purchase-orders/:ref/flow', element: <OrderFlowPage /> },
-          { path: 'purchase-orders/:ref/timeline', element: <OrderTimelinePage /> },
-          {
-            path: 'purchase-orders/:ref/edit',
-            element: withSuspense(<RequireEditOrders><POEditPage /></RequireEditOrders>),
-          },
-          { path: 'sales-orders', element: <SalesOrdersPage /> },
-          { path: 'sales-orders/pending', element: <Navigate to="/sales-orders" replace /> },
-          { path: 'sales-orders/register', element: <Navigate to="/sales-orders?view=completed" replace /> },
-          { path: 'sales-orders/new', element: withSuspense(<SOEntryPage />) },
-          { path: 'sales-orders/:ref/flow', element: <OrderFlowPage /> },
-          { path: 'sales-orders/:ref/timeline', element: <OrderTimelinePage /> },
-          {
-            path: 'sales-orders/:ref/edit',
-            element: withSuspense(<RequireEditOrders><SOEditPage /></RequireEditOrders>),
-          },
-          { path: 'lifts', element: <LiftRegisterPage /> },
-          { path: 'lifts/register', element: <Navigate to="/lifts?view=completed" replace /> },
-          { path: 'lifts/new', element: withSuspense(<LiftEntryPage />) },
-          { path: 'lifts/:liftRef/edit', element: withSuspense(<LiftEditPage />) },
-
-          { path: 'contracts', element: <ContractsPage /> },
-          { path: 'contracts/new', element: <CreateContractPage /> },
-          { path: 'contracts/:id', element: <ContractDetailsPage /> },
-          { path: 'inventory', element: <InventoryPage /> },
-          { path: 'inventory/:lotId/sell', element: <SellInventoryPage /> },
-          { path: 'inventory/:lotId', element: <LotDetailsPage /> },
-          { path: 'deliveries', element: <Navigate to="/lifts" replace /> },
-          { path: 'directory', element: <DirectoryPage /> },
-          { path: 'party', element: <PartyPage /> },
-          { path: 'brokers', element: <Navigate to="/directory?tab=brokers" replace /> },
-          { path: 'producers', element: <Navigate to="/directory?tab=parties" replace /> },
-          { path: 'retailers', element: <Navigate to="/directory?tab=parties" replace /> },
-          { path: 'payments', element: <Navigate to="/app" replace /> },
-          { path: 'reports', element: <ReportsDashboardPage /> },
-          { path: 'reports/:reportId', element: <ReportViewPage /> },
-          { path: 'analytics', element: <AnalyticsPage /> },
-          { path: 'market-news', element: <Navigate to="/app" replace /> },
-          { path: 'activity', element: <ActivityPage /> },
-          { path: 'profile', element: <ProfilePage /> },
-          {
-            path: 'settings',
-            element: <SettingsLayout />,
-            children: [
-              { index: true, element: <SettingsHubPage /> },
-              { path: ':section', element: <SettingsSectionPage /> },
-            ],
-          },
-
-                  { path: '*', element: <Navigate to="/app" replace /> },
+                  { index: true, element: <DashboardPage /> },
+                  { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
+                  { path: 'purchase-orders/pending', element: <Navigate to={appPath('/purchase-orders')} replace /> },
+                  { path: 'purchase-orders/register', element: <Navigate to={appPath('/purchase-orders?view=completed')} replace /> },
+                  { path: 'purchase-orders/new', element: withSuspense(<POEntryPage />) },
+                  { path: 'purchase-orders/:ref/flow', element: <OrderFlowPage /> },
+                  { path: 'purchase-orders/:ref/timeline', element: <OrderTimelinePage /> },
+                  {
+                    path: 'purchase-orders/:ref/edit',
+                    element: withSuspense(<RequireEditOrders><POEditPage /></RequireEditOrders>),
+                  },
+                  { path: 'sales-orders', element: <SalesOrdersPage /> },
+                  { path: 'sales-orders/pending', element: <Navigate to={appPath('/sales-orders')} replace /> },
+                  { path: 'sales-orders/register', element: <Navigate to={appPath('/sales-orders?view=completed')} replace /> },
+                  { path: 'sales-orders/new', element: withSuspense(<SOEntryPage />) },
+                  { path: 'sales-orders/:ref/flow', element: <OrderFlowPage /> },
+                  { path: 'sales-orders/:ref/timeline', element: <OrderTimelinePage /> },
+                  {
+                    path: 'sales-orders/:ref/edit',
+                    element: withSuspense(<RequireEditOrders><SOEditPage /></RequireEditOrders>),
+                  },
+                  { path: 'lifts', element: <LiftRegisterPage /> },
+                  { path: 'lifts/register', element: <Navigate to={appPath('/lifts?view=completed')} replace /> },
+                  { path: 'lifts/new', element: withSuspense(<LiftEntryPage />) },
+                  { path: 'lifts/:liftRef/edit', element: withSuspense(<LiftEditPage />) },
+                  { path: 'contracts', element: <ContractsPage /> },
+                  { path: 'contracts/new', element: <CreateContractPage /> },
+                  { path: 'contracts/:id', element: <ContractDetailsPage /> },
+                  { path: 'inventory', element: <InventoryPage /> },
+                  { path: 'inventory/:lotId/sell', element: <SellInventoryPage /> },
+                  { path: 'inventory/:lotId', element: <LotDetailsPage /> },
+                  { path: 'deliveries', element: <Navigate to={appPath('/lifts')} replace /> },
+                  { path: 'directory', element: <DirectoryPage /> },
+                  { path: 'party', element: <PartyPage /> },
+                  { path: 'brokers', element: <Navigate to={appPath('/directory?tab=brokers')} replace /> },
+                  { path: 'producers', element: <Navigate to={appPath('/directory?tab=parties')} replace /> },
+                  { path: 'retailers', element: <Navigate to={appPath('/directory?tab=parties')} replace /> },
+                  { path: 'payments', element: <Navigate to={APP_HOME} replace /> },
+                  { path: 'reports', element: <ReportsDashboardPage /> },
+                  { path: 'reports/:reportId', element: <ReportViewPage /> },
+                  { path: 'analytics', element: <AnalyticsPage /> },
+                  { path: 'market-news', element: <Navigate to={APP_HOME} replace /> },
+                  { path: 'activity', element: <ActivityPage /> },
+                  { path: 'notifications', element: <InboxPage /> },
+                  { path: 'profile', element: <ProfilePage /> },
+                  {
+                    path: 'settings',
+                    element: <SettingsLayout />,
+                    children: [
+                      { index: true, element: <SettingsHubPage /> },
+                      { path: ':section', element: <SettingsSectionPage /> },
+                    ],
+                  },
+                  { path: '*', element: <Navigate to={APP_HOME} replace /> },
                 ],
               },
+              { path: '*', element: <RedirectIntoApp /> },
             ],
           },
         ],

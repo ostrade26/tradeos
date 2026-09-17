@@ -52,7 +52,7 @@ export function LoginPage() {
             T
           </div>
           <h1 className="text-2xl font-semibold text-heading">Sign in to Tradeal</h1>
-          <p className="text-sm text-muted mt-2">Sign in with your organisation email and password</p>
+          <p className="text-sm text-muted mt-2">Sign in with your username and password</p>
         </div>
 
         <form
@@ -60,11 +60,11 @@ export function LoginPage() {
           className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
         >
           <Input
-            label="Email"
-            type="email"
+            label="Username"
+            type="text"
             value={username}
             onChange={e => setUsername(e.target.value)}
-            autoComplete="email"
+            autoComplete="username"
             autoFocus
             required
           />
@@ -95,10 +95,12 @@ export function LoginPage() {
         </div>
 
         <div className="mt-6 rounded-md border border-gray-200 dark:border-gray-700 bg-card/60 px-4 py-3 text-sm text-muted leading-relaxed">
-          <p className="font-medium text-heading text-sm mb-1">Forgot email or password?</p>
+          <p className="font-medium text-heading text-sm mb-1">Forgot username or password?</p>
           <p>
-            Sign-in uses your <span className="text-heading">organisation email</span>. Ask your organisation admin
-            to reset your password from Settings → Team, or contact Tradeal if you are the only admin.
+            Sign-in uses your <span className="text-heading">username</span>. Organisation users: ask your
+            organisation admin to reset the password from Settings → Team. Tradeal staff: ask another Tradeal
+            Admin. If you are the only Tradeal Admin, you must still be able to sign in — add a second admin from
+            Settings first.
           </p>
         </div>
       </div>

@@ -12,6 +12,8 @@ from fastapi import HTTPException
 
 from ..db import _pg_connect, _sqlite_connect, row_dict, row_get, uses_postgres
 from .billing_schema import format_seat_label, org_code_for_id
+from .email_validation import optional_contact_email
+from .login_username import require_login_username
 from .security import hash_password
 
 
@@ -27,29 +29,81 @@ def normalize_login_email(email: str) -> str:
     return email.strip().lower()
 
 
-def login_identity_in_use(conn, username: str, email: str) -> bool:
-    """True if username or email is already taken (login identity)."""
+def login_identity_in_use(
+    conn,
+    username: str,
+    email: str,
+    *,
+    exclude_user_id: int | None = None,
+) -> bool:
+    """True if username or a non-empty email is already taken as a login identity."""
+    keys: list[str] = []
     user_key = normalize_login_email(username)
+    if user_key:
+        keys.append(user_key)
     email_key = normalize_login_email(email)
+    if email_key and email_key not in keys:
+        keys.append(email_key)
+    if not keys:
+        return False
+    extra = ""
+    params: list[Any] = list(keys + keys)
+    if exclude_user_id is not None:
+        extra = " AND id <> %s" if uses_postgres() else " AND id <> ?"
+        params.append(exclude_user_id)
     if uses_postgres():
+        placeholders = ", ".join(["%s"] * len(keys))
         row = conn.execute(
-            """
+            f"""
             SELECT 1 FROM users
-            WHERE lower(username) = %s OR lower(email) = %s
+            WHERE (
+                lower(username) IN ({placeholders})
+                OR (coalesce(email, '') <> '' AND lower(email) IN ({placeholders}))
+            ){extra}
             LIMIT 1
             """,
-            (user_key, email_key),
+            tuple(params),
         ).fetchone()
     else:
+        placeholders = ", ".join(["?"] * len(keys))
         row = conn.execute(
-            """
+            f"""
             SELECT 1 FROM users
-            WHERE lower(username) = ? OR lower(email) = ?
+            WHERE (
+                lower(username) IN ({placeholders})
+                OR (coalesce(email, '') <> '' AND lower(email) IN ({placeholders}))
+            ){extra}
             LIMIT 1
             """,
-            (user_key, email_key),
+            tuple(params),
         ).fetchone()
     return row is not None
+
+
+def set_user_login_username(conn, user_id: int, username: str) -> str:
+    """Set a user's sign-in username. Unchanged values (including legacy emails) are kept."""
+    q = "SELECT username FROM users WHERE id = %s" if uses_postgres() else "SELECT username FROM users WHERE id = ?"
+    row = conn.execute(q, (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    current = str(_mapping(row).get("username") or "")
+    login = require_login_username(username, allow_existing=current)
+    if login == current.strip().lower():
+        return login
+    if login_identity_in_use(conn, login, "", exclude_user_id=user_id):
+        raise HTTPException(status_code=400, detail="That username is already in use")
+    now = _now()
+    if uses_postgres():
+        conn.execute(
+            "UPDATE users SET username = %s, updated_at = %s WHERE id = %s",
+            (login, now, user_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE users SET username = ?, updated_at = ? WHERE id = ?",
+            (login, now, user_id),
+        )
+    return login
 
 
 def default_org_user_password() -> str:
@@ -369,7 +423,19 @@ def assert_user_org_access(conn, user_id: int, role_slug: str) -> None:
 
 def get_active_subscription(conn, organisation_id: int) -> dict[str, Any] | None:
     q = """
-        SELECT s.*, p.slug AS plan_slug, p.name AS plan_name, p.description AS plan_description
+        SELECT s.*,
+               p.slug AS plan_slug,
+               p.name AS plan_name,
+               p.description AS plan_description,
+               p.licence_type AS plan_licence_type,
+               p.licence_price_cents AS plan_licence_price_cents,
+               p.included_admin_seats AS plan_included_admin_seats,
+               p.included_operator_seats AS plan_included_operator_seats,
+               p.additional_seat_licence_cents AS plan_additional_seat_licence_cents,
+               p.amc_price_cents AS plan_amc_price_cents,
+               p.additional_seat_amc_cents AS plan_additional_seat_amc_cents,
+               p.amc_duration_months AS plan_amc_duration_months,
+               p.amc_grace_days AS plan_amc_grace_days
         FROM subscriptions s
         JOIN subscription_plans p ON p.id = s.plan_id
         WHERE s.organisation_id = ?
@@ -507,6 +573,7 @@ def add_purchased_seat(
             "added": count,
             "seat_type": seat_type,
         },
+        conn=conn,
     )
     from .licence_repository import bump_additional_seats
 
@@ -766,6 +833,7 @@ def delete_platform_user(conn, user_id: int, *, actor_user_id: int) -> dict[str,
         entity_type="user",
         entity_id=str(user_id),
         old_value=snapshot,
+        conn=conn,
     )
     return snapshot
 
@@ -903,6 +971,7 @@ def delete_organisation(conn, org_id: int, *, actor_user_id: int) -> dict[str, A
         entity_type="organisation",
         entity_id=str(org_id),
         old_value=snapshot,
+        conn=conn,
     )
     return snapshot
 
@@ -923,15 +992,13 @@ def create_organisation_with_primary_admin(
         raise HTTPException(status_code=400, detail="Name is required")
 
     admin_name = primary_admin.get("name", "").strip() or "Organisation Admin"
-    email = normalize_login_email(primary_admin.get("email", ""))
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Primary admin email is required")
+    username = require_login_username(primary_admin.get("username", ""))
+    email = optional_contact_email(primary_admin.get("email", ""))
     mobile = primary_admin.get("mobile", "").strip()
-    username = normalize_login_email(primary_admin.get("username", "")) or email
     if login_identity_in_use(conn, username, email):
         raise HTTPException(
             status_code=409,
-            detail="A user with this login email already exists.",
+            detail="This username or email is already in use.",
         )
 
     now = _now()

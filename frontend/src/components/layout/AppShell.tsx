@@ -10,6 +10,7 @@ import { ApiStatusBanner } from './ApiStatusBanner'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { usePermissions } from '../../hooks/useAuth'
+import { appPath } from '../../lib/appShellMode'
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -50,9 +51,9 @@ export function AppShell() {
         setAssistantOpen(true)
       }
       if (isTypingTarget(e.target)) return
-      if (e.key === 'F1' && hasPermission('purchase.create')) { e.preventDefault(); navigate('/purchase-orders/new') }
-      if (e.key === 'F3' && hasPermission('sales.create')) { e.preventDefault(); navigate('/sales-orders/new') }
-      if (e.key === 'F5' && hasPermission('lifts.create')) { e.preventDefault(); navigate('/lifts/new') }
+      if (e.key === 'F1' && hasPermission('purchase.create')) { e.preventDefault(); navigate(appPath('/purchase-orders/new')) }
+      if (e.key === 'F3' && hasPermission('sales.create')) { e.preventDefault(); navigate(appPath('/sales-orders/new')) }
+      if (e.key === 'F5' && hasPermission('lifts.create')) { e.preventDefault(); navigate(appPath('/lifts/new')) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)

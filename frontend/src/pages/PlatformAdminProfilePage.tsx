@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useUser } from '../hooks/useUser'
 import { useToast } from '../hooks/useToast'
 import { ChangePasswordModal } from '../components/settings/ChangePasswordForm'
+import { loginUsernameError } from '../lib/username'
 
 export function PlatformAdminProfilePage() {
   const { roleLabel, session } = useAuth()
@@ -25,9 +26,19 @@ export function PlatformAdminProfilePage() {
     setForm(prev => ({ ...prev, [key]: e.target.value }))
   }
 
-  const handleSave = () => {
-    updateProfile(form)
-    toast.success('Profile updated')
+  const usernameError = loginUsernameError(form.username, { allowCurrent: session?.username })
+
+  const handleSave = async () => {
+    if (usernameError) {
+      toast.error(usernameError)
+      return
+    }
+    try {
+      await updateProfile({ ...form, username: form.username.trim().toLowerCase() })
+      toast.success('Profile updated')
+    } catch {
+      toast.error('Could not save profile')
+    }
   }
 
   const handleReset = () => {
@@ -60,15 +71,21 @@ export function PlatformAdminProfilePage() {
           <div className="min-w-0">
             <p className="text-base font-semibold text-heading truncate">{form.name || session?.name || '—'}</p>
             <p className="text-sm text-muted">{roleLabel}</p>
-            {session?.username && (
-              <p className="text-xs text-muted mt-0.5 truncate">@{session.username}</p>
+            {form.username && (
+              <p className="text-xs text-muted mt-0.5 truncate">@{form.username}</p>
             )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Display name" value={form.name} onChange={set('name')} placeholder="" />
-          <Input label="Username" value={session?.username ?? ''} readOnly />
+          <Input
+            label="Username"
+            value={form.username}
+            onChange={set('username')}
+            error={usernameError ?? undefined}
+            autoComplete="off"
+          />
           <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
           <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
@@ -78,7 +95,7 @@ export function PlatformAdminProfilePage() {
         </div>
 
         <div className="flex items-center gap-2 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <Button onClick={handleSave} disabled={!dirty}>
+          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError)}>
             Save changes
           </Button>
           <Button variant="outline" onClick={handleReset} disabled={!dirty}>

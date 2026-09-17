@@ -25,19 +25,32 @@ export function DetailGroup({
   icon: Icon,
   children,
   className,
+  surface = 'plain',
+  trailing,
 }: {
   title: string
   icon: LucideIcon
   children: ReactNode
   className?: string
+  surface?: 'plain' | 'muted'
+  trailing?: ReactNode
 }) {
   return (
     <section className={cn(sectionPad, className)}>
-      <div className="flex items-center gap-2.5 mb-3">
-        <Icon className="h-4 w-4 text-muted shrink-0" />
-        <h4 className="text-sm font-semibold text-heading">{title}</h4>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon className="h-4 w-4 text-muted shrink-0" />
+          <h4 className="text-sm font-semibold text-heading">{title}</h4>
+        </div>
+        {trailing}
       </div>
-      <div>{children}</div>
+      <div
+        className={cn(
+          surface === 'muted' && 'rounded-md bg-gray-50 dark:bg-gray-800/50 px-4 py-4',
+        )}
+      >
+        {children}
+      </div>
     </section>
   )
 }

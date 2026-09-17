@@ -360,6 +360,11 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     }
     const { data: next, result } = response
     setData(normalizeTradeState(next))
+    if (typeof window !== 'undefined') {
+      queueMicrotask(() => {
+        window.dispatchEvent(new Event('tradeal-inbox-refresh'))
+      })
+    }
     return result
   }, [])
 

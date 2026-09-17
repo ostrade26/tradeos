@@ -3,12 +3,12 @@ import { Link, useLocation } from 'react-router-dom'
 import { Plus, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { usePermissions } from '../../hooks/useAuth'
-import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 const ALL_ACTIONS = [
-  { to: '/purchase-orders/new', label: 'New PO', icon: ArrowDownToLine, permission: 'purchase.create' },
-  { to: '/sales-orders/new', label: 'New SO', icon: ArrowUpFromLine, permission: 'sales.create' },
-  { to: '/lifts/new', label: 'Record Lift', icon: Scale, permission: 'lifts.create' },
+  { to: appPath('/purchase-orders/new'), label: 'New PO', icon: ArrowDownToLine, permission: 'purchase.create' },
+  { to: appPath('/sales-orders/new'), label: 'New SO', icon: ArrowUpFromLine, permission: 'sales.create' },
+  { to: appPath('/lifts/new'), label: 'Record Lift', icon: Scale, permission: 'lifts.create' },
 ] as const
 
 function shouldHideFab(pathname: string, actions: readonly { to: string }[]) {

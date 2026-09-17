@@ -61,10 +61,10 @@ class TradeService:
         self.organisation_id = organisation_id
 
     def _read(self) -> dict:
-        return load_and_normalize(get_state(self.organisation_id))
+        return apply_lift_totals(load_and_normalize(get_state(self.organisation_id)))
 
     def _write(self, data: dict) -> dict:
-        normalized = load_and_normalize(data)
+        normalized = apply_lift_totals(load_and_normalize(data))
         save_state(normalized, self.organisation_id)
         return normalized
 

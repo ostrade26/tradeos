@@ -13,6 +13,7 @@ import { DashboardRecentActivity } from '../components/dashboard/DashboardRecent
 import { DashboardExceptionsSnapshot } from '../components/dashboard/DashboardExceptionsSnapshot'
 import { DashboardInventorySnapshot } from '../components/dashboard/DashboardInventorySnapshot'
 import { buildActionInbox } from '../lib/actionInbox'
+import { appPath } from '../lib/appShellMode'
 
 export function DashboardPage() {
   const store = useTradeStore()
@@ -54,7 +55,7 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 min-[520px]:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatCard
-          to="/inventory"
+          to={appPath('/inventory')}
           label="Inventory Value"
           value={formatCurrency(inventoryValue)}
           change={lots.length ? `${formatQty(totalStockMt)} on hand` : 'No lots yet'}
@@ -67,7 +68,7 @@ export function DashboardPage() {
           icon={<Package className="h-4 w-4" />}
         />
         <StatCard
-          to="/purchase-orders"
+          to={appPath('/purchase-orders')}
           label="Open POs"
           value={String(poPending.length)}
           change={poPending.length ? `${formatQty(poToLiftMt)} to lift` : 'None open'}
@@ -79,7 +80,7 @@ export function DashboardPage() {
           icon={<FileText className="h-4 w-4" />}
         />
         <StatCard
-          to="/sales-orders"
+          to={appPath('/sales-orders')}
           label="Open SOs"
           value={String(soPending.length)}
           change={soPending.length ? `${formatQty(soToLiftMt)} to lift` : 'None open'}
@@ -91,7 +92,7 @@ export function DashboardPage() {
           icon={<Send className="h-4 w-4" />}
         />
         <StatCard
-          to="/lifts"
+          to={appPath('/lifts')}
           label="Lifts"
           value={String(store.lifts.length)}
           change={pendingLifts.length ? `${pendingLifts.length} in transit` : 'None in transit'}

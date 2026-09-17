@@ -78,7 +78,6 @@ export function useUnsavedChangesGuard({
       title={title}
       confirmLabel="Leave without saving"
       cancelLabel="Stay on page"
-      variant="danger"
     >
       <p className="text-sm text-muted leading-relaxed">{message}</p>
     </ConfirmDialog>

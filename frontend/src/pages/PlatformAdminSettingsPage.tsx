@@ -1,16 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Moon, Sun, User, ChevronRight, Palette, Rows3, KeyRound } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb } from '../components/ui/Tabs'
 import { Card, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { Badge } from '../components/ui/Badge'
 import { useTheme } from '../hooks/useTheme'
 import { useTableDensity } from '../hooks/useTableDensity'
+import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../hooks/useToast'
 import type { TableDensity } from '../lib/tableDensity'
 import { cn } from '../lib/utils'
 import { CUSTOM_ACCENT_ID } from '../lib/accentColor'
 import { ChangePasswordModal } from '../components/settings/ChangePasswordForm'
+import { PlatformCreateAdminModal } from '../components/platform/PlatformCreateAdminModal'
+import {
+  PlatformSignInCredentialsModal,
+  type SignInCredentialsPayload,
+} from '../components/platform/PlatformSignInCredentialsModal'
+import { platformApi, type PlatformAdminAccount } from '../api/platformApi'
+import { ApiError } from '../api/client'
 
 function SettingRow({
   icon: Icon,
@@ -43,7 +53,73 @@ export function PlatformAdminSettingsPage() {
   const { theme, setTheme, accentId, accentPreset, accentPresets, customHex, setAccentId, setCustomAccent } =
     useTheme()
   const { density, setDensity } = useTableDensity()
+  const { session } = useAuth()
+  const toast = useToast()
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [admins, setAdmins] = useState<PlatformAdminAccount[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [credentials, setCredentials] = useState<SignInCredentialsPayload | null>(null)
+
+  const loadAdmins = async () => {
+    try {
+      const res = await platformApi.listAdmins()
+      setAdmins(res.admins)
+    } catch {
+      setAdmins([])
+    }
+  }
+
+  useEffect(() => {
+    void loadAdmins()
+  }, [])
+
+  const toCredentials = (admin: PlatformAdminAccount): SignInCredentialsPayload => ({
+    name: admin.name,
+    login_id: admin.login_id || admin.username,
+    username: admin.username,
+    email: admin.email,
+    temporary_password: admin.temporary_password,
+  })
+
+  const addAdmin = async (body: { name: string; username: string }) => {
+    setCreating(true)
+    try {
+      const res = await platformApi.createAdmin(body)
+      setCreateOpen(false)
+      setCredentials(toCredentials(res.admin))
+      toast.success('Tradeal Admin added')
+      await loadAdmins()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not add Tradeal Admin')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const resetAdmin = async (username: string) => {
+    const userId = credentials?.recipient_user_id
+    if (!userId) return
+    setResetBusy(true)
+    try {
+      const res = await platformApi.resetAdminSignIn(userId, { username })
+      setCredentials({
+        name: res.name,
+        login_id: res.login_id || res.username,
+        username: res.username,
+        email: res.email,
+        temporary_password: res.temporary_password,
+        recipient_user_id: userId,
+      })
+      toast.success('Sign-in reset')
+      await loadAdmins()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
+    } finally {
+      setResetBusy(false)
+    }
+  }
 
   return (
     <div className="animate-fade-in max-w-2xl">
@@ -208,9 +284,81 @@ export function PlatformAdminSettingsPage() {
             />
           </div>
         </Card>
+
+        <Card padding={false}>
+          <div className="px-6 pt-6 flex items-start justify-between gap-4">
+            <CardHeader
+              title="Tradeal team"
+              subtitle={
+                admins.length < 2
+                  ? 'You are the only Tradeal Admin. Add a second person so one of you can reset the other if a password is forgotten.'
+                  : 'Platform console operators. One of you can reset the other’s sign-in if they are locked out.'
+              }
+            />
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              Add admin
+            </Button>
+          </div>
+          <div className="px-6 pb-2">
+            {admins.map(admin => {
+              const isYou = session?.userId === admin.id
+              return (
+                <div
+                  key={admin.id}
+                  className="flex items-center justify-between gap-4 py-4 border-b border-gray-200 dark:border-gray-700 last:border-0"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-medium text-heading truncate">{admin.name || admin.username}</p>
+                      {isYou ? <Badge variant="info">You</Badge> : null}
+                    </div>
+                    <p className="text-xs text-muted font-mono mt-0.5 truncate">@{admin.username}</p>
+                  </div>
+                  {isYou ? (
+                    <p className="text-xs text-muted shrink-0">Change password above</p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCredentials({
+                          name: admin.name,
+                          login_id: admin.login_id || admin.username,
+                          username: admin.username,
+                          email: admin.email,
+                          recipient_user_id: admin.id,
+                        })
+                      }
+                    >
+                      Reset sign-in
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Card>
       </div>
 
       <ChangePasswordModal open={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} />
+      <PlatformCreateAdminModal
+        open={createOpen}
+        onClose={() => !creating && setCreateOpen(false)}
+        loading={creating}
+        onSubmit={body => void addAdmin(body)}
+      />
+      <PlatformSignInCredentialsModal
+        open={credentials != null}
+        onClose={() => !resetBusy && setCredentials(null)}
+        payload={credentials}
+        title="Tradeal Admin sign-in"
+        generatingPassword={resetBusy}
+        onGeneratePassword={
+          credentials && !credentials.temporary_password
+            ? username => void resetAdmin(username)
+            : undefined
+        }
+      />
     </div>
   )
 }

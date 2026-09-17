@@ -30,8 +30,8 @@ export function OrgTeamRowActions({
 }) {
   const { classes: density } = useTableDensity()
   const passwordLabel = memberPasswordIsSet(member, passwordConfiguredIds)
-    ? 'Change password'
-    : 'Set password'
+    ? 'Change sign-in'
+    : 'Set sign-in'
 
   const items = useMemo(() => {
     const groups: { items: Parameters<typeof groupMenuItems>[0][number]['items'] }[] = [

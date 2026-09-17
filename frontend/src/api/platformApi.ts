@@ -97,6 +97,15 @@ export interface OrganisationSubscription {
   included_seats: number
   purchased_additional_seats: number
   payment_status: string
+  plan_licence_type?: string
+  plan_licence_price_cents?: number
+  plan_included_admin_seats?: number
+  plan_included_operator_seats?: number
+  plan_additional_seat_licence_cents?: number
+  plan_amc_price_cents?: number
+  plan_additional_seat_amc_cents?: number
+  plan_amc_duration_months?: number
+  plan_amc_grace_days?: number
 }
 
 export interface PlatformUser {
@@ -130,9 +139,9 @@ export interface CreateOrganisationPayload {
   billing_cycle?: BillingCycle
   primary_admin?: {
     name: string
-    email: string
+    username: string
+    email?: string
     mobile?: string
-    username?: string
     password?: string
   }
 }
@@ -163,6 +172,17 @@ export interface SignInResetResult {
   name: string
   login_id: string
   temporary_password: string
+}
+
+export interface PlatformAdminAccount {
+  id: number
+  username: string
+  email: string
+  name: string
+  status: string
+  login_id: string
+  created_at?: string
+  temporary_password?: string
 }
 
 export interface PrimaryAdminUserSummary {
@@ -265,7 +285,41 @@ export interface PlatformDashboard {
   revenue: { licence_cents: number; amc_cents: number; pending_cents: number }
 }
 
-export type NotificationKind = 'credentials' | 'payment_reminder' | 'product_update' | 'feature_launch' | 'release_notes'
+export type ProductRequestKind = 'issue' | 'improvement' | 'requirement'
+export type ProductRequestStatus = 'received' | 'in_progress' | 'done'
+export type ProductRequestPriority = 'p1' | 'p2' | 'p3'
+
+export interface ProductRequestAttachment {
+  name: string
+  mime: string
+  data: string
+}
+
+export interface ProductRequest {
+  id: number
+  organisation_id: number
+  organisation_name?: string
+  requested_by_user_id: number
+  requested_by_name?: string
+  requested_by_username?: string
+  kind: ProductRequestKind | string
+  priority: ProductRequestPriority | string
+  message: string
+  page_path: string
+  attachments: ProductRequestAttachment[]
+  status: ProductRequestStatus | string
+  reply: string
+  created_at: string
+  updated_at: string
+}
+
+export type NotificationKind =
+  | 'credentials'
+  | 'payment_reminder'
+  | 'product_update'
+  | 'feature_launch'
+  | 'release_notes'
+  | 'product_request'
 export type NotificationAudience = 'user' | 'org' | 'active_licences'
 export type NotificationRecipientScope = 'org_admin' | 'all_users'
 
@@ -356,6 +410,20 @@ export const platformApi = {
 
   listUsers: () => apiFetch<{ users: PlatformUser[] }>('/platform/users'),
 
+  listAdmins: () => apiFetch<{ admins: PlatformAdminAccount[] }>('/platform/admins'),
+
+  createAdmin: (body: { username: string; name: string }) =>
+    apiFetch<{ admin: PlatformAdminAccount }>('/platform/admins', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  resetAdminSignIn: (userId: number, body?: { username?: string }) =>
+    apiFetch<SignInResetResult & PlatformAdminAccount>(`/platform/admins/${userId}/reset-sign-in`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+
   createUser: (body: {
     username: string
     password: string
@@ -380,8 +448,11 @@ export const platformApi = {
       body: JSON.stringify(body),
     }),
 
-  resetUserSignIn: (userId: number) =>
-    apiFetch<SignInResetResult>(`/platform/users/${userId}/reset-sign-in`, { method: 'POST' }),
+  resetUserSignIn: (userId: number, body?: { username?: string }) =>
+    apiFetch<SignInResetResult>(`/platform/users/${userId}/reset-sign-in`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 
   listAuditLogs: (organisationId?: number) => {
     const q = organisationId ? `?organisation_id=${organisationId}` : ''
@@ -418,6 +489,20 @@ export const platformApi = {
     apiFetch<{ request: SeatRequest }>(`/platform/seat-requests/${requestId}/reject`, {
       method: 'POST',
       body: JSON.stringify({ admin_note: adminNote }),
+    }),
+
+  productRequestsSummary: () =>
+    apiFetch<{ pending_count: number; open_requests: ProductRequest[] }>('/platform/product-requests/summary'),
+
+  listProductRequests: (status?: ProductRequestStatus) => {
+    const q = status ? `?status=${encodeURIComponent(status)}` : ''
+    return apiFetch<{ requests: ProductRequest[] }>(`/platform/product-requests${q}`)
+  },
+
+  reviewProductRequest: (requestId: number, body: { status: ProductRequestStatus; reply?: string }) =>
+    apiFetch<{ request: ProductRequest }>(`/platform/product-requests/${requestId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: body.status, reply: body.reply ?? '' }),
     }),
 
   dashboard: () => apiFetch<PlatformDashboard>('/platform/dashboard'),

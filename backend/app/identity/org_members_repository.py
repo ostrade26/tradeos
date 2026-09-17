@@ -12,6 +12,7 @@ from .billing_repository import (
     _now,
     create_org_user_with_seat,
     generate_temp_password,
+    set_user_login_username,
     upsert_organisation_member,
 )
 from .repository import append_audit_log, hash_password
@@ -181,6 +182,64 @@ def set_organisation_member_status(
         )
 
 
+def set_organisation_member_sign_in(
+    conn,
+    *,
+    organisation_id: int,
+    user_id: int,
+    actor_user_id: int,
+    password: str = "",
+    username: str = "",
+) -> dict[str, Any]:
+    member = _get_org_member(conn, organisation_id, user_id)
+    pwd_raw = (password or "").strip()
+    user_raw = (username or "").strip()
+    if not pwd_raw and not user_raw:
+        raise HTTPException(status_code=400, detail="Add a username or password")
+    changed_username = ""
+    if user_raw:
+        changed_username = set_user_login_username(conn, user_id, user_raw)
+    if pwd_raw:
+        if len(pwd_raw) < 4:
+            raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+        now = _now()
+        pwd = hash_password(pwd_raw)
+        if uses_postgres():
+            conn.execute(
+                "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
+                (pwd, now, user_id),
+            )
+            conn.execute("DELETE FROM auth_sessions WHERE user_id = %s", (user_id,))
+        else:
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (pwd, now, user_id),
+            )
+            conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
+        append_audit_log(
+            organisation_id=organisation_id,
+            actor_user_id=actor_user_id,
+            action="user.password_reset",
+            entity_type="user",
+            entity_id=str(user_id),
+        )
+    if changed_username:
+        append_audit_log(
+            organisation_id=organisation_id,
+            actor_user_id=actor_user_id,
+            action="user.username_changed",
+            entity_type="user",
+            entity_id=str(user_id),
+            new_value={"username": changed_username},
+        )
+    if uses_postgres():
+        row = conn.execute("SELECT username FROM users WHERE id = %s", (user_id,)).fetchone()
+    else:
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+    login = str(_mapping(row).get("username") or "") if row else changed_username
+    return {"ok": True, "username": login, "login_id": login}
+
+
 def set_organisation_member_password(
     conn,
     *,
@@ -189,30 +248,12 @@ def set_organisation_member_password(
     password: str,
     actor_user_id: int,
 ) -> None:
-    if len(password.strip()) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
-    _get_org_member(conn, organisation_id, user_id)
-    now = _now()
-    pwd = hash_password(password)
-    if uses_postgres():
-        conn.execute(
-            "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
-            (pwd, now, user_id),
-        )
-        conn.execute("DELETE FROM auth_sessions WHERE user_id = %s", (user_id,))
-    else:
-        conn.execute(
-            "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
-            (pwd, now, user_id),
-        )
-        conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
-
-    append_audit_log(
+    set_organisation_member_sign_in(
+        conn,
         organisation_id=organisation_id,
+        user_id=user_id,
         actor_user_id=actor_user_id,
-        action="user.password_reset",
-        entity_type="user",
-        entity_id=str(user_id),
+        password=password,
     )
 
 
@@ -278,8 +319,7 @@ def create_organisation_member(
 
 
 def _login_identifier(username: str, email: str) -> str:
-    ident = (email or "").strip() or (username or "").strip()
-    return ident
+    return (username or "").strip() or (email or "").strip()
 
 
 def reset_organisation_member_sign_in(
@@ -288,11 +328,14 @@ def reset_organisation_member_sign_in(
     organisation_id: int,
     user_id: int,
     actor_user_id: int,
+    username: str | None = None,
 ) -> dict[str, Any]:
-    """Generate a temporary password and invalidate existing sessions."""
+    """Optionally set a new username, then issue a temporary password."""
     member = _get_org_member(conn, organisation_id, user_id)
     if member.get("role_slug") == "platform_admin":
         raise HTTPException(status_code=400, detail="Cannot reset platform admin sign-in here")
+    if username and username.strip():
+        set_user_login_username(conn, user_id, username)
     if uses_postgres():
         profile = conn.execute(
             "SELECT username, email, name FROM users WHERE id = %s",
@@ -314,15 +357,15 @@ def reset_organisation_member_sign_in(
         password=temp,
         actor_user_id=actor_user_id,
     )
-    username = str(prof.get("username") or "")
+    uname = str(prof.get("username") or "")
     email = str(prof.get("email") or "")
     name = str(prof.get("name") or "")
     return {
         "user_id": user_id,
-        "username": username,
+        "username": uname,
         "email": email,
         "name": name,
-        "login_id": _login_identifier(username, email),
+        "login_id": _login_identifier(uname, email),
         "temporary_password": temp,
     }
 

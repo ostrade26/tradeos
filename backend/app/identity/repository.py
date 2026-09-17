@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from ..db import _pg_connect, _sqlite_connect, row_dict, row_get, uses_postgres
-from .billing_repository import assert_user_org_access, user_has_org_seat_access
+from .billing_repository import assert_user_org_access, set_user_login_username, user_has_org_seat_access
 from .permissions_data import ROLE_PERMISSION_SLUGS
 from .security import hash_password, verify_password
 
@@ -206,9 +206,9 @@ def authenticate(username: str, password: str) -> AuthUser:
         with _pg_connect() as conn:
             row = conn.execute(q, (ident, ident)).fetchone()
             if not row or row["status"] != "active":
-                raise HTTPException(status_code=401, detail="Invalid email or password")
+                raise HTTPException(status_code=401, detail="Invalid username or password")
             if not verify_password(password, row["password_hash"]):
-                raise HTTPException(status_code=401, detail="Invalid email or password")
+                raise HTTPException(status_code=401, detail="Invalid username or password")
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -217,9 +217,9 @@ def authenticate(username: str, password: str) -> AuthUser:
     with _sqlite_connect() as conn:
         row = conn.execute(q, (ident, ident)).fetchone()
         if not row or row["status"] != "active":
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Invalid username or password")
         if not verify_password(password, row["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Invalid username or password")
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
         _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -337,6 +337,7 @@ def update_user_profile(
     name: str | None = None,
     phone: str | None = None,
     location: str | None = None,
+    username: str | None = None,
 ) -> AuthUser:
     fields: list[str] = []
     params: list[Any] = []
@@ -352,22 +353,36 @@ def update_user_profile(
     if location is not None:
         fields.append("location = ?" if not uses_postgres() else "location = %s")
         params.append(location.strip())
-    if not fields:
+    if username is None and not fields:
         raise HTTPException(status_code=400, detail="Nothing to update")
     now = _now_iso()
-    fields.append("updated_at = ?" if not uses_postgres() else "updated_at = %s")
-    params.append(now)
-    params.append(user_id)
-    q = f"UPDATE users SET {', '.join(fields)} WHERE id = ?"
-    if uses_postgres():
-        q = q.replace("?", "%s")
-        with _pg_connect() as conn:
-            conn.execute(q, tuple(params))
-            conn.commit()
+    if fields:
+        fields.append("updated_at = ?" if not uses_postgres() else "updated_at = %s")
+        params.append(now)
+        params.append(user_id)
+        q = f"UPDATE users SET {', '.join(fields)} WHERE id = ?"
+        if uses_postgres():
+            q = q.replace("?", "%s")
+            with _pg_connect() as conn:
+                if username is not None:
+                    set_user_login_username(conn, user_id, username)
+                conn.execute(q, tuple(params))
+                conn.commit()
+        else:
+            with _sqlite_connect() as conn:
+                if username is not None:
+                    set_user_login_username(conn, user_id, username)
+                conn.execute(q, tuple(params))
+                conn.commit()
     else:
-        with _sqlite_connect() as conn:
-            conn.execute(q, tuple(params))
-            conn.commit()
+        if uses_postgres():
+            with _pg_connect() as conn:
+                set_user_login_username(conn, user_id, username or "")
+                conn.commit()
+        else:
+            with _sqlite_connect() as conn:
+                set_user_login_username(conn, user_id, username or "")
+                conn.commit()
     user = _fetch_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -531,13 +546,15 @@ def append_audit_log(
     entity_id: str = "",
     old_value: Any = None,
     new_value: Any = None,
+    conn: Any = None,
 ) -> None:
     created = _now_iso()
     old_j = json.dumps(old_value, default=str) if old_value is not None else None
     new_j = json.dumps(new_value, default=str) if new_value is not None else None
-    if uses_postgres():
-        with _pg_connect() as conn:
-            conn.execute(
+
+    def _write(c) -> None:
+        if uses_postgres():
+            c.execute(
                 """
                 INSERT INTO audit_logs
                 (organisation_id, actor_user_id, action, entity_type, entity_id, old_value, new_value, created_at)
@@ -545,15 +562,24 @@ def append_audit_log(
                 """,
                 (organisation_id, actor_user_id, action, entity_type, entity_id, old_j, new_j, created),
             )
-            conn.commit()
+        else:
+            c.execute(
+                """
+                INSERT INTO audit_logs
+                (organisation_id, actor_user_id, action, entity_type, entity_id, old_value, new_value, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (organisation_id, actor_user_id, action, entity_type, entity_id, old_j, new_j, created),
+            )
+
+    if conn is not None:
+        _write(conn)
         return
-    with _sqlite_connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO audit_logs
-            (organisation_id, actor_user_id, action, entity_type, entity_id, old_value, new_value, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (organisation_id, actor_user_id, action, entity_type, entity_id, old_j, new_j, created),
-        )
-        conn.commit()
+    if uses_postgres():
+        with _pg_connect() as c:
+            _write(c)
+            c.commit()
+        return
+    with _sqlite_connect() as c:
+        _write(c)
+        c.commit()

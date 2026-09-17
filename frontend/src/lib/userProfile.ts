@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string
   phone: string
   role: string
+  username: string
 }
 
 export const EMPTY_USER_PROFILE: UserProfile = {
@@ -14,6 +15,7 @@ export const EMPTY_USER_PROFILE: UserProfile = {
   email: '',
   phone: '',
   role: '',
+  username: '',
 }
 
 const STORAGE_KEY = 'tradeal-user-profile'

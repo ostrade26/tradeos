@@ -6,7 +6,7 @@ import { DropdownPanel } from './DropdownPanel'
 import { useAuth } from '../../hooks/useAuth'
 import { useUser } from '../../hooks/useUser'
 import { useLocation } from 'react-router-dom'
-import { isPlatformAdminPath } from '../../lib/appShellMode'
+import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 export function UserMenu() {
   const [open, setOpen] = useState(false)
@@ -15,8 +15,8 @@ export function UserMenu() {
   const { profile, initials } = useUser()
   const { roleLabel, logout, session, isPlatformAdmin } = useAuth()
   const platformConsole = isPlatformAdmin && isPlatformAdminPath(location.pathname)
-  const profilePath = platformConsole ? '/platform-admin/profile' : '/profile'
-  const settingsPath = platformConsole ? '/platform-admin/settings' : '/settings'
+  const profilePath = platformConsole ? '/platform-admin/profile' : appPath('/profile')
+  const settingsPath = platformConsole ? '/platform-admin/settings' : appPath('/settings')
 
   return (
     <DropdownPanel
@@ -44,7 +44,9 @@ export function UserMenu() {
     >
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <p className="text-sm font-semibold text-heading truncate">{profile.name}</p>
-        <p className="text-xs text-muted truncate">{profile.email}</p>
+        <p className="text-xs text-muted truncate">
+          {profile.username ? `@${profile.username}` : profile.email}
+        </p>
         {session?.organisationName && (
           <p className="text-xs text-muted truncate mt-0.5">{session.organisationName}</p>
         )}

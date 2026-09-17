@@ -7,9 +7,11 @@ import { Button } from '../components/ui/Button'
 import { useAuth } from '../hooks/useAuth'
 import { useUser } from '../hooks/useUser'
 import { useToast } from '../hooks/useToast'
+import { loginUsernameError } from '../lib/username'
+import { APP_HOME } from '../lib/appShellMode'
 
 export function ProfilePage() {
-  const { roleLabel } = useAuth()
+  const { roleLabel, session } = useAuth()
   const { profile, initials, updateProfile } = useUser()
   const toast = useToast()
   const [form, setForm] = useState(profile)
@@ -22,9 +24,15 @@ export function ProfilePage() {
     setForm(prev => ({ ...prev, [key]: e.target.value }))
   }
 
+  const usernameError = loginUsernameError(form.username, { allowCurrent: session?.username })
+
   const handleSave = async () => {
+    if (usernameError) {
+      toast.error(usernameError)
+      return
+    }
     try {
-      await updateProfile(form)
+      await updateProfile({ ...form, username: form.username.trim().toLowerCase() })
       toast.success('Profile updated')
     } catch {
       toast.error('Could not save profile')
@@ -42,7 +50,7 @@ export function ProfilePage() {
       <PageHeader
         title="Profile"
         subtitle="Your account details shown in the header and trade documents"
-        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Profile' }]} />}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: APP_HOME }, { label: 'Profile' }]} />}
       />
 
       <Card>
@@ -54,11 +62,21 @@ export function ProfilePage() {
           <div>
             <p className="text-base font-semibold text-heading">{form.name || '—'}</p>
             <p className="text-sm text-muted">{roleLabel || form.role}</p>
+            {form.username ? (
+              <p className="text-xs text-muted mt-0.5 truncate">@{form.username}</p>
+            ) : null}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Company / trader name" value={form.name} onChange={set('name')} placeholder="" />
+          <Input
+            label="Username"
+            value={form.username}
+            onChange={set('username')}
+            error={usernameError ?? undefined}
+            autoComplete="off"
+          />
           <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
           <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
@@ -68,7 +86,7 @@ export function ProfilePage() {
         </div>
 
         <div className="flex items-center gap-2 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <Button onClick={handleSave} disabled={!dirty}>
+          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError)}>
             Save changes
           </Button>
           <Button variant="outline" onClick={handleReset} disabled={!dirty}>

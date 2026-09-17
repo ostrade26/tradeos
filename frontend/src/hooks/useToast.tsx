@@ -79,11 +79,7 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: 
       aria-live="polite"
       aria-relevant="additions"
     >
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[min(36vh,11rem)] bg-gradient-to-t from-gray-300/85 via-gray-200/35 to-transparent dark:from-gray-950/80 dark:via-gray-900/30 dark:to-transparent"
-        aria-hidden
-      />
-      <div className="relative flex flex-col items-center gap-2 px-4 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] w-full max-w-md mx-auto">
+      <div className="flex flex-col items-center gap-2 px-4 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] w-full max-w-md mx-auto">
       {toasts.map(t => {
         const variant = t.variant ?? 'info'
         const styles = variantStyles[variant]
