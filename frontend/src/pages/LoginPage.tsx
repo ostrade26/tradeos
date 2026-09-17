@@ -32,13 +32,19 @@ export function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      await login(username.trim(), password)
+      await login(username.trim(), password.trim())
       const saved = loadAuthSession()
       const defaultHome = saved?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
       const dest = from && from !== '/' && from !== '/login' && from !== APP_HOME ? from : defaultHome
       navigate(dest, { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not sign in')
+      if (err instanceof ApiError && err.status === 0) {
+        setError(
+          'Cannot reach the Tradeal API. Run npm run dev:all, open http://127.0.0.1:5173, and confirm http://127.0.0.1:8000/api/v1/health returns JSON.',
+        )
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Could not sign in')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -52,7 +58,7 @@ export function LoginPage() {
             T
           </div>
           <h1 className="text-2xl font-semibold text-heading">Sign in to Tradeal</h1>
-          <p className="text-sm text-muted mt-2">Sign in with your username and password</p>
+          <p className="text-sm text-muted mt-2">Use your login ID and password</p>
         </div>
 
         <form
@@ -60,7 +66,7 @@ export function LoginPage() {
           className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
         >
           <Input
-            label="Username"
+            label="Username or email"
             type="text"
             value={username}
             onChange={e => setUsername(e.target.value)}
@@ -95,12 +101,11 @@ export function LoginPage() {
         </div>
 
         <div className="mt-6 rounded-md border border-gray-200 dark:border-gray-700 bg-card/60 px-4 py-3 text-sm text-muted leading-relaxed">
-          <p className="font-medium text-heading text-sm mb-1">Forgot username or password?</p>
+          <p className="font-medium text-heading text-sm mb-1">After a platform password reset</p>
           <p>
-            Sign-in uses your <span className="text-heading">username</span>. Organisation users: ask your
-            organisation admin to reset the password from Settings → Team. Tradeal staff: ask another Tradeal
-            Admin. If you are the only Tradeal Admin, you must still be able to sign in — add a second admin from
-            Settings first.
+            Use the modal <span className="text-heading">Login ID</span> and{' '}
+            <span className="text-heading">temporary password</span> exactly (Copy all). Wrong password shows
+            &quot;Invalid username or password&quot; — not a timeout.
           </p>
         </div>
       </div>

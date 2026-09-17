@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -313,8 +314,11 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
 
 export function TradeProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const { organisationSandboxTools } = useAuth()
+  const { session, organisationSandboxTools } = useAuth()
   const isPlatformAdminRoute = location.pathname.startsWith('/platform-admin')
+  const skipTradeLoad = isPlatformAdminRoute || !!session?.isPlatformAdmin
+  const tradeContextKey = `${session?.userId ?? ''}:${session?.organisationId ?? ''}:${session?.token?.slice(0, 8) ?? ''}`
+  const loadSeq = useRef(0)
 
   const [data, setData] = useState<TradeData>(defaultData)
   const [ready, setReady] = useState(false)
@@ -322,10 +326,10 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const loadState = useCallback(async (seedIfEmpty: boolean) => {
+    const seq = ++loadSeq.current
     setLoading(true)
     setError(null)
     try {
-      await tradeApi.health()
       let state = await tradeApi.getState()
       if (
         seedIfEmpty &&
@@ -340,10 +344,13 @@ export function TradeProvider({ children }: { children: ReactNode }) {
           // Demo seed requires an admin session.
         }
       }
+      if (seq !== loadSeq.current) return
       setData(normalizeTradeState(state))
     } catch (err) {
+      if (seq !== loadSeq.current) return
       setError(err instanceof Error ? err.message : 'Could not load data from server')
     } finally {
+      if (seq !== loadSeq.current) return
       setLoading(false)
       setReady(true)
     }
@@ -354,13 +361,18 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   }, [loadState])
 
   useEffect(() => {
-    if (isPlatformAdminRoute) {
+    if (skipTradeLoad) {
+      setLoading(false)
+      setReady(true)
+      return
+    }
+    if (!session?.token) {
       setLoading(false)
       setReady(true)
       return
     }
     void loadState(true)
-  }, [isPlatformAdminRoute, loadState])
+  }, [loadState, session?.token, skipTradeLoad, tradeContextKey])
 
   const applyMutation = useCallback(async <T,>(fn: () => Promise<{ data: TradeData; result: T }>): Promise<T> => {
     const response = await fn()
@@ -726,12 +738,12 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     pipelineData,
   }
 
-  if (!ready && loading && !isPlatformAdminRoute) {
+  if (!ready && loading && !skipTradeLoad) {
     return <TradeStoreLoading />
   }
 
   if (
-    !isPlatformAdminRoute &&
+    !skipTradeLoad &&
     error &&
     data.tradeOrders.length === 0 &&
     data.brokers.length === 0

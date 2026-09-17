@@ -34,3 +34,6 @@ backend/data/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Local QA / agent scratch (screenshots, smoke logs)
+.qa-tmp/

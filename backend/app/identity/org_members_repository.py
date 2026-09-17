@@ -319,7 +319,27 @@ def create_organisation_member(
 
 
 def _login_identifier(username: str, email: str) -> str:
-    return (username or "").strip() or (email or "").strip()
+    un = (username or "").strip()
+    em = (email or "").strip()
+    if em and "@" in em and (not un or un.lower() == em.lower()):
+        return em
+    return un or em
+
+
+def _user_profile(conn, user_id: int) -> dict[str, Any]:
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT username, email, name FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT username, email, name FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return dict(_mapping(row))
 
 
 def reset_organisation_member_sign_in(
@@ -336,19 +356,6 @@ def reset_organisation_member_sign_in(
         raise HTTPException(status_code=400, detail="Cannot reset platform admin sign-in here")
     if username and username.strip():
         set_user_login_username(conn, user_id, username)
-    if uses_postgres():
-        profile = conn.execute(
-            "SELECT username, email, name FROM users WHERE id = %s",
-            (user_id,),
-        ).fetchone()
-    else:
-        profile = conn.execute(
-            "SELECT username, email, name FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-    if not profile:
-        raise HTTPException(status_code=404, detail="User not found")
-    prof = dict(_mapping(profile))
     temp = generate_temp_password()
     set_organisation_member_password(
         conn,
@@ -357,6 +364,7 @@ def reset_organisation_member_sign_in(
         password=temp,
         actor_user_id=actor_user_id,
     )
+    prof = _user_profile(conn, user_id)
     uname = str(prof.get("username") or "")
     email = str(prof.get("email") or "")
     name = str(prof.get("name") or "")

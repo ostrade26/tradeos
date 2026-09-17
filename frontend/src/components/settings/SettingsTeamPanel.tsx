@@ -105,44 +105,61 @@ export function SettingsTeamPanel({
     [passwordConfiguredIds],
   )
 
-  const openResetMemberSignIn = useCallback((member: OrganisationMember) => {
-    setSignInCredentials({
-      name: member.name,
-      login_id: member.username || member.email,
-      username: member.username,
-      email: member.email,
-      recipient_user_id: member.id,
-    })
-  }, [])
+  const issueMemberSignIn = useCallback(
+    async (member: OrganisationMember, usernameDraft?: string) => {
+      const userId = member.id
+      if (resettingSignInId != null) return
+      setSignInCredentials({
+        name: member.name,
+        login_id: member.username || member.email,
+        username: member.username,
+        email: member.email,
+        recipient_user_id: userId,
+      })
+      setResettingSignInId(userId)
+      try {
+        const username = usernameDraft?.trim().toLowerCase()
+        const result = await organisationApi.resetMemberSignIn(
+          userId,
+          username ? { username } : undefined,
+        )
+        markPasswordConfigured(userId)
+        setSignInCredentials({
+          name: result.name,
+          login_id: result.login_id,
+          username: result.username,
+          email: result.email,
+          temporary_password: result.temporary_password,
+          recipient_user_id: userId,
+        })
+        toast.success('Temporary password issued — share it with the user')
+        await load()
+        onMembersChanged?.()
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
+      } finally {
+        setResettingSignInId(null)
+      }
+    },
+    [load, markPasswordConfigured, onMembersChanged, resettingSignInId, toast],
+  )
 
-  const generateMemberPassword = useCallback(async (username: string) => {
-    const userId = signInCredentials?.recipient_user_id
-    if (!userId || resettingSignInId != null) return
-    setResettingSignInId(userId)
-    try {
-      const result = await organisationApi.resetMemberSignIn(userId, { username })
-      markPasswordConfigured(userId)
-      setSignInCredentials(prev =>
-        prev
-          ? {
-              ...prev,
-              name: result.name,
-              login_id: result.login_id,
-              username: result.username,
-              temporary_password: result.temporary_password,
-              recipient_user_id: userId,
-            }
-          : null,
-      )
-      toast.success('Temporary password issued — share it with the user')
-      await load()
-      onMembersChanged?.()
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
-    } finally {
-      setResettingSignInId(null)
-    }
-  }, [load, markPasswordConfigured, onMembersChanged, resettingSignInId, signInCredentials?.recipient_user_id, toast])
+  const openResetMemberSignIn = useCallback(
+    (member: OrganisationMember) => {
+      void issueMemberSignIn(member)
+    },
+    [issueMemberSignIn],
+  )
+
+  const regenerateMemberSignIn = useCallback(
+    (username: string) => {
+      const userId = signInCredentials?.recipient_user_id
+      if (!userId) return
+      const member = members.find(m => m.id === userId)
+      if (member) void issueMemberSignIn(member, username)
+    },
+    [issueMemberSignIn, members, signInCredentials?.recipient_user_id],
+  )
 
   const sessionLogin = session?.username?.trim().toLowerCase()
 
@@ -308,8 +325,8 @@ export function SettingsTeamPanel({
         payload={signInCredentials}
         generatingPassword={resettingSignInId != null}
         onGeneratePassword={
-          signInCredentials && !signInCredentials.temporary_password
-            ? username => void generateMemberPassword(username)
+          signInCredentials?.recipient_user_id
+            ? username => void regenerateMemberSignIn(username)
             : undefined
         }
       />

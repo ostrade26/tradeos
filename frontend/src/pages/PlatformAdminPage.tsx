@@ -244,42 +244,48 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     saveOrderPanelDocked(docked)
   }, [setDetailPanelOpen])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    const blockRegisters = !opts?.background
+    if (blockRegisters) setLoading(true)
+
     try {
-      const [orgRes, planRes] = await Promise.all([
-        platformApi.listOrganisations(),
-        platformApi.listPlans(),
-      ])
+      const orgRes = await platformApi.listOrganisations()
       setOrganisations(orgRes.organisations)
-      setPlans(planRes.plans)
-      try {
-        const [seatRes, dashRes, licRes, amcRes, payRes, relRes] = await Promise.all([
-          platformApi.listSeats().catch(() => ({ seats: [] as OrganisationSeat[] })),
-          platformApi.dashboard().catch(() => null),
-          platformApi.listLicenses().catch(() => ({ licenses: [] as OrganisationLicence[] })),
-          platformApi.listAmcs().catch(() => ({ amcs: [] as OrganisationAmc[] })),
-          platformApi.listPayments().catch(() => ({ payments: [] as OrganisationPayment[] })),
-          platformApi.listReleases().catch(() => ({
-            releases: [] as PlatformRelease[],
-            next_version: '1.0.0',
-            latest_version: null,
-          })),
-        ])
-        setLicensedSeats(seatRes.seats)
-        setDashboard(dashRes)
-        setLicenses(licRes.licenses)
-        setAmcs(amcRes.amcs)
-        setPayments(payRes.payments)
-        setReleases(relRes.releases)
-        setNextReleaseVersion(relRes.next_version || '1.0.0')
-      } catch {
-        setLicensedSeats([])
-      }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load platform data')
+      toast.error(err instanceof ApiError ? err.message : 'Could not load organisations')
     } finally {
-      setLoading(false)
+      if (blockRegisters) setLoading(false)
+    }
+
+    try {
+      const planRes = await platformApi.listPlans()
+      setPlans(planRes.plans)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load plans')
+    }
+
+    try {
+      const [seatRes, dashRes, licRes, amcRes, payRes, relRes] = await Promise.all([
+        platformApi.listSeats().catch(() => ({ seats: [] as OrganisationSeat[] })),
+        platformApi.dashboard().catch(() => null),
+        platformApi.listLicenses().catch(() => ({ licenses: [] as OrganisationLicence[] })),
+        platformApi.listAmcs().catch(() => ({ amcs: [] as OrganisationAmc[] })),
+        platformApi.listPayments().catch(() => ({ payments: [] as OrganisationPayment[] })),
+        platformApi.listReleases().catch(() => ({
+          releases: [] as PlatformRelease[],
+          next_version: '1.0.0',
+          latest_version: null,
+        })),
+      ])
+      setLicensedSeats(seatRes.seats)
+      setDashboard(dashRes)
+      setLicenses(licRes.licenses)
+      setAmcs(amcRes.amcs)
+      setPayments(payRes.payments)
+      setReleases(relRes.releases)
+      setNextReleaseVersion(relRes.next_version || '1.0.0')
+    } catch {
+      setLicensedSeats([])
     }
   }, [toast])
 
@@ -720,48 +726,58 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }, [toast])
 
-  const openResetPrimaryAdminSignIn = useCallback(() => {
-    const admin = orgDetail?.primary_admin_user
-    if (!admin) return
-    setSignInCredentials({
-      name: admin.name,
-      login_id: admin.login_id || admin.email || admin.username,
-      username: admin.username,
-      email: admin.email,
-      organisation_id: orgDetail.organisation.id,
-      recipient_user_id: admin.user_id,
-    })
-  }, [orgDetail?.organisation.id, orgDetail?.primary_admin_user])
+  const issuePrimaryAdminSignIn = useCallback(
+    async (usernameDraft?: string) => {
+      const admin = orgDetail?.primary_admin_user
+      const userId = signInCredentials?.recipient_user_id ?? admin?.user_id
+      const orgId = orgDetail?.organisation.id
+      if (!userId || !orgId || !admin || resettingPrimarySignIn) return
 
-  const generatePrimaryAdminPassword = useCallback(async (username: string) => {
-    const userId = signInCredentials?.recipient_user_id
-    if (!userId || resettingPrimarySignIn) return
-    setResettingPrimarySignIn(true)
-    try {
-      const result = await platformApi.resetUserSignIn(userId, { username })
-      setSignInCredentials(prev =>
-        prev
-          ? {
-              ...prev,
-              name: result.name,
-              login_id: result.login_id,
-              username: result.username,
-              email: result.email,
-              temporary_password: result.temporary_password,
-              recipient_user_id: userId,
-            }
-          : null,
-      )
-      toast.success('New temporary password issued')
-      if (orgDetail?.organisation.id) {
-        void loadOrgDetail(orgDetail.organisation.id)
+      setSignInCredentials({
+        name: admin.name,
+        login_id: admin.login_id || admin.email || admin.username,
+        username: admin.username,
+        email: admin.email,
+        organisation_id: orgId,
+        recipient_user_id: userId,
+      })
+      setResettingPrimarySignIn(true)
+      try {
+        const username = usernameDraft?.trim().toLowerCase()
+        const result = await platformApi.resetUserSignIn(
+          userId,
+          username ? { username } : undefined,
+        )
+        setSignInCredentials({
+          name: result.name,
+          login_id: result.login_id,
+          username: result.username,
+          email: result.email,
+          temporary_password: result.temporary_password,
+          organisation_id: orgId,
+          recipient_user_id: userId,
+        })
+        toast.success('New temporary password issued')
+        void loadOrgDetail(orgId)
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
+      } finally {
+        setResettingPrimarySignIn(false)
       }
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not reset sign-in')
-    } finally {
-      setResettingPrimarySignIn(false)
-    }
-  }, [loadOrgDetail, orgDetail?.organisation.id, resettingPrimarySignIn, signInCredentials?.recipient_user_id, toast])
+    },
+    [
+      loadOrgDetail,
+      orgDetail?.organisation.id,
+      orgDetail?.primary_admin_user,
+      resettingPrimarySignIn,
+      signInCredentials?.recipient_user_id,
+      toast,
+    ],
+  )
+
+  const openResetPrimaryAdminSignIn = useCallback(() => {
+    void issuePrimaryAdminSignIn()
+  }, [issuePrimaryAdminSignIn])
 
   const submitCreateOrg = async (form: OrganisationFormState) => {
     if (createOrgInFlight.current) return
@@ -990,7 +1006,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       ) : null}
 
       {section === 'organisations' &&
-        (loading ? (
+        (loading && organisations.length === 0 ? (
           <TableSkeleton rows={10} cols={8} />
         ) : (
           <DataTable
@@ -1028,7 +1044,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'seats' &&
-        (loading ? (
+        (loading && licensedSeats.length === 0 ? (
           <TableSkeleton rows={10} cols={5} />
         ) : (
           <DataTable
@@ -1060,7 +1076,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'plans' &&
-        (loading ? (
+        (loading && plans.length === 0 ? (
           <TableSkeleton rows={6} cols={6} />
         ) : (
           <DataTable
@@ -1086,7 +1102,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'licenses' &&
-        (loading ? (
+        (loading && licenses.length === 0 ? (
           <TableSkeleton rows={8} cols={7} />
         ) : (
           <DataTable
@@ -1107,7 +1123,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'amcs' &&
-        (loading ? (
+        (loading && amcs.length === 0 ? (
           <TableSkeleton rows={8} cols={6} />
         ) : (
           <DataTable
@@ -1126,7 +1142,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'payments' &&
-        (loading ? (
+        (loading && payments.length === 0 ? (
           <TableSkeleton rows={8} cols={6} />
         ) : (
           <DataTable
@@ -1237,7 +1253,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'releases' &&
-        (loading ? (
+        (loading && releases.length === 0 ? (
           <TableSkeleton rows={8} cols={5} />
         ) : (
           <DataTable
@@ -1335,8 +1351,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         payload={signInCredentials}
         generatingPassword={resettingPrimarySignIn}
         onGeneratePassword={
-          signInCredentials && !signInCredentials.temporary_password
-            ? username => void generatePrimaryAdminPassword(username)
+          signInCredentials?.recipient_user_id
+            ? username => void issuePrimaryAdminSignIn(username)
             : undefined
         }
       />

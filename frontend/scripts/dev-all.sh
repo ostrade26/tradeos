@@ -20,8 +20,18 @@ frontend_up() {
   curl -sf "${FRONTEND_URL}/" >/dev/null 2>&1
 }
 
+port_8000_busy() {
+  lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1
+}
+
 if backend_up; then
   echo "✓ Backend already running at ${BACKEND_URL}"
+elif port_8000_busy; then
+  echo "✗ Port 8000 is in use but /api/v1/health did not respond."
+  echo "  Kill the stuck process, then retry:"
+  echo "    lsof -nP -iTCP:8000 -sTCP:LISTEN"
+  echo "    kill -9 <PID>"
+  exit 1
 else
   echo "Starting Python API on :8000…"
   npm run dev:backend &

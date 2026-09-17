@@ -253,7 +253,6 @@ def init_db() -> None:
 
 
 def get_state(organisation_id: int) -> dict[str, Any]:
-    init_db()
     if uses_postgres():
         with _pg_connect() as conn:
             set_pg_organisation_context(conn, organisation_id)
@@ -272,7 +271,6 @@ def get_state(organisation_id: int) -> dict[str, Any]:
 
 
 def save_state(data: dict[str, Any], organisation_id: int) -> None:
-    init_db()
     payload = json.dumps(data)
     if uses_postgres():
         with _pg_connect() as conn:

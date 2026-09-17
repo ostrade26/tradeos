@@ -246,12 +246,17 @@ export function PlatformSignInCredentialsModal({
               />
             ) : (
               <CredentialRow
-                label="Username"
+                label="Login ID (username or email)"
                 value={payload.login_id}
                 copied={copiedField === 'login'}
                 onCopy={() => void copyLogin()}
               />
             )}
+            {!pendingGenerate && password ? (
+              <p className="text-xs text-muted leading-relaxed -mt-2">
+                Sign in at /login with this Login ID and temporary password exactly as shown.
+              </p>
+            ) : null}
             {password ? (
               <CredentialRow
                 label="Temporary password"
@@ -274,7 +279,7 @@ export function PlatformSignInCredentialsModal({
             </p>
           ) : (
             <p className="text-xs text-muted leading-relaxed mt-4">
-              Copy to share privately, or send to their Tradeal notifications. They can open it later from the bell.
+              Copy all, then sign in at /login. Temporary passwords are case-sensitive. Notify sends the same details in-app.
             </p>
           )}
         </div>
