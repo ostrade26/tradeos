@@ -1,3 +1,5 @@
+import { SERVICE_ISSUE_UI_ENABLED } from './serviceIssueConfig'
+
 export type ServiceIssueKind =
   | 'no_internet'
   | 'connectivity'
@@ -246,7 +248,7 @@ const EMIT_COOLDOWN_MS = 120_000
 const lastEmitByKind: Partial<Record<ServiceIssueKind, number>> = {}
 
 export function emitServiceIssue(issue: ServiceIssueView) {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || !SERVICE_ISSUE_UI_ENABLED) return
   const now = Date.now()
   const last = lastEmitByKind[issue.kind]
   if (last != null && now - last < EMIT_COOLDOWN_MS) return

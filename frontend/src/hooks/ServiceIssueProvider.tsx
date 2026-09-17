@@ -15,6 +15,7 @@ import {
   classifyUnknownError,
 } from '../lib/serviceIssue'
 import { serviceIssueUsesFullPage } from '../lib/serviceIssueTheme'
+import { SERVICE_ISSUE_UI_ENABLED } from '../lib/serviceIssueConfig'
 
 type ServiceIssueContextValue = {
   reportIssue: (err: unknown) => void
@@ -30,6 +31,7 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(false)
 
   const showIssue = useCallback((next: ServiceIssueView) => {
+    if (!SERVICE_ISSUE_UI_ENABLED) return
     setIssue(prev => {
       if (prev?.kind === next.kind && prev.title === next.title) return prev
       return next
@@ -51,6 +53,7 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onEvent = (event: Event) => {
+      if (!SERVICE_ISSUE_UI_ENABLED) return
       const detail = (event as CustomEvent<ServiceIssueView>).detail
       // Ignore background API errors while connectivity modal is already shown.
       if (detail?.title) {
@@ -77,7 +80,9 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
     [reportIssue, showIssue, clearIssue],
   )
 
-  const fullPage = Boolean(open && issue && serviceIssueUsesFullPage(issue.kind))
+  const fullPage = Boolean(
+    SERVICE_ISSUE_UI_ENABLED && open && issue && serviceIssueUsesFullPage(issue.kind),
+  )
 
   return (
     <ServiceIssueContext.Provider value={value}>
@@ -91,13 +96,15 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
       ) : (
         <>
           {children}
-          <ServiceIssueModal
-            open={open}
-            issue={issue}
-            checking={checking}
-            onRefresh={onRefresh}
-            onClose={clearIssue}
-          />
+          {SERVICE_ISSUE_UI_ENABLED ? (
+            <ServiceIssueModal
+              open={open}
+              issue={issue}
+              checking={checking}
+              onRefresh={onRefresh}
+              onClose={clearIssue}
+            />
+          ) : null}
         </>
       )}
     </ServiceIssueContext.Provider>

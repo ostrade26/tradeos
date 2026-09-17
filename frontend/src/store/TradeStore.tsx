@@ -37,6 +37,7 @@ import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
 import { useServiceIssue } from '../hooks/ServiceIssueProvider'
 import { classifyUnknownError } from '../lib/serviceIssue'
+import { SERVICE_ISSUE_UI_ENABLED } from '../lib/serviceIssueConfig'
 
 export interface CreateOrderInput {
   ref?: string
@@ -291,8 +292,13 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
 
   return (
     <div className="flex h-viewport items-center justify-center bg-body p-6">
-      <div className="max-w-md text-center space-y-4">
-        <p className="text-sm text-muted">Tradeal could not load your organisation data.</p>
+      <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-6 text-center space-y-4">
+        <p className="text-sm font-medium text-heading">Could not load organisation data</p>
+        {!SERVICE_ISSUE_UI_ENABLED ? (
+          <p className="text-sm text-danger text-left whitespace-pre-wrap break-words">{message}</p>
+        ) : (
+          <p className="text-sm text-muted">Tradeal could not load your organisation data.</p>
+        )}
         <button
           type="button"
           onClick={onRetry}
