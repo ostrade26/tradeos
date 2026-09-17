@@ -84,6 +84,7 @@ export function ServiceIssueModal({
           <p className="text-sm leading-relaxed text-muted">{issue.hint}</p>
           <div className="pt-4">
             <ServiceIssueActions
+              issue={issue}
               theme={theme}
               checking={checking}
               onRefresh={onRefresh}

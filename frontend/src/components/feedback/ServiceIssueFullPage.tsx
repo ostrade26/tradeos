@@ -52,6 +52,7 @@ export function ServiceIssueFullPage({ issue, checking, onRefresh, onBeforeHome 
 
         <div className="mt-10 w-full max-w-md">
           <ServiceIssueActions
+            issue={issue}
             theme={theme}
             checking={checking}
             onRefresh={onRefresh}

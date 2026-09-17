@@ -9,7 +9,7 @@ export function resolveApiBase(raw: string | undefined): string {
   return `${value}/api/v1`
 }
 
-const API_BASE = resolveApiBase(import.meta.env.VITE_API_URL)
+export const API_BASE = resolveApiBase(import.meta.env.VITE_API_URL)
 const API_TOKEN = (
   (import.meta.env.VITE_TRADEAL_API_TOKEN as string | undefined)
   ?? (import.meta.env.VITE_TRADEOS_API_TOKEN as string | undefined)
@@ -21,6 +21,11 @@ const USER_FACING_OFFLINE = 'Tradeal is not responding. Try refreshing the page.
 function surfaceInfrastructureIssue(path: string, status: number, detail: string) {
   const issue = classifyApiFailure(path, status, detail)
   if (issue) emitServiceIssue(issue)
+}
+
+/** For support copy on service-issue modals (no secrets). */
+export function apiBaseForDiagnostics(): string {
+  return API_BASE
 }
 
 if (import.meta.env.PROD && USING_LOCAL_PROXY) {

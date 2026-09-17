@@ -43,6 +43,7 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
 
   const clearIssue = useCallback(() => {
     setOpen(false)
+    window.dispatchEvent(new CustomEvent('tradeal-service-issue-dismissed'))
   }, [])
 
   useEffect(() => {

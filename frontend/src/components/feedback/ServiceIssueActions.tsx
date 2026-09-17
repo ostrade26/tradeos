@@ -3,8 +3,11 @@ import { Button } from '../ui/Button'
 import { APP_HOME } from '../../lib/appShellMode'
 import type { ServiceIssueTheme } from '../../lib/serviceIssueTheme'
 import { cn } from '../../lib/utils'
+import type { ServiceIssueView } from '../../lib/serviceIssue'
+import { ServiceIssueCopyButton } from './ServiceIssueCopyButton'
 
 type ServiceIssueActionsProps = {
+  issue: ServiceIssueView
   theme: ServiceIssueTheme
   checking?: boolean
   onRefresh: () => void
@@ -15,6 +18,7 @@ type ServiceIssueActionsProps = {
 }
 
 export function ServiceIssueActions({
+  issue,
   theme,
   checking = false,
   onRefresh,
@@ -58,6 +62,7 @@ export function ServiceIssueActions({
           Dismiss
         </Button>
       ) : null}
+      <ServiceIssueCopyButton issue={issue} />
     </div>
   )
 }
