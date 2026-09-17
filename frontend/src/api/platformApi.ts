@@ -202,6 +202,9 @@ export interface OrganisationDetailResponse {
   primary_admin?: {
     user_id: number
     username: string
+    email?: string
+    name?: string
+    login_id?: string
     temporary_password?: string | null
   }
   licence?: OrganisationLicence | null

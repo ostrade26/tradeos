@@ -14,6 +14,9 @@ export interface UserPreferences {
   customHex?: string
   tableDensity?: 'compact' | 'relaxed'
   lastSeenPlatformWhatsNew?: string
+  completedOrgProductTour?: boolean
+  completedOrgAccountWelcome?: boolean
+  setupPrimaryFocus?: 'purchase' | 'sales' | 'operations' | 'dashboard'
 }
 
 export interface AuthSession {

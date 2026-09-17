@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom'
+import { Navigate, useNavigate, Link } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -8,12 +8,15 @@ import { useAuth } from '../hooks/useAuth'
 import { loadAuthSession } from '../lib/auth'
 import { APP_HOME } from '../lib/appShellMode'
 import { ApiError } from '../api/client'
+import type { AuthSession } from '../lib/auth'
+
+function homeAfterLogin(session: AuthSession | null): string {
+  return session?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
+}
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-  const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -21,10 +24,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (isAuthenticated) {
-    const saved = loadAuthSession()
-    const home = saved?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
-    const dest = from && from !== '/' && from !== '/login' ? from : home
-    return <Navigate to={dest} replace />
+    return <Navigate to={homeAfterLogin(loadAuthSession())} replace />
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,11 +32,8 @@ export function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      await login(username.trim(), password.trim())
-      const saved = loadAuthSession()
-      const defaultHome = saved?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
-      const dest = from && from !== '/' && from !== '/login' && from !== APP_HOME ? from : defaultHome
-      navigate(dest, { replace: true })
+      await login(username.trim(), password)
+      navigate(homeAfterLogin(loadAuthSession()), { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.status === 0) {
         setError(

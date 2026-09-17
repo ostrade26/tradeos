@@ -57,8 +57,11 @@ def extract_bearer_token(request: Request) -> str:
     return ""
 
 
-def login(username: str, password: str) -> tuple[str, Session]:
+def login(username: str, password: str) -> tuple[str, Session, bool]:
+    from .identity.repository import user_has_prior_login
+
     user = authenticate(username, password)
+    is_first_login = not user_has_prior_login(user.id)
     touch_user_login(user.id)
     token, session = create_session(user)
     append_audit_log(
@@ -68,7 +71,7 @@ def login(username: str, password: str) -> tuple[str, Session]:
         entity_type="user",
         entity_id=str(user.id),
     )
-    return token, session
+    return token, session, is_first_login
 
 
 def logout(token: str) -> None:

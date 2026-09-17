@@ -137,6 +137,9 @@ class PreferencesPatchBody(BaseModel):
     customHex: str | None = None
     tableDensity: str | None = None
     lastSeenPlatformWhatsNew: str | None = None
+    completedOrgProductTour: bool | None = None
+    completedOrgAccountWelcome: bool | None = None
+    setupPrimaryFocus: str | None = None
 
 
 class ChangePasswordBody(BaseModel):
@@ -272,8 +275,8 @@ def health() -> dict:
 
 @app.post("/api/v1/auth/login", tags=["auth"], summary="Sign in")
 def auth_login(body: LoginBody) -> dict:
-    token, session = auth.login(body.username, body.password)
-    return {"token": token, **auth.session_to_dict(session)}
+    token, session, is_first_login = auth.login(body.username, body.password)
+    return {"token": token, "isFirstLogin": is_first_login, **auth.session_to_dict(session)}
 
 
 @app.post("/api/v1/auth/logout", tags=["auth"], summary="Sign out")

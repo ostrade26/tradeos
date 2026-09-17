@@ -192,6 +192,7 @@ export interface AuthMeResponse {
   organisationSandboxTools?: boolean
   appliedUpdates?: string[]
   appliedVersion?: string
+  isFirstLogin?: boolean
 }
 
 export const authApi = {

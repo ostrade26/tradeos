@@ -731,7 +731,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       const admin = orgDetail?.primary_admin_user
       const userId = signInCredentials?.recipient_user_id ?? admin?.user_id
       const orgId = orgDetail?.organisation.id
-      if (!userId || !orgId || !admin || resettingPrimarySignIn) return
+      if (!userId || !orgId || !admin || resettingPrimarySignIn) {
+        if (!admin) toast.error('No primary admin found for this organisation')
+        return
+      }
 
       setSignInCredentials({
         name: admin.name,
@@ -807,12 +810,15 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       await load()
       toast.success(`Organisation “${detail.organisation.name}” created`)
       if (detail.primary_admin?.temporary_password) {
+        const pa = detail.primary_admin
         setSignInCredentials({
-          name: detail.organisation.primary_contact_name ?? undefined,
-          login_id: detail.primary_admin.username,
-          temporary_password: detail.primary_admin.temporary_password,
+          name: pa.name ?? detail.organisation.primary_contact_name ?? undefined,
+          login_id: pa.login_id ?? pa.username,
+          username: pa.username,
+          email: pa.email ?? undefined,
+          temporary_password: pa.temporary_password ?? undefined,
           organisation_id: detail.organisation.id,
-          recipient_user_id: detail.primary_admin.user_id,
+          recipient_user_id: pa.user_id,
         })
       }
       void loadOrgDetail(detail.organisation.id)

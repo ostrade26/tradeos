@@ -9,7 +9,7 @@ export function DashboardQuickActions() {
   const sellablePo = store.getPOPending().find(po => store.getRemainingSellQty(po.ref) > 0)
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" data-tour="dashboard-quick-actions">
       <Button to={appPath('/purchase-orders/new')} variant="secondary" size="sm">
         <FileText className="h-4 w-4" />
         New PO

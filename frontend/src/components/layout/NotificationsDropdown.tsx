@@ -63,6 +63,7 @@ export function NotificationsDropdown() {
             onClick={onClick}
             aria-label={badgeLabel}
             aria-expanded={expanded}
+            data-tour="header-notifications"
           >
             <Bell className="h-5 w-5" />
             {badgeCount > 0 && (

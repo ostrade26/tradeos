@@ -189,7 +189,9 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
 
 
 def authenticate(username: str, password: str) -> AuthUser:
-    ident = username.strip().lower()
+    ident = (username or "").strip().lower()
+    if not ident or password is None or password == "":
+        raise HTTPException(status_code=401, detail="Invalid username or password")
     q = """
         SELECT u.id, u.username, u.name, u.email, u.password_hash, u.organisation_id,
                u.account_type, u.status, u.role_id,
@@ -260,6 +262,18 @@ def change_user_password(user_id: int, current_password: str, new_password: str)
             (hash_password(new_password), _now_iso(), user_id),
         )
         conn.commit()
+
+
+def user_has_prior_login(user_id: int) -> bool:
+    if uses_postgres():
+        with _pg_connect() as conn:
+            row = conn.execute("SELECT last_login_at FROM users WHERE id = %s", (user_id,)).fetchone()
+    else:
+        with _sqlite_connect() as conn:
+            row = conn.execute("SELECT last_login_at FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        return False
+    return bool(row_get(row, "last_login_at"))
 
 
 def touch_user_login(user_id: int) -> None:
@@ -392,7 +406,16 @@ def update_user_profile(
 def merge_user_preferences(user_id: int, patch: dict[str, Any]) -> AuthUser:
     if not patch:
         raise HTTPException(status_code=400, detail="Nothing to update")
-    allowed = {"theme", "accentId", "customHex", "tableDensity", "lastSeenPlatformWhatsNew"}
+    allowed = {
+        "theme",
+        "accentId",
+        "customHex",
+        "tableDensity",
+        "lastSeenPlatformWhatsNew",
+        "completedOrgProductTour",
+        "completedOrgAccountWelcome",
+        "setupPrimaryFocus",
+    }
     clean = {k: v for k, v in patch.items() if k in allowed and v is not None}
     if not clean:
         raise HTTPException(status_code=400, detail="No valid preference keys")

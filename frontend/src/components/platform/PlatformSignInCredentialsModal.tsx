@@ -102,7 +102,10 @@ export function PlatformSignInCredentialsModal({
   const [notified, setNotified] = useState(false)
   const [usernameDraft, setUsernameDraft] = useState('')
   const password = payload?.temporary_password
-  const pendingGenerate = Boolean(payload && !password && onGeneratePassword)
+  const pendingGenerate = Boolean(
+    payload && !password && onGeneratePassword && !generatingPassword,
+  )
+  const issuingPassword = Boolean(payload && !password && generatingPassword)
   const currentUsername = (payload?.username || payload?.login_id || '').trim()
   const usernameError = pendingGenerate ? loginUsernameError(usernameDraft, { allowCurrent: currentUsername }) : null
 
@@ -265,12 +268,10 @@ export function PlatformSignInCredentialsModal({
                 copied={copiedField === 'password'}
                 onCopy={() => void copyPassword()}
               />
+            ) : issuingPassword ? (
+              <CredentialRow label="Temporary password" value="Generating…" muted />
             ) : (
-              <CredentialRow
-                label="Temporary password"
-                value="Not generated yet"
-                muted
-              />
+              <CredentialRow label="Temporary password" value="Not generated yet" muted />
             )}
           </div>
           {pendingGenerate ? (

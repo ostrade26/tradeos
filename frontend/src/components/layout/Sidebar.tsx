@@ -258,7 +258,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               {showLabels && (
                 <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Trading</p>
               )}
-              <div className="space-y-0.5 mb-3">
+              <div className="space-y-0.5 mb-3" data-tour="nav-trading">
                 {tradingNav.map(item => (
                   <NavLink
                     key={item.to}
@@ -267,6 +267,13 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                     title={iconOnly ? item.label : undefined}
                     className={navClass}
                     onClick={onMobileClose}
+                    data-tour={
+                      item.label === 'Purchase Orders'
+                        ? 'nav-purchase-orders'
+                        : item.label === 'Lift Register'
+                          ? 'nav-lifts'
+                          : undefined
+                    }
                   >
                     <item.icon className="h-5 w-5 shrink-0" />
                     {showLabels && item.label}

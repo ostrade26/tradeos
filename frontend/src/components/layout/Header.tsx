@@ -39,6 +39,7 @@ export function Header({
         type="button"
         onClick={onOpenCommand}
         aria-label="Search orders, parties, lifts"
+        data-tour="header-search"
         className="flex min-w-0 flex-1 max-w-[9.5rem] sm:max-w-md lg:max-w-xl items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-2.5 sm:px-3 py-2 text-sm text-muted hover:border-accent/40 hover:text-accent transition-colors cursor-pointer dark:border-gray-600 dark:bg-gray-700/30 attex-focus"
       >
         <Search className="h-[1.125rem] w-[1.125rem] shrink-0" />

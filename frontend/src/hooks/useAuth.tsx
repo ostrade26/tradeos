@@ -25,6 +25,7 @@ import {
 import { authApi } from '../api/tradeApi'
 import { applyUserPreferences } from '../lib/applyUserPreferences'
 import { sessionFromApi } from '../lib/authSession'
+import { markPendingAccountWelcome } from '../lib/firstLoginWelcome'
 import { preferenceUserKey } from '../lib/userPreferences'
 
 interface AuthContextValue {
@@ -81,6 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     const result = await authApi.login(username, password)
     const next = sessionFromApi(result, result.token)
+    if (
+      result.isFirstLogin &&
+      !result.isPlatformAdmin &&
+      !result.preferences?.completedOrgAccountWelcome
+    ) {
+      markPendingAccountWelcome()
+    }
     saveAuthSession(next)
     applyUserPreferences(next.preferences, preferenceUserKey())
     setSession(next)

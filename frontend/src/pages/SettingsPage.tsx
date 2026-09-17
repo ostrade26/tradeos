@@ -5,7 +5,9 @@ import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb } from '../components/ui/Tabs'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { usePermissions } from '../hooks/useAuth'
+import { useAuth, usePermissions } from '../hooks/useAuth'
+import { useProductTour } from '../contexts/ProductTourContext'
+import { ApiError } from '../api/client'
 import { useTheme } from '../hooks/useTheme'
 import { useTableDensity } from '../hooks/useTableDensity'
 import { useToast } from '../hooks/useToast'
@@ -59,7 +61,9 @@ function useSettingsBilling(canViewSubscription: boolean) {
 
 /** Shared state + dialogs for all settings routes */
 export function SettingsLayout() {
+  const { isPlatformAdmin } = useAuth()
   const { hasPermission, organisationSandboxTools } = usePermissions()
+  const productTour = useProductTour()
   const canImport = hasPermission('organisation.edit')
   const canUseDemoTools = organisationSandboxTools && hasPermission('organisation.edit')
   const canViewSubscription = hasPermission('organisation.subscription.view')
@@ -80,6 +84,26 @@ export function SettingsLayout() {
   const [exporting, setExporting] = useState<'json' | 'excel' | 'csv' | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [replayingProductGuide, setReplayingProductGuide] = useState(false)
+
+  const handleReplayProductGuide = useCallback(async () => {
+    if (!productTour || replayingProductGuide) return
+    setReplayingProductGuide(true)
+    try {
+      await productTour.replayProductTour()
+      toast.success('Product guide started')
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not start product guide',
+      )
+    } finally {
+      setReplayingProductGuide(false)
+    }
+  }, [productTour, replayingProductGuide, toast])
 
   const { billing, billingLoading, reloadBilling } = useSettingsBilling(showPlanSection || showTeamSection)
 
@@ -147,6 +171,9 @@ export function SettingsLayout() {
       onSeatsChanged: reloadBilling,
       onMembersChanged: reloadBilling,
       onOpenPassword: () => setPasswordModalOpen(true),
+      showProductGuideReplay: !isPlatformAdmin && !!productTour,
+      onReplayProductGuide: () => void handleReplayProductGuide(),
+      replayingProductGuide,
       onExport: format => void handleExport(format),
       exporting,
       onImportClick: () => importRef.current?.click(),
@@ -171,6 +198,10 @@ export function SettingsLayout() {
       exporting,
       downloadingTemplate,
       handleDownloadTemplate,
+      handleReplayProductGuide,
+      isPlatformAdmin,
+      productTour,
+      replayingProductGuide,
     ],
   )
 

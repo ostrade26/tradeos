@@ -47,6 +47,7 @@ export function FloatingCreateCta() {
   return (
     <div
       ref={ref}
+      data-tour="create-fab"
       className="fixed bottom-6 right-6 z-30 pb-[env(safe-area-inset-bottom)] sm:bottom-6 lg:hidden"
       aria-label="Create order"
     >

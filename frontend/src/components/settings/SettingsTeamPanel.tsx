@@ -109,13 +109,6 @@ export function SettingsTeamPanel({
     async (member: OrganisationMember, usernameDraft?: string) => {
       const userId = member.id
       if (resettingSignInId != null) return
-      setSignInCredentials({
-        name: member.name,
-        login_id: member.username || member.email,
-        username: member.username,
-        email: member.email,
-        recipient_user_id: userId,
-      })
       setResettingSignInId(userId)
       try {
         const username = usernameDraft?.trim().toLowerCase()

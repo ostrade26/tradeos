@@ -1,5 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { authApi } from '../../api/tradeApi'
+import { sessionFromApi } from '../../lib/authSession'
+import { ORG_PRODUCT_GUIDE_STEPS } from '../../lib/productGuideTour'
+import { AccountSetupWelcome } from '../onboarding/AccountSetupWelcome'
+import { ProductGuideTour } from '../onboarding/ProductGuideTour'
+import {
+  clearPendingAccountWelcome,
+  shouldShowAccountWelcome,
+} from '../../lib/firstLoginWelcome'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { DetailPanelColumn, DetailPanelRouteSync, DetailPanelSlotProvider } from './DetailPanelSlot'
@@ -9,8 +18,9 @@ import { AssistantPanel } from '../assistant/AssistantPanel'
 import { ApiServiceIssueWatch } from './ApiServiceIssueWatch'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
-import { usePermissions } from '../../hooks/useAuth'
-import { appPath } from '../../lib/appShellMode'
+import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
+import { ProductTourProvider } from '../../contexts/ProductTourContext'
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -21,16 +31,126 @@ function isTypingTarget(target: EventTarget | null) {
 
 export function AppShell() {
   const { hasPermission } = usePermissions()
+  const { session, applySession, isPlatformAdmin } = useAuth()
   const [commandOpen, setCommandOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [productTourOpen, setProductTourOpen] = useState(false)
+  const [accountWelcomeOpen, setAccountWelcomeOpen] = useState(false)
+  const tourStartedRef = useRef(false)
+  const pendingReplayOnDashboardRef = useRef(false)
   const navigate = useNavigate()
   const location = useLocation()
+
+  const isDashboardPath = (pathname: string) =>
+    pathname === APP_HOME || pathname === `${APP_HOME}/`
 
   useEffect(() => {
     setMobileNavOpen(false)
   }, [location.pathname])
+
+  const openProductTour = useCallback(() => {
+    setSidebarCollapsed(false)
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setMobileNavOpen(true)
+    }
+    window.setTimeout(() => setProductTourOpen(true), 400)
+  }, [])
+
+  useEffect(() => {
+    if (!pendingReplayOnDashboardRef.current || !isDashboardPath(location.pathname)) return
+    pendingReplayOnDashboardRef.current = false
+    openProductTour()
+  }, [location.pathname, openProductTour])
+
+  useEffect(() => {
+    if (!session || isPlatformAdmin) return
+    if (shouldShowAccountWelcome(session)) {
+      setAccountWelcomeOpen(true)
+    }
+  }, [isPlatformAdmin, session])
+
+  const finishAccountWelcome = useCallback(async () => {
+    setAccountWelcomeOpen(false)
+    clearPendingAccountWelcome()
+    if (session?.token) {
+      try {
+        const me = await authApi.updatePreferences({ completedOrgAccountWelcome: true })
+        applySession(sessionFromApi(me, session.token))
+      } catch {
+        /* still continue to product guide */
+      }
+    }
+    if (!isDashboardPath(location.pathname)) {
+      navigate(APP_HOME)
+    }
+    tourStartedRef.current = true
+    window.setTimeout(() => openProductTour(), 300)
+  }, [applySession, location.pathname, navigate, openProductTour, session?.token])
+
+  useEffect(() => {
+    if (!session || isPlatformAdmin || isPlatformAdminPath(location.pathname) || tourStartedRef.current) {
+      return
+    }
+    if (accountWelcomeOpen) return
+    if (session.preferences?.completedOrgProductTour) return
+    if (
+      !session.preferences?.completedOrgAccountWelcome &&
+      shouldShowAccountWelcome(session)
+    ) {
+      return
+    }
+
+    tourStartedRef.current = true
+    const state = location.state as { startProductTour?: boolean } | null
+    if (state?.startProductTour) {
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        { replace: true, state: {} },
+      )
+    }
+    openProductTour()
+  }, [
+    isPlatformAdmin,
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    accountWelcomeOpen,
+    openProductTour,
+    session,
+  ])
+
+  const finishProductTour = useCallback(async () => {
+    setProductTourOpen(false)
+    setMobileNavOpen(false)
+    if (!session?.token) return
+    try {
+      const me = await authApi.updatePreferences({ completedOrgProductTour: true })
+      applySession(sessionFromApi(me, session.token))
+    } catch {
+      /* tour still closes */
+    }
+  }, [applySession, session?.token])
+
+  const replayProductTour = useCallback(async () => {
+    if (!session?.token || isPlatformAdmin) return
+    try {
+      const me = await authApi.updatePreferences({ completedOrgProductTour: false })
+      applySession(sessionFromApi(me, session.token))
+    } catch {
+      /* tour can still run; pref sync is best-effort for replay */
+    }
+    tourStartedRef.current = true
+    if (isDashboardPath(location.pathname)) {
+      openProductTour()
+      return
+    }
+    pendingReplayOnDashboardRef.current = true
+    navigate(APP_HOME)
+  }, [applySession, isPlatformAdmin, location.pathname, navigate, openProductTour, session?.token])
 
   useEffect(() => initOverlayScrollbars(), [])
 
@@ -62,6 +182,7 @@ export function AppShell() {
   return (
     <DetailPanelSlotProvider>
       <DetailPanelRouteSync />
+      <ProductTourProvider replayProductTour={replayProductTour}>
       <div className="flex h-viewport overflow-hidden bg-body wrapper">
         <a href="#main-content" className="skip-to-main">
           Skip to main content
@@ -102,7 +223,21 @@ export function AppShell() {
           onClose={() => setAssistantOpen(false)}
         />
         <FloatingCreateCta />
+        {session && !isPlatformAdmin ? (
+          <AccountSetupWelcome
+            open={accountWelcomeOpen}
+            session={session}
+            onComplete={() => void finishAccountWelcome()}
+          />
+        ) : null}
+        <ProductGuideTour
+          open={productTourOpen}
+          steps={ORG_PRODUCT_GUIDE_STEPS}
+          onComplete={() => void finishProductTour()}
+          onSkip={() => void finishProductTour()}
+        />
       </div>
+      </ProductTourProvider>
     </DetailPanelSlotProvider>
   )
 }

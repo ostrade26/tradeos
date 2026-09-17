@@ -1098,8 +1098,12 @@ def create_organisation_with_primary_admin(
     )
 
     custom_password = primary_admin.get("password", "").strip()
-    password = custom_password or default_org_user_password()
-    used_default_password = not custom_password
+    if custom_password:
+        password = custom_password
+        show_temporary_password = False
+    else:
+        password = generate_temp_password()
+        show_temporary_password = True
 
     user_id = create_org_user_with_seat(
         conn,
@@ -1114,13 +1118,17 @@ def create_organisation_with_primary_admin(
     )
 
     detail = organisation_detail(conn, org_id)
+    admin_summary = detail.get("primary_admin_user") or {}
+    login_id = str(admin_summary.get("login_id") or username)
     return {
         **detail,
         "primary_admin": {
             "user_id": user_id,
             "username": username,
             "email": email,
-            "temporary_password": password if used_default_password else None,
+            "name": admin_name,
+            "login_id": login_id,
+            "temporary_password": password if show_temporary_password else None,
         },
         "_audit_actor_user_id": actor_user_id,
     }
