@@ -1,29 +1,39 @@
 import { useCallback, useEffect, useState } from 'react'
-import { platformApi } from '../api/platformApi'
-import { buildPlatformSeatRequestInbox } from '../lib/platformSeatRequestInbox'
+import { platformApi, type PlatformInboxItem } from '../api/platformApi'
 import type { InboxAction } from '../lib/actionInbox'
 
 const POLL_MS = 15_000
 
-export function usePlatformSeatRequestInbox(enabled: boolean) {
+function toAction(item: PlatformInboxItem): InboxAction {
+  return {
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    subtitle: item.subtitle,
+    href: item.href,
+    urgency: item.urgency,
+  }
+}
+
+export function usePlatformActionInbox(enabled: boolean) {
   const [actions, setActions] = useState<InboxAction[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
+  const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
     if (!enabled) {
       setActions([])
-      setPendingCount(0)
+      setUnread(0)
       return
     }
     setLoading(true)
     try {
-      const summary = await platformApi.seatRequestsSummary()
-      setPendingCount(summary.pending_count)
-      setActions(buildPlatformSeatRequestInbox(summary.open_requests))
+      const summary = await platformApi.actionInbox()
+      setUnread(summary.unread)
+      setActions(summary.items.map(toAction))
     } catch {
       setActions([])
-      setPendingCount(0)
+      setUnread(0)
     } finally {
       setLoading(false)
     }
@@ -48,5 +58,5 @@ export function usePlatformSeatRequestInbox(enabled: boolean) {
     }
   }, [enabled, refresh])
 
-  return { actions, pendingCount, loading, refresh }
+  return { actions, unread, loading, refresh }
 }

@@ -18,6 +18,7 @@ import { PlatformAdminSettingsPage } from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MarketingPage } from './pages/MarketingPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { NoticesPage } from './pages/NoticesPage'
 import { ContractsPage } from './pages/ContractsPage'
 import { CreateContractPage } from './pages/CreateContractPage'
 import { ContractDetailsPage } from './pages/ContractDetailsPage'
@@ -113,6 +114,7 @@ const router = createBrowserRouter([
                 element: <ShellLayout />,
                 children: [
                   { path: 'app', element: <DashboardPage /> },
+                  { path: 'app/notices', element: <NoticesPage /> },
 
           { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
           { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },

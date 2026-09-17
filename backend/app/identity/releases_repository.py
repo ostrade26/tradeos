@@ -357,6 +357,9 @@ def publish_release(
         payload=payload,
         href="",
         actor_user_id=actor_user_id,
+        process_inline=audience == "user",
+        source="release",
+        source_id=release_id,
     )
     now = _now_iso()
     if uses_postgres():
@@ -389,12 +392,17 @@ def publish_release(
             "version": release["version"],
             "audience": audience,
             "sent": result.get("sent"),
+            "queued": result.get("queued"),
+            "campaign_id": result.get("campaign_id"),
             "gated": bool(gated),
         },
     )
     updated = _get_release(conn, release_id)
     updated["sent"] = result.get("sent")
     updated["skipped_expired_amc"] = result.get("skipped_expired_amc")
+    updated["queued"] = result.get("queued")
+    updated["campaign_id"] = result.get("campaign_id")
+    updated["campaign_status"] = result.get("campaign_status")
     return updated
 
 

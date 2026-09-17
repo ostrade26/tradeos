@@ -32,6 +32,12 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         { id: 'payments', label: 'Payments', group: 'Navigation', action: () => navigate('/platform-admin/payments') },
         { id: 'releases', label: 'Releases', group: 'Navigation', action: () => navigate('/platform-admin/releases') },
         {
+          id: 'needs-attention',
+          label: 'Needs attention',
+          group: 'Navigation',
+          action: () => navigate('/platform-admin/seat-requests'),
+        },
+        {
           id: 'seat-requests',
           label: 'Seat requests',
           group: 'Navigation',
@@ -57,6 +63,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       { id: 'reports', label: 'Reports', group: 'Navigation', action: () => navigate('/reports') },
       { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate('/analytics') },
       { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate('/activity') },
+      { id: 'notices', label: 'From Tradeal', group: 'Navigation', action: () => navigate('/app/notices') },
       { id: 'contracts', label: 'Contracts', group: 'Navigation', action: () => navigate('/contracts') },
       { id: 'settings', label: 'Settings', group: 'Navigation', action: () => navigate('/settings') },
       { id: 'profile', label: 'Profile', group: 'Navigation', action: () => navigate('/profile') },

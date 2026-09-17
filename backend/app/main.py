@@ -167,6 +167,9 @@ def _require_order_perm(session: auth.Session, body: dict, action: str) -> None:
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    from .identity.notification_worker import start_campaign_worker
+
+    start_campaign_worker()
 
 
 @app.middleware("http")

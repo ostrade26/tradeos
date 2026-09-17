@@ -30,7 +30,7 @@ export function ActionInbox({ className }: { className?: string }) {
     <Card className={cn('h-full flex flex-col', className)}>
       <CardHeader
         title="Action inbox"
-        subtitle={actions.length === 0 ? 'All caught up' : `${actions.length} item${actions.length === 1 ? '' : 's'} need attention`}
+        subtitle={actions.length === 0 ? 'All caught up' : `${actions.length} item${actions.length === 1 ? '' : 's'} need attention — trade follow-ups, not notices from Tradeal`}
       />
       {actions.length === 0 ? (
         <DashboardCardEmptyState

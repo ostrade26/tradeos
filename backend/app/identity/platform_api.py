@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import auth
@@ -992,6 +992,20 @@ def list_seats(request: Request) -> dict[str, Any]:
         return {"seats": list_platform_seats(conn)}
 
 
+@router.get("/inbox", summary="Needs attention — open platform actions (server unread)")
+def platform_action_inbox(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.view")
+    from .platform_inbox import platform_action_inbox as load_inbox
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return load_inbox(conn)
+    with _sqlite_connect() as conn:
+        return load_inbox(conn)
+
+
 @router.get("/seat-requests/summary", summary="Open seat requests count (platform notifications)")
 def seat_requests_summary(request: Request) -> dict[str, Any]:
     session = _session(request)
@@ -1343,15 +1357,23 @@ class SendNotificationBody(BaseModel):
 
 
 @router.post("/notifications", summary="Send an in-app notice to a chosen audience")
-def send_org_notification(body: SendNotificationBody, request: Request) -> dict[str, Any]:
+def send_org_notification(
+    body: SendNotificationBody,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "organisations.edit")
     from .notifications_repository import create_notifications_for_audience
+    from .notification_worker import schedule_campaign_processing
 
     payload = dict(body.payload or {})
     if body.feature_key.strip():
         payload["feature_key"] = body.feature_key.strip()
+    # Single-user stays inline so credentials notices exist before the response returns.
+    # org / active_licences enqueue a campaign and fan out after the response.
+    process_inline = body.audience == "user"
     kwargs = dict(
         audience=body.audience,
         organisation_id=body.organisation_id,
@@ -1364,15 +1386,69 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
         payload=payload,
         href=body.href,
         actor_user_id=session.user.id,
+        process_inline=process_inline,
+        source="manual",
     )
     if uses_postgres():
         with _pg_connect() as conn:
             result = create_notifications_for_audience(conn, **kwargs)
             conn.commit()
+    else:
+        with _sqlite_connect() as conn:
+            result = create_notifications_for_audience(conn, **kwargs)
+            conn.commit()
+    result.pop("notifications", None)
+    if result.get("queued"):
+        schedule_campaign_processing(background_tasks)
+    return result
+
+
+@router.get("/notification-campaigns", summary="List recent notification campaigns")
+def list_notification_campaigns(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .notification_campaigns_repository import list_campaigns
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"campaigns": list_campaigns(conn, limit=limit)}
+    with _sqlite_connect() as conn:
+        return {"campaigns": list_campaigns(conn, limit=limit)}
+
+
+@router.get("/notification-campaigns/{campaign_id}", summary="Get a notification campaign")
+def get_notification_campaign(campaign_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .notification_campaigns_repository import get_campaign
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"campaign": get_campaign(conn, campaign_id)}
+    with _sqlite_connect() as conn:
+        return {"campaign": get_campaign(conn, campaign_id)}
+
+
+@router.post("/notification-campaigns/{campaign_id}/process", summary="Run or retry campaign fan-out")
+def process_notification_campaign(campaign_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .notification_campaigns_repository import process_campaign
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            result = process_campaign(conn, campaign_id)
+            conn.commit()
             result.pop("notifications", None)
             return result
     with _sqlite_connect() as conn:
-        result = create_notifications_for_audience(conn, **kwargs)
+        result = process_campaign(conn, campaign_id)
         conn.commit()
         result.pop("notifications", None)
         return result
@@ -1483,11 +1559,17 @@ def update_platform_release(release_id: int, body: ReleaseBody, request: Request
 
 
 @router.post("/releases/{release_id}/publish", summary="Publish a release to a chosen audience")
-def publish_platform_release(release_id: int, body: PublishReleaseBody, request: Request) -> dict[str, Any]:
+def publish_platform_release(
+    release_id: int,
+    body: PublishReleaseBody,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "organisations.edit")
     from .releases_repository import publish_release
+    from .notification_worker import schedule_campaign_processing
 
     kwargs = dict(
         audience=body.audience,
@@ -1501,8 +1583,10 @@ def publish_platform_release(release_id: int, body: PublishReleaseBody, request:
         with _pg_connect() as conn:
             release = publish_release(conn, release_id, **kwargs)
             conn.commit()
-            return {"release": release}
-    with _sqlite_connect() as conn:
-        release = publish_release(conn, release_id, **kwargs)
-        conn.commit()
-        return {"release": release}
+    else:
+        with _sqlite_connect() as conn:
+            release = publish_release(conn, release_id, **kwargs)
+            conn.commit()
+    if release.get("queued"):
+        schedule_campaign_processing(background_tasks)
+    return {"release": release}
