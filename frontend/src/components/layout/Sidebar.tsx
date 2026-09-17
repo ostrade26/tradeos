@@ -8,7 +8,8 @@ import {
 import { cn } from '../../lib/utils'
 import { isPlatformAdminPath } from '../../lib/appShellMode'
 import { isSettingsAreaPath, SETTINGS_SECTIONS, settingsPath } from '../../lib/settingsSections'
-import { usePermissions } from '../../hooks/useAuth'
+import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
 
 /** Register routes — navigate with a clean URL (no `ref` from the previous register). */
 function registerNavTo(path: string) {
@@ -54,12 +55,14 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
   const location = useLocation()
   const platformAdminMode = isPlatformAdminPath(location.pathname)
   const settingsMode = !platformAdminMode && isSettingsAreaPath(location.pathname)
+  const { isPlatformAdmin } = useAuth()
   const { hasPermission } = usePermissions()
   const canManageOrganisation = hasPermission('organisation.edit')
   const showPlanInSettings =
     canManageOrganisation &&
     (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
   const showTeamInSettings = canManageOrganisation
+  const { pendingCount: openSeatRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanInSettings) return false
     if (s.teamSection && !showTeamInSettings) return false
@@ -184,7 +187,9 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                 </p>
               )}
               <div className="space-y-0.5">
-                {platformAdminNav.map(item => (
+                {platformAdminNav.map(item => {
+                  const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
+                  return (
                     <NavLink
                       key={item.to}
                       to={item.to}
@@ -193,10 +198,27 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                       className={navClass}
                       onClick={onMobileClose}
                     >
-                      <item.icon className="h-5 w-5 shrink-0" />
-                      {showLabels && <span className="truncate">{item.label}</span>}
+                      <span className="relative shrink-0">
+                        <item.icon className="h-5 w-5" />
+                        {iconOnly && seatBadge && (
+                          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                            {openSeatRequests > 9 ? '9+' : openSeatRequests}
+                          </span>
+                        )}
+                      </span>
+                      {showLabels && (
+                        <>
+                          <span className="truncate">{item.label}</span>
+                          {seatBadge && (
+                            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white tabular-nums">
+                              {openSeatRequests > 9 ? '9+' : openSeatRequests}
+                            </span>
+                          )}
+                        </>
+                      )}
                     </NavLink>
-                ))}
+                  )
+                })}
               </div>
             </>
           ) : (

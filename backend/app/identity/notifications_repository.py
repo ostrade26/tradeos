@@ -49,14 +49,6 @@ def _row(row: Any) -> dict[str, Any]:
     item["unread"] = item.get("read_at") in (None, "")
     item["applied"] = bool(item.get("applied_at"))
     item["feature_key"] = str(item.get("feature_key") or item["payload"].get("feature_key") or "")
-    campaign_id = item.get("campaign_id")
-    if campaign_id in (None, ""):
-        item["campaign_id"] = None
-    else:
-        try:
-            item["campaign_id"] = int(campaign_id)
-        except (TypeError, ValueError):
-            item["campaign_id"] = None
     return item
 
 
@@ -84,26 +76,6 @@ def _resolve_recipient(conn, organisation_id: int, recipient_user_id: int | None
     return int(admin["user_id"])
 
 
-def _fetch_campaign_notification(conn, campaign_id: int, recipient_user_id: int) -> dict[str, Any] | None:
-    if uses_postgres():
-        row = conn.execute(
-            """
-            SELECT * FROM user_notifications
-            WHERE campaign_id = %s AND recipient_user_id = %s
-            """,
-            (campaign_id, recipient_user_id),
-        ).fetchone()
-    else:
-        row = conn.execute(
-            """
-            SELECT * FROM user_notifications
-            WHERE campaign_id = ? AND recipient_user_id = ?
-            """,
-            (campaign_id, recipient_user_id),
-        ).fetchone()
-    return _row(row) if row else None
-
-
 def _insert_notification(
     conn,
     *,
@@ -115,7 +87,6 @@ def _insert_notification(
     payload: dict[str, Any] | None,
     href: str,
     actor_user_id: int,
-    campaign_id: int | None = None,
 ) -> dict[str, Any]:
     now = _now_iso()
     payload = dict(payload or {})
@@ -132,42 +103,27 @@ def _insert_notification(
         now,
         actor_user_id,
         feature_key,
-        campaign_id,
     )
     if uses_postgres():
         row = conn.execute(
             """
             INSERT INTO user_notifications
-            (organisation_id, recipient_user_id, kind, title, body, payload_json, href, created_at, created_by_user_id, feature_key, campaign_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (campaign_id, recipient_user_id) DO NOTHING
+            (organisation_id, recipient_user_id, kind, title, body, payload_json, href, created_at, created_by_user_id, feature_key)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             vals,
         ).fetchone()
-        if row:
-            return _row(row)
-        if campaign_id:
-            existing = _fetch_campaign_notification(conn, campaign_id, recipient_user_id)
-            if existing:
-                return existing
-        raise HTTPException(status_code=500, detail="Could not create notification")
+        return _row(row)
     cur = conn.execute(
         """
         INSERT INTO user_notifications
-        (organisation_id, recipient_user_id, kind, title, body, payload_json, href, created_at, created_by_user_id, feature_key, campaign_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (campaign_id, recipient_user_id) DO NOTHING
+        (organisation_id, recipient_user_id, kind, title, body, payload_json, href, created_at, created_by_user_id, feature_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         vals,
     )
-    if int(getattr(cur, "rowcount", 0) or 0) > 0 and cur.lastrowid:
-        return _row(conn.execute("SELECT * FROM user_notifications WHERE id = ?", (cur.lastrowid,)).fetchone())
-    if campaign_id:
-        existing = _fetch_campaign_notification(conn, campaign_id, recipient_user_id)
-        if existing:
-            return existing
-    raise HTTPException(status_code=500, detail="Could not create notification")
+    return _row(conn.execute("SELECT * FROM user_notifications WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 
 def _org_has_active_licence(conn, organisation_id: int) -> bool:
@@ -318,29 +274,84 @@ def create_notifications_for_audience(
     payload: dict[str, Any] | None,
     href: str,
     actor_user_id: int,
-    process_inline: bool | None = None,
-    source: str = "manual",
-    source_id: int | None = None,
 ) -> dict[str, Any]:
-    from .notification_campaigns_repository import enqueue_notification_campaign
+    if kind not in NOTIFICATION_KINDS:
+        raise HTTPException(status_code=400, detail="Invalid notification type")
+    title = title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    if recipient_scope not in ("org_admin", "all_users"):
+        raise HTTPException(status_code=400, detail="Invalid recipient scope")
 
-    return enqueue_notification_campaign(
+    payload = dict(payload or {})
+    if kind in UPDATE_KINDS:
+        feature_key = normalize_feature_key(str(payload.get("feature_key") or ""), title)
+        payload["cta"] = "update"
+        payload["feature_key"] = feature_key
+
+    if organisation_id:
+        if uses_postgres():
+            org = conn.execute("SELECT id FROM organisations WHERE id = %s", (organisation_id,)).fetchone()
+        else:
+            org = conn.execute("SELECT id FROM organisations WHERE id = ?", (organisation_id,)).fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+
+    targets, skipped_amc = resolve_audience_recipients(
         conn,
         audience=audience,
         organisation_id=organisation_id,
         recipient_user_id=recipient_user_id,
         recipient_scope=recipient_scope,
         exclude_expired_amc=exclude_expired_amc,
-        kind=kind,
-        title=title,
-        body=body,
-        payload=payload,
-        href=href,
-        actor_user_id=actor_user_id,
-        process_inline=process_inline,
-        source=source,
-        source_id=source_id,
     )
+    if not targets:
+        raise HTTPException(
+            status_code=400,
+            detail="No recipients match this audience"
+            + (" (expired AMC excluded)" if skipped_amc else ""),
+        )
+
+    items = [
+        _insert_notification(
+            conn,
+            organisation_id=oid,
+            recipient_user_id=uid,
+            kind=kind,
+            title=title,
+            body=body,
+            payload=payload,
+            href=href,
+            actor_user_id=actor_user_id,
+        )
+        for oid, uid in targets
+    ]
+    audit_payload = dict(payload or {})
+    if "temporary_password" in audit_payload:
+        audit_payload["temporary_password"] = "[redacted]"
+    append_audit_log(
+        organisation_id=organisation_id,
+        actor_user_id=actor_user_id,
+        action="notification.sent",
+        entity_type="user_notification",
+        entity_id=str(items[0]["id"]),
+        new_value={
+            "kind": kind,
+            "audience": audience,
+            "recipient_scope": recipient_scope,
+            "exclude_expired_amc": exclude_expired_amc,
+            "sent": len(items),
+            "skipped_expired_amc": skipped_amc,
+            "title": title,
+            "payload": audit_payload,
+        },
+    )
+    return {
+        "sent": len(items),
+        "skipped_expired_amc": skipped_amc,
+        "notifications": items,
+        "notification": items[0],
+    }
 
 
 def list_notifications_for_user(conn, user_id: int, limit: int = 50) -> list[dict[str, Any]]:

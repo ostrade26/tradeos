@@ -282,44 +282,8 @@ export interface UserNotification {
   applied_at?: string | null
   applied?: boolean
   feature_key?: string
-  campaign_id?: number | null
   unread: boolean
   created_at: string
-}
-
-export interface NotificationCampaign {
-  id: number
-  kind: NotificationKind | string
-  title: string
-  body: string
-  payload: Record<string, string>
-  audience: NotificationAudience | string
-  status: 'pending' | 'processing' | 'complete' | 'failed' | string
-  sent_count: number
-  skipped_expired_amc: number
-  queued?: boolean
-  created_at: string
-}
-
-export interface SendNotificationResult {
-  sent: number
-  skipped_expired_amc: number
-  queued?: boolean
-  campaign_id?: number | null
-  campaign_status?: string
-  notification: UserNotification | null
-}
-
-export interface PlatformInboxItem {
-  id: string
-  kind: string
-  title: string
-  subtitle: string
-  href: string
-  urgency: 'high' | 'medium' | 'low'
-  created_at?: string | null
-  entity_id?: number
-  amount_cents?: number
 }
 
 export type ReleaseCategory = 'bug_fix' | 'improvement' | 'cosmetic' | 'new_feature' | 'product_update'
@@ -346,11 +310,8 @@ export interface PlatformRelease {
   updated_at: string
   published_at: string | null
   sent?: number
-    skipped_expired_amc?: number
-    queued?: boolean
-    campaign_id?: number | null
-    campaign_status?: string
-  }
+  skipped_expired_amc?: number
+}
 
 export const platformApi = {
   listPlans: () => apiFetch<{ plans: SubscriptionPlan[] }>('/platform/plans'),
@@ -514,19 +475,10 @@ export const platformApi = {
     payload?: Record<string, string>
     feature_key?: string
   }) =>
-    apiFetch<SendNotificationResult>('/platform/notifications', {
+    apiFetch<{ sent: number; skipped_expired_amc: number; notification: UserNotification }>('/platform/notifications', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-
-  actionInbox: () =>
-    apiFetch<{ unread: number; items: PlatformInboxItem[]; counts: Record<string, number> }>('/platform/inbox'),
-
-  listNotificationCampaigns: () =>
-    apiFetch<{ campaigns: NotificationCampaign[] }>('/platform/notification-campaigns'),
-
-  getNotificationCampaign: (campaignId: number) =>
-    apiFetch<{ campaign: NotificationCampaign }>(`/platform/notification-campaigns/${campaignId}`),
 
   listReleases: () =>
     apiFetch<{ releases: PlatformRelease[]; latest_version: string | null; next_version: string }>(

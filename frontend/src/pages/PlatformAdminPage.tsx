@@ -120,7 +120,7 @@ const SECTION_META: Record<
   },
   'seat-requests': {
     title: 'Seat requests',
-    subtitle: 'Register of add-on seat requests. Open items also appear under Needs attention in the header.',
+    subtitle: 'Approve after off-platform payment',
     breadcrumb: 'Seat requests',
   },
   audit: {
@@ -406,7 +406,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
   const auditOrgFilter = searchParams.get('organisation_id')
   const auditUserFilter = searchParams.get('user_id')
-  const seatRequestHighlight = searchParams.get('highlight')
 
   const filteredAuditRows = useMemo(() => {
     let rows = sortedAuditRows
@@ -609,11 +608,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       const skipped = res.skipped_expired_amc
         ? ` · ${res.skipped_expired_amc} skipped (expired AMC)`
         : ''
-      if (res.queued) {
-        toast.success(`Queued for delivery${skipped}. Recipients will see it shortly.`)
-      } else {
-        toast.success(`Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${skipped}`)
-      }
+      toast.success(`Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${skipped}`)
       setNotifyOpen(false)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not send notice')
@@ -671,11 +666,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       const skipped = res.release.skipped_expired_amc
         ? ` · ${res.release.skipped_expired_amc} skipped (expired AMC)`
         : ''
-      if (res.release.queued) {
-        toast.success(`Published ${res.release.version}. Delivery is queued${skipped}.`)
-      } else {
-        toast.success(`Published ${res.release.version} to ${res.release.sent ?? 0} ${res.release.sent === 1 ? 'person' : 'people'}${skipped}`)
-      }
+      toast.success(`Published ${res.release.version} to ${res.release.sent ?? 0} ${res.release.sent === 1 ? 'person' : 'people'}${skipped}`)
       setPublishingReleaseRow(null)
       await load()
     } catch (err) {
@@ -1118,7 +1109,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             data={sortedSeatRequests}
             columns={seatRequestColumnDefs}
             getRowId={r => String(r.id)}
-            activeRowId={seatRequestHighlight ?? undefined}
             stickyFirstColumn
             sortKey={seatRequestSort.key}
             sortDirection={seatRequestSort.direction}
@@ -1127,7 +1117,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             emptyState={
               <EmptyState
                 title="No seat requests"
-                description="Submitted from org Settings after off-platform payment. Open requests also appear under Needs attention in the header."
+                description="Submitted from org Settings after off-platform payment."
                 action={
                   <Button variant="outline" size="sm" onClick={() => void loadSeatRequests()}>
                     Refresh
