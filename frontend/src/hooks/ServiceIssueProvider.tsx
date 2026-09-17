@@ -30,7 +30,10 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(false)
 
   const showIssue = useCallback((next: ServiceIssueView) => {
-    setIssue(next)
+    setIssue(prev => {
+      if (prev?.kind === next.kind && prev.title === next.title) return prev
+      return next
+    })
     setOpen(true)
   }, [])
 
@@ -49,7 +52,16 @@ export function ServiceIssueProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onEvent = (event: Event) => {
       const detail = (event as CustomEvent<ServiceIssueView>).detail
-      if (detail?.title) showIssue(detail)
+      // Ignore background API errors while connectivity modal is already shown.
+      if (detail?.title) {
+        setIssue(current => {
+          if (current?.kind === 'connectivity' || current?.kind === 'no_internet') {
+            if (detail.kind === 'connectivity' || detail.kind === 'no_internet') return current
+          }
+          return detail
+        })
+        setOpen(true)
+      }
     }
     window.addEventListener(SERVICE_ISSUE_EVENT, onEvent)
     return () => window.removeEventListener(SERVICE_ISSUE_EVENT, onEvent)

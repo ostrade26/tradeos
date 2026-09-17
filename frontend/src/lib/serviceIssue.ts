@@ -242,7 +242,20 @@ export async function copyServiceIssueReport(issue: ServiceIssueView, apiBase: s
 
 export const SERVICE_ISSUE_EVENT = 'tradeal-service-issue'
 
+const EMIT_COOLDOWN_MS = 120_000
+const lastEmitByKind: Partial<Record<ServiceIssueKind, number>> = {}
+
 export function emitServiceIssue(issue: ServiceIssueView) {
   if (typeof window === 'undefined') return
+  const now = Date.now()
+  const last = lastEmitByKind[issue.kind]
+  if (last != null && now - last < EMIT_COOLDOWN_MS) return
+  lastEmitByKind[issue.kind] = now
   window.dispatchEvent(new CustomEvent(SERVICE_ISSUE_EVENT, { detail: issue }))
+}
+
+export function resetServiceIssueEmitCooldown() {
+  for (const key of Object.keys(lastEmitByKind) as ServiceIssueKind[]) {
+    delete lastEmitByKind[key]
+  }
 }

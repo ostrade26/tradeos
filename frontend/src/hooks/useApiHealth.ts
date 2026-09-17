@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { tradeApi } from '../api/tradeApi'
 
-const POLL_MS = 15_000
+/** Background probe only — modal waits for consecutive failures in ApiServiceIssueWatch. */
+const POLL_MS = 45_000
 const HEALTH_ATTEMPTS = 3
 const RETRY_GAP_MS = 1_200
 

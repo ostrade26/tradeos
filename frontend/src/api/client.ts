@@ -104,11 +104,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       },
     })
   } catch (err) {
+    // Connectivity modals come from ApiServiceIssueWatch (/health), not every failed fetch.
     if (err instanceof Error && err.name === 'AbortError') {
-      surfaceInfrastructureIssue(path, 0, 'timeout')
       throw new ApiError(USER_FACING_OFFLINE, 0)
     }
-    surfaceInfrastructureIssue(path, 0, 'network')
     throw new ApiError(USER_FACING_OFFLINE, 0)
   } finally {
     clearTimeout(timeout)

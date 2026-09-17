@@ -9,16 +9,20 @@ export function ApiServiceIssueWatch() {
   const { showIssue, clearIssue } = useServiceIssue()
   const wasOffline = useRef(false)
   const dismissedWhileDown = useRef(false)
+  const failureStreak = useRef(0)
+  /** Avoid modal on a single blip during cold start or deploy. */
+  const FAILURES_BEFORE_MODAL = 2
 
   useEffect(() => {
     if (online === false && !checking) {
       wasOffline.current = true
-      if (!dismissedWhileDown.current) {
+      failureStreak.current += 1
+      if (failureStreak.current >= FAILURES_BEFORE_MODAL && !dismissedWhileDown.current) {
         showIssue({
           ...connectivityIssue(),
           requestPath: '/health',
           httpStatus: 0,
-          technical: 'Periodic health check failed',
+          technical: 'Periodic health check failed (consecutive probes)',
         })
       }
       return
@@ -26,6 +30,7 @@ export function ApiServiceIssueWatch() {
     if (online === true) {
       wasOffline.current = false
       dismissedWhileDown.current = false
+      failureStreak.current = 0
       clearIssue()
     }
   }, [online, checking, showIssue, clearIssue])
