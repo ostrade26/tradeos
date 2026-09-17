@@ -35,6 +35,8 @@ import { formatQty } from '../lib/utils'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
+import { useServiceIssue } from '../hooks/ServiceIssueProvider'
+import { classifyUnknownError } from '../lib/serviceIssue'
 
 export interface CreateOrderInput {
   ref?: string
@@ -261,41 +263,42 @@ function TradeStoreLoading({ message }: { message?: string }) {
 }
 
 function TradeStoreError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { showIssue } = useServiceIssue()
   const isAuthError = /not authenticated|unauthorized/i.test(message)
-  const isOffline = /cannot reach the api/i.test(message)
+
+  useEffect(() => {
+    if (isAuthError) return
+    showIssue(classifyUnknownError({ name: 'ApiError', message, status: 0 }))
+  }, [isAuthError, message, showIssue])
+
+  if (isAuthError) {
+    return (
+      <div className="flex h-viewport items-center justify-center bg-body p-6">
+        <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-6 text-center space-y-4">
+          <p className="text-sm text-heading font-medium">Your session expired</p>
+          <p className="text-sm text-muted">Sign in again to continue.</p>
+          <button
+            type="button"
+            onClick={() => window.location.assign('/login')}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer"
+          >
+            Go to sign in
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-viewport items-center justify-center bg-body p-6">
-      <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-6 text-center space-y-4">
-        <p className="text-sm text-danger">{message}</p>
-        {isAuthError ? (
-          <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
-            <p className="font-medium text-heading mb-1">Session expired</p>
-            <p>Sign in again at <code className="font-mono">http://localhost:5173/login</code></p>
-          </div>
-        ) : isOffline ? (
-          import.meta.env.DEV ? (
-            <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
-              <p className="font-medium text-heading mb-1">Start both servers:</p>
-              <p>Terminal 1: <code className="font-mono">npm run dev:backend</code></p>
-              <p>Terminal 2: <code className="font-mono">npm run dev</code></p>
-              <p className="mt-2">Then open <code className="font-mono">http://localhost:5173</code></p>
-            </div>
-          ) : (
-            <div className="rounded-md bg-gray-100/90 px-4 py-3 text-left text-xs text-muted leading-relaxed dark:bg-gray-800/50">
-              <p className="font-medium text-heading mb-1">Production checklist</p>
-              <p>Confirm Railway is running and open the API health URL in this browser.</p>
-              <p className="mt-2">In Chrome: disable ad blockers for this site, hard refresh (Cmd+Shift+R), or try Incognito — extensions often block cross-origin API calls.</p>
-              <p className="mt-2">On Vercel, set <code className="font-mono">VITE_API_URL</code> to your Railway URL ending in <code className="font-mono">/api/v1</code>, then redeploy.</p>
-            </div>
-          )
-        ) : null}
+      <div className="max-w-md text-center space-y-4">
+        <p className="text-sm text-muted">Tradeal could not load your organisation data.</p>
         <button
           type="button"
           onClick={onRetry}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer"
         >
-          Retry
+          Try again
         </button>
       </div>
     </div>

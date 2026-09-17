@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from '../components/ui/Drawer'
 import { SystemUpdateModal } from '../components/layout/SystemUpdateModal'
+import { ReleaseNoticeModal } from '../components/feedback/ReleaseNoticeModal'
 import { PlatformProductRequestModal } from '../components/platform/PlatformProductRequestModal'
 import {
   PlatformSeatRequestDecisionModal,
@@ -15,7 +16,7 @@ import { authApi } from '../api/tradeApi'
 import { sessionFromApi } from '../lib/authSession'
 import { saveAuthSession } from '../lib/auth'
 import { appPath } from '../lib/appShellMode'
-import { isProductUpdateNotice } from '../lib/notificationDisplay'
+import { isProductUpdateNotice, isReleaseStyleNoticeKind } from '../lib/notificationDisplay'
 import type { ProductRequestStatus, UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
 
@@ -127,17 +128,25 @@ export function useInboxItemActions({
 
   const modals = (
     <>
-      <Modal
-        open={readNotice != null}
-        onClose={() => setReadNotice(null)}
-        title={readNotice?.title ?? 'Message'}
-        subtitle="From Tradeal"
-        size="md"
-      >
-        <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">
-          {readNotice?.body}
-        </p>
-      </Modal>
+      {readNotice && isReleaseStyleNoticeKind(readNotice.kind) ? (
+        <ReleaseNoticeModal
+          open
+          notice={readNotice}
+          onClose={() => setReadNotice(null)}
+        />
+      ) : (
+        <Modal
+          open={readNotice != null}
+          onClose={() => setReadNotice(null)}
+          title={readNotice?.title ?? 'Message'}
+          subtitle="From Tradeal"
+          size="md"
+        >
+          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">
+            {readNotice?.body}
+          </p>
+        </Modal>
+      )}
 
       <SystemUpdateModal
         open={!!updating}

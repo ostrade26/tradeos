@@ -6,7 +6,7 @@ import { DetailPanelColumn, DetailPanelRouteSync, DetailPanelSlotProvider } from
 import { GlobalCommandPalette } from './GlobalCommandPalette'
 import { FloatingCreateCta } from './FloatingCreateCta'
 import { AssistantPanel } from '../assistant/AssistantPanel'
-import { ApiStatusBanner } from './ApiStatusBanner'
+import { ApiServiceIssueWatch } from './ApiServiceIssueWatch'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { usePermissions } from '../../hooks/useAuth'
@@ -79,7 +79,7 @@ export function AppShell() {
             onOpenAssistant={() => setAssistantOpen(true)}
             onOpenMobileNav={() => setMobileNavOpen(true)}
           />
-          <ApiStatusBanner />
+          <ApiServiceIssueWatch />
           <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
             <main
               id="main-content"

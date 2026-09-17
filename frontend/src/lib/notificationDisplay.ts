@@ -47,6 +47,10 @@ export function notificationSubtitle(item: UserNotification): string {
   return item.body || formatDateTime(item.created_at)
 }
 
+export function isReleaseStyleNoticeKind(kind: string): boolean {
+  return kind === 'release_notes' || kind === 'product_update' || kind === 'feature_launch'
+}
+
 export function isProductUpdateNotice(item: UserNotification): boolean {
   const cta = item.payload?.cta
   return cta === 'update' || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))

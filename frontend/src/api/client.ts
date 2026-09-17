@@ -1,4 +1,5 @@
 import { clearAuthSession, loadAuthSession } from '../lib/auth'
+import { classifyApiFailure, emitServiceIssue } from '../lib/serviceIssue'
 
 /** Accepts `/api/v1`, `https://host`, or `https://host/api/v1`. */
 export function resolveApiBase(raw: string | undefined): string {
@@ -14,6 +15,13 @@ const API_TOKEN = (
   ?? (import.meta.env.VITE_TRADEOS_API_TOKEN as string | undefined)
 )?.trim() ?? ''
 const USING_LOCAL_PROXY = API_BASE === '/api/v1'
+
+const USER_FACING_OFFLINE = 'Tradeal is not responding. Try refreshing the page.'
+
+function surfaceInfrastructureIssue(path: string, status: number, detail: string) {
+  const issue = classifyApiFailure(path, status, detail)
+  if (issue) emitServiceIssue(issue)
+}
 
 if (import.meta.env.PROD && USING_LOCAL_PROXY) {
   console.error(
@@ -92,19 +100,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     })
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      throw new ApiError(
-        USING_LOCAL_PROXY
-          ? `Request timed out — the Python API on port 8000 is not responding. Stop any stuck backend, then run: npm run dev:all`
-          : `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s. Check Railway is up and VITE_API_URL is ${API_BASE}.`,
-        0,
-      )
+      surfaceInfrastructureIssue(path, 0, 'timeout')
+      throw new ApiError(USER_FACING_OFFLINE, 0)
     }
-    throw new ApiError(
-      USING_LOCAL_PROXY
-        ? 'Cannot reach the API. Start the backend with: npm run dev:backend (port 8000), then open http://localhost:5173'
-        : `Cannot reach the API at ${API_BASE}. Check that Railway is running and VITE_API_URL is set on Vercel.`,
-      0,
-    )
+    surfaceInfrastructureIssue(path, 0, 'network')
+    throw new ApiError(USER_FACING_OFFLINE, 0)
   } finally {
     clearTimeout(timeout)
   }
@@ -119,15 +119,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         window.location.assign('/login')
       }
     }
+    surfaceInfrastructureIssue(path, res.status, detail)
     if (res.status === 404) {
-      throw new ApiError(
-        USING_LOCAL_PROXY
-          ? `${detail} — check that the backend is running (npm run dev:backend) and you are using http://localhost:5173`
-          : `${detail} — check VITE_API_URL (${API_BASE}) and that the Railway API is up`,
-        res.status,
-      )
+      throw new ApiError(detail || 'This request is not available.', res.status)
     }
-    throw new ApiError(detail, res.status)
+    throw new ApiError(detail || 'Something went wrong.', res.status)
   }
   return body as T
 }

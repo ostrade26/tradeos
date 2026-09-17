@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, CheckCircle2, Circle, Loader2 } from 'lucide-react'
-import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
+import { AnnouncementModalShell } from '../feedback/AnnouncementModalShell'
+import { announcementVariantFromKind } from '../../lib/announcementTheme'
 import { cn } from '../../lib/utils'
 import { releaseCategoryLabel } from '../../lib/releaseVersion'
 import type { UserNotification } from '../../api/platformApi'
@@ -209,33 +210,39 @@ export function SystemUpdateModal({
     ? `${featureCount} ${featureCount === 1 ? 'item' : 'items'} applied to this account`
     : notification?.title || 'Applying this update to your workspace'
 
+  const variant = notification ? announcementVariantFromKind(notification.kind) : 'update'
+
   return (
-    <Modal
+    <AnnouncementModalShell
       open={open}
       onClose={dismissible ? onClose : () => undefined}
       dismissible={dismissible}
+      variant={variant}
       title={title}
       subtitle={subtitle}
-      size="md"
+      version={version || undefined}
+      maxWidthClass="max-w-2xl"
       footer={
         phase === 'failed' ? (
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" className="min-h-11" onClick={onClose}>
             Close
           </Button>
         ) : phase === 'success' ? (
-          <div className="flex w-full items-center justify-between gap-3">
-            <p className="text-xs text-muted tabular-nums">
+          <>
+            <p className="text-sm text-muted tabular-nums sm:mr-auto">
               {reloadIn == null ? 'Reloading…' : `Reloading in ${reloadIn}s`}
             </p>
-            <Button type="button" onClick={reloadNow}>
+            <Button type="button" className="min-h-11 px-8 font-semibold" onClick={reloadNow}>
               Reload now
             </Button>
-          </div>
+          </>
         ) : (
-          <p className="text-xs text-muted">Keep this window open until the update finishes.</p>
+          <p className="w-full text-center text-sm text-muted sm:text-left">
+            Keep this window open until the update finishes.
+          </p>
         )
       }
-      footerClassName={phase === 'success' ? 'items-center' : phase === 'failed' ? undefined : 'items-center'}
+      footerClassName={phase === 'success' ? 'items-center sm:justify-between' : undefined}
     >
       <div className="space-y-5">
         {phase === 'success' ? (
@@ -315,6 +322,6 @@ export function SystemUpdateModal({
           </ul>
         </div>
       </div>
-    </Modal>
+    </AnnouncementModalShell>
   )
 }

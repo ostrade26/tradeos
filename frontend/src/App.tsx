@@ -6,6 +6,7 @@ import { TableDensityProvider } from './hooks/useTableDensity'
 import { AuthProvider } from './hooks/useAuth'
 import { UserProvider } from './hooks/useUser'
 import { ToastProvider } from './hooks/useToast'
+import { ServiceIssueProvider } from './hooks/ServiceIssueProvider'
 import { TradeProvider } from './store/TradeStore'
 import { AppShell } from './components/layout/AppShell'
 import { RequireAuth } from './components/auth/RequireAuth'
@@ -84,7 +85,9 @@ function RootProviders() {
       <ThemeProvider>
         <TableDensityProvider>
           <ToastProvider>
-            <Outlet />
+            <ServiceIssueProvider>
+              <Outlet />
+            </ServiceIssueProvider>
           </ToastProvider>
         </TableDensityProvider>
       </ThemeProvider>
