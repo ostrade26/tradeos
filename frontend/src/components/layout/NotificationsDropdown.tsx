@@ -162,7 +162,7 @@ export function NotificationsDropdown() {
 
       <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2.5">
         <Link
-          to={isPlatformAdmin ? '/platform-admin/seat-requests' : '/app/notices'}
+          to={isPlatformAdmin ? '/platform-admin/seat-requests' : '/app/notifications'}
           onClick={() => setOpen(false)}
           className="text-xs text-accent hover:underline"
         >

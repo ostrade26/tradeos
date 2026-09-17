@@ -115,6 +115,7 @@ const router = createBrowserRouter([
                 children: [
                   { path: 'app', element: <DashboardPage /> },
                   { path: 'app/notices', element: <NoticesPage /> },
+                  { path: 'app/notifications', element: <NoticesPage /> },
 
           { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
           { path: 'purchase-orders/pending', element: <Navigate to="/purchase-orders" replace /> },
