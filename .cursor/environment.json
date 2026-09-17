@@ -1,0 +1,15 @@
+{
+  "name": "Tradeal",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "cd backend && TRADEAL_USERS=\"admin:admin123:admin:Admin\" TRADEAL_PLATFORM_ADMIN=\"platform:platform123:Platform Admin\" ./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+    },
+    {
+      "name": "frontend",
+      "command": "cd frontend && npm run dev"
+    }
+  ]
+}
