@@ -136,8 +136,7 @@ def _row_data(row: Any) -> dict[str, Any]:
 
 
 def ping_db() -> str:
-    """Open a connection and run SELECT 1. Returns 'postgres' or 'sqlite'."""
-    init_db()
+    """Lightweight DB probe for /health — does not run migrations (startup init_db only)."""
     if uses_postgres():
         with _pg_connect() as conn:
             conn.execute("SELECT 1")
