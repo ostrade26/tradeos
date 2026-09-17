@@ -58,6 +58,8 @@ def _integrity_error_detail(exc: BaseException) -> str:
         return "This username or email is already in use."
     if "unique" in text or "duplicate" in text:
         return "This conflicts with an existing record."
+    if "audit_logs" in text or "seat_requests" in text or "foreign key" in text:
+        return "Could not delete organisation because related records still exist. Deploy the latest API and retry."
     return "Database constraint violation."
 
 

@@ -838,35 +838,73 @@ def delete_platform_user(conn, user_id: int, *, actor_user_id: int) -> dict[str,
     return snapshot
 
 
+def _delete_org_scoped_rows(conn, org_id: int, table: str) -> None:
+    if uses_postgres():
+        conn.execute(f"DELETE FROM {table} WHERE organisation_id = %s", (org_id,))
+    else:
+        conn.execute(f"DELETE FROM {table} WHERE organisation_id = ?", (org_id,))
+
+
+def _purge_audit_logs_for_org(conn, org_id: int, user_ids: list[int]) -> None:
+    """audit_logs FKs have no ON DELETE CASCADE — clear before users/org are removed."""
+    if user_ids:
+        ph = "%s" if uses_postgres() else "?"
+        placeholders = ",".join(ph for _ in user_ids)
+        sql = (
+            f"DELETE FROM audit_logs WHERE organisation_id = {ph} "
+            f"OR actor_user_id IN ({placeholders})"
+        )
+        conn.execute(sql, (org_id, *user_ids))
+    elif uses_postgres():
+        conn.execute("DELETE FROM audit_logs WHERE organisation_id = %s", (org_id,))
+    else:
+        conn.execute("DELETE FROM audit_logs WHERE organisation_id = ?", (org_id,))
+
+
 def _purge_organisation_rows(conn, org_id: int) -> None:
     if uses_postgres():
         user_rows = conn.execute(
             "SELECT id FROM users WHERE organisation_id = %s",
             (org_id,),
         ).fetchall()
-        for u in user_rows:
-            uid = int(row_get(u, "id"))
+    else:
+        user_rows = conn.execute(
+            "SELECT id FROM users WHERE organisation_id = ?",
+            (org_id,),
+        ).fetchall()
+
+    user_ids = [int(row_get(u, "id")) for u in user_rows]
+
+    for uid in user_ids:
+        if uses_postgres():
             conn.execute("DELETE FROM auth_sessions WHERE user_id = %s", (uid,))
-        conn.execute("DELETE FROM organisation_members WHERE organisation_id = %s", (org_id,))
+        else:
+            conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (uid,))
+
+    _purge_audit_logs_for_org(conn, org_id, user_ids)
+
+    for table in (
+        "seat_requests",
+        "product_requests",
+        "user_notifications",
+        "user_applied_updates",
+        "organisation_applied_updates",
+        "organisation_payments",
+        "organisation_licenses",
+        "organisation_members",
+        "organisation_seats",
+        "subscriptions",
+    ):
+        _delete_org_scoped_rows(conn, org_id, table)
+
+    if uses_postgres():
         conn.execute("DELETE FROM users WHERE organisation_id = %s", (org_id,))
-        conn.execute("DELETE FROM subscriptions WHERE organisation_id = %s", (org_id,))
         conn.execute("DELETE FROM trade_state WHERE organisation_id = %s", (org_id,))
         conn.execute("DELETE FROM organisations WHERE id = %s", (org_id,))
-        return
-
-    user_rows = conn.execute(
-        "SELECT id FROM users WHERE organisation_id = ?",
-        (org_id,),
-    ).fetchall()
-    for u in user_rows:
-        uid = int(row_get(u, "id"))
-        conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (uid,))
-    conn.execute("DELETE FROM organisation_members WHERE organisation_id = ?", (org_id,))
-    conn.execute("DELETE FROM organisation_seats WHERE organisation_id = ?", (org_id,))
-    conn.execute("DELETE FROM subscriptions WHERE organisation_id = ?", (org_id,))
-    conn.execute("DELETE FROM users WHERE organisation_id = ?", (org_id,))
-    conn.execute("DELETE FROM trade_state WHERE organisation_id = ?", (org_id,))
-    conn.execute("DELETE FROM organisations WHERE id = ?", (org_id,))
+    else:
+        conn.execute("DELETE FROM users WHERE organisation_id = ?", (org_id,))
+        conn.execute("DELETE FROM trade_state WHERE organisation_id = ?", (org_id,))
+        conn.execute("DELETE FROM organisations WHERE id = ?", (org_id,))
 
 
 def _organisation_retention_score(conn, org_id: int) -> tuple[int, int, int]:
