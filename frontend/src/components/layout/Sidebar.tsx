@@ -30,11 +30,12 @@ const tradingNav = [
   { to: appPath('/contracts'), icon: FileText, label: 'Contracts' },
 ]
 
-const platformNav = [
+const platformNavBase = [
   { to: appPath('/directory'), icon: BookUser, label: 'Directory' },
   { to: appPath('/reports'), icon: ClipboardList, label: 'Reports' },
   { to: appPath('/analytics'), icon: BarChart3, label: 'Analytics' },
   { to: appPath('/activity'), icon: Activity, label: 'Activity' },
+  { to: appPath('/features'), icon: platformFeaturesAccessNavIcon, label: 'Features', featuresNav: true as const },
   { to: appPath('/notifications'), icon: Bell, label: orgNoticesLabels.sidebarNav },
 ]
 
@@ -86,14 +87,14 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
     canManageOrganisation &&
     (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
   const showTeamInSettings = canManageOrganisation
-  const showAddonsInSettings = hasPermission('organisation.subscription.view') && !isPlatformAdmin
+  const showFeaturesNav = hasPermission('organisation.subscription.view') && !isPlatformAdmin
   const { pendingCount: openSeatRequests, openProductRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanInSettings) return false
     if (s.teamSection && !showTeamInSettings) return false
-    if (s.addonsSection && !showAddonsInSettings) return false
     return true
   })
+  const platformNav = platformNavBase.filter(item => !('featuresNav' in item && item.featuresNav) || showFeaturesNav)
   const showLabels = !collapsed || mobileOpen
   const iconOnly = collapsed && !mobileOpen
 

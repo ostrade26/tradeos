@@ -67,6 +67,9 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       { id: 'reports', label: 'Reports', group: 'Navigation', action: () => navigate(appPath('/reports')) },
       { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate(appPath('/analytics')) },
       { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate(appPath('/activity')) },
+      ...(hasPermission('organisation.subscription.view') && !isPlatformAdmin
+        ? [{ id: 'features', label: 'Features', group: 'Navigation', action: () => navigate(appPath('/features')) }]
+        : []),
       { id: 'inbox', label: 'Inbox', group: 'Navigation', action: () => navigate(appPath('/notifications')) },
       ...(hasPermission('purchase.create')
         ? [{ id: 'new-po', label: 'New Purchase Order', description: 'F1', group: 'Actions', action: () => navigate(appPath('/purchase-orders/new')) }]
@@ -95,7 +98,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     }))
 
     return [...nav, ...searchHits]
-  }, [hasPermission, store, navigate, onOpenAssistant, platformAdminMode])
+  }, [hasPermission, store, navigate, onOpenAssistant, platformAdminMode, isPlatformAdmin])
 
   return <CommandPalette open={open} onClose={onClose} items={items} />
 }

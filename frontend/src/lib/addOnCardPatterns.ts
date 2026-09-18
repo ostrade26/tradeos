@@ -5,21 +5,23 @@ export type AddOnGeometricPatternKind = 'dots' | 'grid' | 'lines' | 'diagonal' |
 
 const PATTERN_CYCLE: AddOnGeometricPatternKind[] = ['dots', 'grid', 'lines', 'diagonal', 'cross']
 
-/** Tint matched to category wash — kept light so pattern + gradient stay subtle. */
+/** Tint matched to category wash — kept very light so pattern stays subtle. */
 const PATTERN_INK: Record<AddOnIllustrationKind, string> = {
-  ai: 'rgba(56, 189, 248, 0.16)',
-  analytics: 'rgba(236, 72, 153, 0.14)',
-  connect: 'rgba(249, 115, 22, 0.15)',
-  ops: 'rgba(16, 185, 129, 0.14)',
-  spark: 'rgba(6, 182, 212, 0.15)',
+  neutral: 'rgba(100, 116, 139, 0.06)',
+  ai: 'rgba(56, 189, 248, 0.07)',
+  analytics: 'rgba(236, 72, 153, 0.06)',
+  connect: 'rgba(249, 115, 22, 0.06)',
+  ops: 'rgba(16, 185, 129, 0.06)',
+  spark: 'rgba(6, 182, 212, 0.06)',
 }
 
 const PATTERN_INK_DARK: Record<AddOnIllustrationKind, string> = {
-  ai: 'rgba(125, 211, 252, 0.12)',
-  analytics: 'rgba(244, 114, 182, 0.11)',
-  connect: 'rgba(251, 146, 60, 0.12)',
-  ops: 'rgba(52, 211, 153, 0.11)',
-  spark: 'rgba(34, 211, 238, 0.12)',
+  neutral: 'rgba(148, 163, 184, 0.05)',
+  ai: 'rgba(125, 211, 252, 0.05)',
+  analytics: 'rgba(244, 114, 182, 0.05)',
+  connect: 'rgba(251, 146, 60, 0.05)',
+  ops: 'rgba(52, 211, 153, 0.05)',
+  spark: 'rgba(34, 211, 238, 0.05)',
 }
 
 function hashKey(key: string): number {

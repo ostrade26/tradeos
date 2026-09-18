@@ -1536,6 +1536,24 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
         return {"offer": offer}
 
 
+@router.delete("/feature-offers/{offer_id}", summary="Delete add-on offer from catalog")
+def delete_platform_feature_offer(offer_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import delete_offer
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = delete_offer(conn, offer_id, actor_user_id=session.user.id)
+            conn.commit()
+            return {"ok": True, "offer": offer}
+    with _sqlite_connect() as conn:
+        offer = delete_offer(conn, offer_id, actor_user_id=session.user.id)
+        conn.commit()
+        return {"ok": True, "offer": offer}
+
+
 @router.post("/feature-offers/{offer_id}/catalog-status", summary="List, retire, or draft an offer")
 def set_platform_feature_offer_status(
     offer_id: int,

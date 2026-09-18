@@ -1,9 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
 import { CreditCard, Database, Keyboard, Palette, User, Users } from 'lucide-react'
-import { platformFeatureIcon } from './platformProductIcons'
 import { appPath } from './appShellMode'
 
-export type SettingsSectionId = 'appearance' | 'account' | 'data' | 'plan' | 'addons' | 'team' | 'shortcuts'
+export type SettingsSectionId = 'appearance' | 'account' | 'data' | 'plan' | 'team' | 'shortcuts'
 
 export interface SettingsSectionDef {
   id: SettingsSectionId
@@ -15,8 +14,6 @@ export interface SettingsSectionDef {
   planSection?: boolean
   /** Hide unless org can view team members */
   teamSection?: boolean
-  /** Hide unless org can browse add-ons marketplace */
-  addonsSection?: boolean
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
@@ -48,14 +45,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     description: 'Subscription and seat requests',
     icon: CreditCard,
     planSection: true,
-  },
-  {
-    id: 'addons',
-    segment: 'addons',
-    label: 'Add-ons',
-    description: 'Optional features for your organisation',
-    icon: platformFeatureIcon,
-    addonsSection: true,
   },
   {
     id: 'team',

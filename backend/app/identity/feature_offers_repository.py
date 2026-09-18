@@ -190,6 +190,32 @@ def upsert_offer(
     return offer
 
 
+def delete_offer(conn, offer_id: int, *, actor_user_id: int) -> dict[str, Any]:
+    offer = get_offer(conn, offer_id)
+    counts = _counts_for_offer(conn, str(offer["feature_key"]))
+    if counts["active_orgs"] > 0 or counts["pending_requests"] > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot delete while organisations have this feature or open requests. "
+                "Retire the offer or resolve access first."
+            ),
+        )
+    if uses_postgres():
+        conn.execute("DELETE FROM platform_feature_offers WHERE id = %s", (offer_id,))
+    else:
+        conn.execute("DELETE FROM platform_feature_offers WHERE id = ?", (offer_id,))
+    append_audit_log(
+        organisation_id=None,
+        actor_user_id=actor_user_id,
+        action="feature_offer.deleted",
+        entity_type="platform_feature_offer",
+        entity_id=str(offer_id),
+        new_value={"feature_key": offer.get("feature_key"), "title": offer.get("title")},
+    )
+    return offer
+
+
 def set_catalog_status(
     conn,
     offer_id: int,
@@ -346,7 +372,6 @@ def request_paid_for_org(
     feature_key: str,
 ) -> dict[str, Any]:
     from .feature_interests_repository import OPEN_STATUS
-    from .notifications_repository import notify_platform_admins
 
     offer = get_offer_by_key(conn, feature_key)
     if not offer or offer.get("catalog_status") != "listed":
@@ -385,20 +410,7 @@ def request_paid_for_org(
             (organisation_id, user_id, key, title, detail, OPEN_STATUS, now, now),
         )
         interest_id = int(cur.lastrowid)
-    notify_platform_admins(
-        conn,
-        kind="release_notes",
-        title=f"Feature access · {title}",
-        body=f"An organisation requested access to {title} from Settings → Add-ons.",
-        payload={
-            "cta": "review_interest",
-            "feature_interest_id": str(interest_id),
-            "feature_key": key,
-            "organisation_id": str(organisation_id),
-        },
-        href=f"/platform-admin/add-ons?tab=access&interestId={interest_id}",
-        actor_user_id=user_id,
-    )
+    # Inbox work items are built from open interests — no separate admin notice.
     append_audit_log(
         organisation_id=organisation_id,
         actor_user_id=user_id,

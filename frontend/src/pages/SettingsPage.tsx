@@ -71,7 +71,6 @@ export function SettingsLayout() {
   const canManageTeam = hasPermission('organisation.edit')
   const showPlanSection = (canViewSubscription || canRequestSeats) && canManageTeam
   const showTeamSection = canManageTeam
-  const showAddonsSection = canViewSubscription && !isPlatformAdmin
 
   const themeApi = useTheme()
   const { density, setDensity } = useTableDensity()
@@ -233,7 +232,7 @@ export function SettingsLayout() {
 
   return (
     <>
-      <Outlet context={{ sectionHandlers, showPlanSection, showTeamSection, showAddonsSection }} />
+      <Outlet context={{ sectionHandlers, showPlanSection, showTeamSection }} />
       <ChangePasswordModal open={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} />
       <ConfirmDialog
         open={pendingImport != null}
@@ -326,25 +325,23 @@ type SettingsOutletContext = {
   sectionHandlers: SettingsSectionHandlers
   showPlanSection: boolean
   showTeamSection: boolean
-  showAddonsSection: boolean
 }
 
 function useSettingsOutlet(): SettingsOutletContext {
   return useOutletContext<SettingsOutletContext>()
 }
 
-function visibleSections(showPlanSection: boolean, showTeamSection: boolean, showAddonsSection: boolean) {
+function visibleSections(showPlanSection: boolean, showTeamSection: boolean) {
   return SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanSection) return false
     if (s.teamSection && !showTeamSection) return false
-    if (s.addonsSection && !showAddonsSection) return false
     return true
   })
 }
 
 export function SettingsHubPage() {
-  const { showPlanSection, showTeamSection, showAddonsSection } = useSettingsOutlet()
-  const sections = visibleSections(showPlanSection, showTeamSection, showAddonsSection)
+  const { showPlanSection, showTeamSection } = useSettingsOutlet()
+  const sections = visibleSections(showPlanSection, showTeamSection)
 
   return (
     <div className="animate-fade-in max-w-3xl">
@@ -378,7 +375,7 @@ export function SettingsHubPage() {
 
 export function SettingsSectionPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
-  const { sectionHandlers, showPlanSection, showTeamSection, showAddonsSection } = useSettingsOutlet()
+  const { sectionHandlers, showPlanSection, showTeamSection } = useSettingsOutlet()
 
   if (!sectionParam || !isSettingsSectionId(sectionParam)) {
     return <Navigate to={appPath('/settings')} replace />
@@ -391,19 +388,14 @@ export function SettingsSectionPage() {
   if (section === 'team' && !showTeamSection) {
     return <Navigate to={appPath('/settings')} replace />
   }
-  if (section === 'addons' && !showAddonsSection) {
-    return <Navigate to={appPath('/settings')} replace />
-  }
 
   const meta = SETTINGS_SECTIONS.find(s => s.id === section)
   const sectionMaxWidth =
     section === 'team'
       ? 'w-full max-w-none'
-      : section === 'addons'
-        ? 'w-full max-w-none'
-        : section === 'plan'
-          ? 'max-w-3xl'
-          : 'max-w-2xl'
+      : section === 'plan'
+        ? 'max-w-3xl'
+        : 'max-w-2xl'
 
   const breadcrumb = (
     <Breadcrumb

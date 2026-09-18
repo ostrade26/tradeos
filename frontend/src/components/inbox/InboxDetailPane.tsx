@@ -15,9 +15,10 @@ import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
 function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (item.productRequest && platformConsole) return 'Review request'
   if (item.seatRequest && platformConsole) return 'Review seat request'
+  if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
     if (item.notice.kind === 'deploy_review') return 'Open release'
-    if (item.notice.payload?.cta === 'review_interest') return 'Review interest'
+    if (item.notice.payload?.cta === 'review_interest') return 'Review request'
     if (isFeatureInterestNotice(item.notice)) return 'Express interest'
     if (
       isFeatureEnhancementNotice(item.notice) &&
@@ -111,12 +112,11 @@ export function InboxDetailPane({
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4">
         <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{body}</p>
-      </div>
-
-      <div className="shrink-0 px-4 sm:px-5 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-zinc-900/40">
-        <Button size="sm" className="w-full sm:w-auto" onClick={() => onOpen(item)}>
-          {cta}
-        </Button>
+        <div className="mt-4">
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => onOpen(item)}>
+            {cta}
+          </Button>
+        </div>
       </div>
     </div>
   )

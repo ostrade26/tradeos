@@ -32,6 +32,9 @@ function statusBadgeVariant(status: string): 'info' | 'success' | 'warning' | 'd
 }
 
 function statusLabel(status: string): string {
+  if (status === 'interested') return 'Pending'
+  if (status === 'approved') return 'Active'
+  if (status === 'rejected') return 'Declined'
   return status.replace(/_/g, ' ')
 }
 

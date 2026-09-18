@@ -8,6 +8,10 @@ import {
   PlatformSeatRequestDecisionModal,
   type SeatRequestDecisionMode,
 } from '../components/platform/PlatformSeatRequestDecisionModal'
+import {
+  PlatformFeatureInterestModal,
+  type FeatureInterestRow,
+} from '../components/platform/PlatformFeatureInterestModal'
 import { useAuth } from './useAuth'
 import { useToast } from './useToast'
 import { platformApi } from '../api/platformApi'
@@ -67,6 +71,8 @@ export function useInboxItemActions({
   const [featureInterestBusy, setFeatureInterestBusy] = useState(false)
   const [reviewingRequest, setReviewingRequest] = useState<UnifiedInboxItem['productRequest']>()
   const [reviewingBusy, setReviewingBusy] = useState(false)
+  const [reviewingInterest, setReviewingInterest] = useState<FeatureInterestRow | null>(null)
+  const [interestReviewBusy, setInterestReviewBusy] = useState(false)
   const [seatDecision, setSeatDecision] = useState<{
     mode: SeatRequestDecisionMode
     row: NonNullable<UnifiedInboxItem['seatRequest']>
@@ -82,6 +88,29 @@ export function useInboxItemActions({
     }
     await refresh()
   }, [refresh, session?.token])
+
+  const openFeatureInterestReview = useCallback(async (interestIdRaw: string | number) => {
+    const interestId = Number(interestIdRaw)
+    if (!Number.isFinite(interestId)) {
+      toast.error('Could not open request')
+      return
+    }
+    markFeatureInterestInboxNotices(inboxItems, String(interestId), markRead)
+    setInterestReviewBusy(true)
+    try {
+      const res = await platformApi.listFeatureInterests()
+      const row = res.interests.find(i => i.id === interestId)
+      if (!row) {
+        toast.error('Request not found')
+        return
+      }
+      setReviewingInterest(row as FeatureInterestRow)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load request')
+    } finally {
+      setInterestReviewBusy(false)
+    }
+  }, [inboxItems, markRead, toast])
 
   const handleSelect = useCallback((row: UnifiedInboxItem) => {
     if (row.productRequest && platformConsole) {
@@ -106,12 +135,9 @@ export function useInboxItemActions({
       if (row.notice.payload?.cta === 'review_interest' && platformConsole) {
         const interestId = row.notice.payload?.feature_interest_id
         if (interestId) {
-          markFeatureInterestInboxNotices(inboxItems, String(interestId), markRead)
-          navigate(
-            `/platform-admin/add-ons?tab=access&interestId=${encodeURIComponent(interestId)}`,
-          )
-        } else if (row.notice.href) {
-          navigate(row.notice.href.startsWith('/') ? row.notice.href : appPath(row.notice.href))
+          void openFeatureInterestReview(interestId)
+        } else {
+          toast.error('Could not open request')
         }
         if (row.category === 'notice' && row.unread) void markRead(row.id)
         return
@@ -148,11 +174,9 @@ export function useInboxItemActions({
         ? row.id.slice('feature-interest-'.length)
         : ''
       if (interestId) {
-        markFeatureInterestInboxNotices(inboxItems, interestId, markRead)
-      }
-      if (row.href) {
-        const path = row.href.startsWith('/app/') ? row.href : appPath(row.href)
-        navigate(path)
+        void openFeatureInterestReview(interestId)
+      } else {
+        toast.error('Could not open request')
       }
       return
     }
@@ -160,7 +184,7 @@ export function useInboxItemActions({
       const path = row.href.startsWith('/app/') ? row.href : appPath(row.href)
       navigate(path)
     }
-  }, [inboxItems, markRead, navigate, platformConsole, session?.token])
+  }, [markRead, navigate, openFeatureInterestReview, platformConsole, session?.token, toast])
 
   const saveProductReview = async (body: { status: ProductRequestStatus; reply: string }) => {
     if (!reviewingRequest) return
@@ -290,6 +314,51 @@ export function useInboxItemActions({
         loading={reviewingBusy}
         onClose={() => !reviewingBusy && setReviewingRequest(undefined)}
         onSave={body => void saveProductReview(body)}
+      />
+
+      <PlatformFeatureInterestModal
+        open={reviewingInterest != null}
+        interest={reviewingInterest}
+        loading={interestReviewBusy}
+        onClose={() => !interestReviewBusy && setReviewingInterest(null)}
+        onApprove={async note => {
+          if (!reviewingInterest) return
+          const wasRejected = reviewingInterest.status === 'rejected'
+          setInterestReviewBusy(true)
+          try {
+            await platformApi.approveFeatureInterest(reviewingInterest.id, note)
+            toast.success(
+              wasRejected ? 'Access restored for organisation' : 'Feature enabled for organisation',
+            )
+            setReviewingInterest(null)
+            await refreshPlatform()
+            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not approve')
+          } finally {
+            setInterestReviewBusy(false)
+          }
+        }}
+        onReject={async note => {
+          if (!reviewingInterest) return
+          const wasApproved = reviewingInterest.status === 'approved'
+          setInterestReviewBusy(true)
+          try {
+            await platformApi.rejectFeatureInterest(reviewingInterest.id, note)
+            toast.success(
+              wasApproved
+                ? 'Access revoked — organisation notified'
+                : 'Request declined',
+            )
+            setReviewingInterest(null)
+            await refreshPlatform()
+            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not decline')
+          } finally {
+            setInterestReviewBusy(false)
+          }
+        }}
       />
 
       <PlatformSeatRequestDecisionModal

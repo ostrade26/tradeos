@@ -725,4 +725,9 @@ export const platformApi = {
       method: 'POST',
       body: JSON.stringify({ catalog_status }),
     }),
+
+  deleteFeatureOffer: (offerId: number) =>
+    apiFetch<{ ok: boolean; offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {
+      method: 'DELETE',
+    }),
 }

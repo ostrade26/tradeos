@@ -90,7 +90,14 @@ export const PlatformFeatureAccessPanel = forwardRef<
             {
               key: 'status',
               header: 'Status',
-              render: r => r.status.replace(/_/g, ' '),
+              render: r =>
+                r.status === 'interested'
+                  ? 'Pending'
+                  : r.status === 'approved'
+                    ? 'Active'
+                    : r.status === 'rejected'
+                      ? 'Declined'
+                      : r.status.replace(/_/g, ' '),
             },
             {
               key: 'created',
@@ -122,7 +129,7 @@ export const PlatformFeatureAccessPanel = forwardRef<
           emptyState={
             <EmptyState
               title="No feature access requests"
-              description="Organisations request access from launch notices and Settings → Add-ons."
+              description="Organisations request access from launch notices and Features."
             />
           }
         />
@@ -166,7 +173,7 @@ export const PlatformFeatureAccessPanel = forwardRef<
             toast.success(
               wasApproved
                 ? 'Access revoked — organisation notified'
-                : 'Request declined — organisation notified',
+                : 'Request declined',
             )
             setReviewing(null)
             clearInterestIdParam()

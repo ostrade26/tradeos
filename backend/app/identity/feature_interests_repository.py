@@ -12,7 +12,6 @@ from .notifications_repository import (
     create_notification,
     mark_notifications_read_for_feature_interest,
     normalize_feature_key,
-    notify_platform_admins,
 )
 from .repository import append_audit_log
 
@@ -223,20 +222,6 @@ def express_interest_from_notification(
             )
             item = get_interest(conn, int(cur.lastrowid))
         created.append(item)
-        notify_platform_admins(
-            conn,
-            kind="release_notes",
-            title=f"Feature interest · {title}",
-            body=f"{item.get('organisation_name') or 'An organisation'} wants access to {title}.",
-            payload={
-                "cta": "review_interest",
-                "feature_interest_id": str(item["id"]),
-                "feature_key": key,
-                "organisation_id": str(organisation_id),
-            },
-            href=f"/platform-admin/add-ons?tab=access&interestId={item['id']}",
-            actor_user_id=user_id,
-        )
 
     if not created:
         raise HTTPException(status_code=400, detail="Interest was already submitted for these features")
@@ -319,12 +304,31 @@ def _mark_interest_reviewed(
     conn,
     *,
     interest_id: int,
+    organisation_id: int,
+    feature_key: str,
     status: str,
     note: str,
     actor_user_id: int,
     now: str,
 ) -> None:
+    """Apply review status and clear marketplace Pending for this org+feature."""
     if uses_postgres():
+        # Drop older rows with the same reviewed status (legacy UNIQUE org+feature+status).
+        conn.execute(
+            """
+            DELETE FROM feature_launch_interests
+            WHERE organisation_id = %s AND feature_key = %s AND status = %s AND id <> %s
+            """,
+            (organisation_id, feature_key, status, interest_id),
+        )
+        # Drop any other open requests so Pending cannot stick after decline.
+        conn.execute(
+            """
+            DELETE FROM feature_launch_interests
+            WHERE organisation_id = %s AND feature_key = %s AND status = %s AND id <> %s
+            """,
+            (organisation_id, feature_key, OPEN_STATUS, interest_id),
+        )
         conn.execute(
             """
             UPDATE feature_launch_interests
@@ -334,6 +338,20 @@ def _mark_interest_reviewed(
             (status, note, actor_user_id, now, now, interest_id),
         )
         return
+    conn.execute(
+        """
+        DELETE FROM feature_launch_interests
+        WHERE organisation_id = ? AND feature_key = ? AND status = ? AND id <> ?
+        """,
+        (organisation_id, feature_key, status, interest_id),
+    )
+    conn.execute(
+        """
+        DELETE FROM feature_launch_interests
+        WHERE organisation_id = ? AND feature_key = ? AND status = ? AND id <> ?
+        """,
+        (organisation_id, feature_key, OPEN_STATUS, interest_id),
+    )
     conn.execute(
         """
         UPDATE feature_launch_interests
@@ -378,6 +396,8 @@ def approve_interest(
         _mark_interest_reviewed(
             conn,
             interest_id=interest_id,
+            organisation_id=org_id,
+            feature_key=feature_key,
             status=APPROVED_STATUS,
             note=note,
             actor_user_id=actor_user_id,
@@ -409,6 +429,8 @@ def approve_interest(
     _mark_interest_reviewed(
         conn,
         interest_id=interest_id,
+        organisation_id=org_id,
+        feature_key=feature_key,
         status=APPROVED_STATUS,
         note=note,
         actor_user_id=actor_user_id,
@@ -467,11 +489,14 @@ def reject_interest(
         _mark_interest_reviewed(
             conn,
             interest_id=interest_id,
+            organisation_id=org_id,
+            feature_key=feature_key,
             status=REJECTED_STATUS,
             note=note,
             actor_user_id=actor_user_id,
             now=now,
         )
+        # Revoking access — org should know they lost the feature.
         _notify_org_decision(
             conn,
             organisation_id=org_id,
@@ -498,20 +523,14 @@ def reject_interest(
     _mark_interest_reviewed(
         conn,
         interest_id=interest_id,
+        organisation_id=org_id,
+        feature_key=feature_key,
         status=REJECTED_STATUS,
         note=note,
         actor_user_id=actor_user_id,
         now=now,
     )
-    _notify_org_decision(
-        conn,
-        organisation_id=org_id,
-        feature_key=feature_key,
-        feature_title=str(item["feature_title"]),
-        approved=False,
-        note=note,
-        actor_user_id=actor_user_id,
-    )
+    # Declining an open request is quiet — no org inbox notice.
     append_audit_log(
         organisation_id=org_id,
         actor_user_id=actor_user_id,

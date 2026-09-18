@@ -8,7 +8,6 @@ from .notifications_repository import (
     list_notifications_for_user,
     mark_all_read_for_user,
     mark_notification_read,
-    unread_count_for_user,
 )
 from .product_request_repository import list_product_requests_platform
 from .seat_request_repository import list_seat_requests_platform
@@ -66,9 +65,17 @@ def _inbox_item(
     }
 
 
+def _is_review_interest_notice(notice: dict[str, Any]) -> bool:
+    """Legacy duplicate of feature_interest work items — hide from inbox."""
+    payload = notice.get("payload") or {}
+    return str(payload.get("cta") or "") == "review_interest"
+
+
 def _notice_items(conn, user_id: int, limit: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for n in list_notifications_for_user(conn, user_id, limit=limit):
+        if _is_review_interest_notice(n):
+            continue
         unread = bool(n.get("unread"))
         out.append(
             _inbox_item(
@@ -203,7 +210,12 @@ def list_inbox_for_session(
 
 
 def inbox_notice_unread(conn, user_id: int) -> int:
-    return unread_count_for_user(conn, user_id)
+    # Exclude legacy review_interest notices (duplicates of feature_interest work).
+    return sum(
+        1
+        for n in list_notifications_for_user(conn, user_id, limit=200)
+        if n.get("unread") and not _is_review_interest_notice(n)
+    )
 
 
 def inbox_work_open_count(

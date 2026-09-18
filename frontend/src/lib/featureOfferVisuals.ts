@@ -13,7 +13,7 @@ import {
   Zap,
 } from 'lucide-react'
 
-export type AddOnIllustrationKind = 'ai' | 'analytics' | 'connect' | 'ops' | 'spark'
+export type AddOnIllustrationKind = 'neutral' | 'ai' | 'analytics' | 'connect' | 'ops' | 'spark'
 
 export type AddOnVisualTheme = {
   gradient: string
@@ -166,36 +166,43 @@ export type AddOnCardSurface = {
 }
 
 const CARD_SURFACES: Record<AddOnIllustrationKind, AddOnCardSurface> = {
+  neutral: {
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.1)_0%,rgba(148,163,184,0.03)_42%,transparent_68%)]',
+    iconBox: 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
+    categoryPill: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200',
+    ring: 'ring-slate-200/95 dark:ring-slate-500/30',
+    ringHover: 'hover:ring-slate-300 dark:hover:ring-slate-400/40',
+  },
   ai: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(147,197,253,0.32)_0%,rgba(147,197,253,0.08)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(147,197,253,0.14)_0%,rgba(147,197,253,0.04)_42%,transparent_68%)]',
     iconBox: 'bg-sky-300/25 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
     categoryPill: 'bg-sky-50 text-sky-800 dark:bg-sky-900/35 dark:text-sky-200',
     ring: 'ring-sky-200/90 dark:ring-sky-500/25',
     ringHover: 'hover:ring-sky-300 dark:hover:ring-sky-400/40',
   },
   analytics: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(244,114,182,0.3)_0%,rgba(244,114,182,0.07)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(244,114,182,0.12)_0%,rgba(244,114,182,0.03)_42%,transparent_68%)]',
     iconBox: 'bg-pink-300/25 text-pink-800 dark:bg-pink-500/15 dark:text-pink-200',
     categoryPill: 'bg-pink-50 text-pink-800 dark:bg-pink-900/35 dark:text-pink-200',
     ring: 'ring-pink-200/90 dark:ring-pink-500/25',
     ringHover: 'hover:ring-pink-300 dark:hover:ring-pink-400/40',
   },
   connect: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(253,186,116,0.32)_0%,rgba(253,186,116,0.08)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(253,186,116,0.14)_0%,rgba(253,186,116,0.04)_42%,transparent_68%)]',
     iconBox: 'bg-orange-300/25 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200',
     categoryPill: 'bg-orange-50 text-orange-800 dark:bg-orange-900/35 dark:text-orange-200',
     ring: 'ring-orange-200/95 dark:ring-orange-500/25',
     ringHover: 'hover:ring-orange-300 dark:hover:ring-orange-400/40',
   },
   ops: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(134,239,172,0.3)_0%,rgba(134,239,172,0.07)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(134,239,172,0.12)_0%,rgba(134,239,172,0.03)_42%,transparent_68%)]',
     iconBox: 'bg-emerald-300/25 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
     categoryPill: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-200',
     ring: 'ring-emerald-200/90 dark:ring-emerald-500/25',
     ringHover: 'hover:ring-emerald-300 dark:hover:ring-emerald-400/40',
   },
   spark: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(103,232,249,0.3)_0%,rgba(103,232,249,0.07)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(103,232,249,0.12)_0%,rgba(103,232,249,0.03)_42%,transparent_68%)]',
     iconBox: 'bg-cyan-300/25 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200',
     categoryPill: 'bg-cyan-50 text-cyan-900 dark:bg-cyan-900/35 dark:text-cyan-200',
     ring: 'ring-cyan-200/90 dark:ring-cyan-500/25',
@@ -223,6 +230,7 @@ export function addOnIllustrationForOffer(featureKey: string, title: string): Ad
 
 export function addOnCategoryLabel(kind: AddOnIllustrationKind): string {
   const map: Record<AddOnIllustrationKind, string> = {
+    neutral: 'Feature',
     ai: 'AI · Chatbot',
     analytics: 'Analytics',
     connect: 'Integrations',
@@ -231,6 +239,19 @@ export function addOnCategoryLabel(kind: AddOnIllustrationKind): string {
   }
   return map[kind]
 }
+
+/** Accent swatches shown when creating/editing a feature card. */
+export const ADDON_CARD_TONE_OPTIONS: Array<{
+  id: AddOnIllustrationKind
+  label: string
+  swatch: string
+}> = [
+  { id: 'neutral', label: 'Grey', swatch: 'bg-slate-400' },
+  { id: 'ai', label: 'Blue', swatch: 'bg-sky-500' },
+  { id: 'ops', label: 'Green', swatch: 'bg-emerald-500' },
+  { id: 'connect', label: 'Orange', swatch: 'bg-orange-500' },
+  { id: 'analytics', label: 'Pink', swatch: 'bg-pink-500' },
+]
 
 export function pricingChipLabel(pricingType: string, priceCents: number): string {
   if (pricingType === 'free') return 'Free'

@@ -21,7 +21,6 @@ import { cn } from '../../lib/utils'
 import { CUSTOM_ACCENT_ID } from '../../lib/accentColor'
 import type { TableDensity } from '../../lib/tableDensity'
 import type { SettingsSectionId } from '../../lib/settingsSections'
-import { AddOnsMarketplace } from './AddOnsMarketplace'
 import { appPath } from '../../lib/appShellMode'
 import { SettingsSubscriptionPanelContent } from './SettingsSubscriptionSidePanel'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
@@ -409,9 +408,6 @@ export function SettingsSectionContent({
           onSeatsChanged={h.onSeatsChanged}
         />
       )
-
-    case 'addons':
-      return <AddOnsMarketplace />
 
     case 'shortcuts':
       return (
