@@ -10,7 +10,6 @@ on:
 jobs:
   register-release:
     runs-on: ubuntu-latest
-    # Skip duplicate runs while you tune this; remove if you want every push to register.
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +24,10 @@ jobs:
           TRADEAL_DEPLOY_ENV: production
         run: |
           if [[ -z "${TRADEAL_API_URL}" || -z "${TRADEAL_API_TOKEN}" ]]; then
-            echo "Skipping: set TRADEAL_API_URL and TRADEAL_API_TOKEN repository secrets."
-            exit 0
+            echo "::error::Missing repository secrets TRADEAL_API_URL and/or TRADEAL_API_TOKEN."
+            echo "Set them to your production API base URL and deploy hook token (same as x-tradeal-token / TRADEAL_API_TOKEN on the API)."
+            echo "Without these, pushes will not create a Releases draft or notify Tradeal admins."
+            exit 1
           fi
           chmod +x scripts/register-production-deploy.sh
           ./scripts/register-production-deploy.sh
