@@ -59,6 +59,7 @@ export type SettingsSectionHandlers = {
   density: ReturnType<typeof useTableDensity>['density']
   setDensity: ReturnType<typeof useTableDensity>['setDensity']
   canImport: boolean
+  canClearTradeData: boolean
   canUseDemoTools: boolean
   canRequestSeats: boolean
   canManageTeam: boolean
@@ -375,7 +376,7 @@ export function SettingsSectionContent({
               <SettingRow
                 icon={Database}
                 title="Load demo data"
-                description="Sample POs, SOs, and lifts (test org only)"
+                description="Sample POs, SOs, and lifts (sandbox only)"
                 action={
                   <Button variant="outline" size="sm" onClick={h.onConfirmDemo}>
                     Load demo
@@ -383,11 +384,11 @@ export function SettingsSectionContent({
                 }
               />
             )}
-            {h.canUseDemoTools && (
+            {h.canClearTradeData && (
               <SettingRow
                 icon={Trash2}
                 title="Clear all data"
-                description="Remove all trade data (test org only)"
+                description="Remove all orders, lifts, inventory, and directory entries"
                 action={
                   <Button variant="outlineDanger" size="sm" onClick={h.onConfirmClear}>
                     Clear

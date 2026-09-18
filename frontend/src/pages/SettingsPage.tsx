@@ -67,6 +67,7 @@ export function SettingsLayout() {
   const { hasPermission, organisationSandboxTools } = usePermissions()
   const productTour = useProductTour()
   const canImport = hasPermission('organisation.edit')
+  const canClearTradeData = !isPlatformAdmin && hasPermission('organisation.edit')
   const canUseDemoTools = organisationSandboxTools && hasPermission('organisation.edit')
   const canViewSubscription = hasPermission('organisation.subscription.view')
   const canRequestSeats = hasPermission('organisation.seats.request')
@@ -185,6 +186,7 @@ export function SettingsLayout() {
       density,
       setDensity,
       canImport,
+      canClearTradeData,
       canUseDemoTools,
       canRequestSeats,
       canManageTeam,
@@ -214,6 +216,7 @@ export function SettingsLayout() {
       density,
       setDensity,
       canImport,
+      canClearTradeData,
       canUseDemoTools,
       canRequestSeats,
       canManageTeam,
@@ -316,7 +319,8 @@ export function SettingsLayout() {
         slideLabel="Slide to clear"
       >
         <p className="text-sm text-gray-600 dark:text-muted">
-          This removes all orders, lifts, inventory, and directory entries. This cannot be undone.
+          This removes all orders, lifts, inventory, and directory entries for your organisation.
+          Users, seats, and your licence are kept. This cannot be undone.
         </p>
       </ConfirmDialog>
     </>

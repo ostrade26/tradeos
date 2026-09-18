@@ -371,9 +371,20 @@ def seed(request: Request) -> dict:
 
 @app.post("/api/v1/admin/reset", tags=["admin"], summary="Clear all data")
 def reset(request: Request) -> dict:
-    """Wipes trade data for this organisation (sandbox org only)."""
-    auth.require_sandbox_demo_tools(_session(request), request)
+    """Wipes trade data for the signed-in organisation. Keeps users, seats, and licence."""
+    session = _session(request)
+    auth.require_permission(session, "organisation.edit")
+    org_id = auth.resolve_organisation_id(session, request)
     state = _trade_service(request).reset()
+    from .identity.repository import append_audit_log
+
+    append_audit_log(
+        organisation_id=org_id,
+        actor_user_id=session.user.id,
+        action="organisation.trade_data_cleared",
+        entity_type="organisation",
+        entity_id=str(org_id),
+    )
     return {"data": state, "result": {"reset": True}}
 
 
