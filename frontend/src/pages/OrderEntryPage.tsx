@@ -21,6 +21,11 @@ import { useToast } from '../hooks/useToast'
 import { OrderCreatedModal } from '../components/orders/OrderCreatedModal'
 import { ContractPdfUpload } from '../components/orders/ContractPdfUpload'
 import { CaptionCard } from '../components/ui/CaptionCard'
+import {
+  PartyFormModal,
+  partyFormToInput,
+  type PartyFormValues,
+} from '../components/directory/PartyFormModal'
 import { formatDate, formatCurrency, formatQty, roundQtyMt, availableQtyClass, cn } from '../lib/utils'
 import { soRemainingQtyClass } from '../components/ui/AvailableQtyHint'
 import { type OrderSide, type DeliveryType, type TradeOrder, toBeLifted } from '../data/mockData'
@@ -1016,6 +1021,9 @@ function OrderFormFields({
   const sellerBalance = isPO && form.partyName.trim()
     ? store.getSellerOutstandingBalance(form.partyName)
     : { total: 0, lines: [] as { poRef: string; soRef: string; qtyMt: number }[] }
+  const [partyModalOpen, setPartyModalOpen] = useState(false)
+  const [partyModalInitial, setPartyModalInitial] = useState<Partial<PartyFormValues> | null>(null)
+  const [partyModalSaving, setPartyModalSaving] = useState(false)
 
   const handleBrokerageModeChange = (next: 'percent' | 'perTon') => {
     form.setValues(v => ({
@@ -1023,6 +1031,28 @@ function OrderFormFields({
       brokerageType: next,
       ...(next === 'percent' ? { brokeragePerTon: '' } : { brokeragePct: '0' }),
     }))
+  }
+
+  const handleSaveNewParty = async (values: PartyFormValues) => {
+    setPartyModalSaving(true)
+    try {
+      const input = partyFormToInput(values)
+      const party = isPO
+        ? await store.addProducer(input)
+        : await store.addRetailer(input)
+      toast.success('Party added to directory', { description: party.name })
+      applyPartySelection(form, isPO, party.id, party.name)
+      onFieldEdit?.('partyName')
+      setPartyModalOpen(false)
+      setPartyModalInitial(null)
+    } catch (err) {
+      toast.error('Could not add party', {
+        description: err instanceof Error ? err.message : 'Failed to save',
+      })
+      throw err
+    } finally {
+      setPartyModalSaving(false)
+    }
   }
 
   const sellerItemCaption = isPO && sellerBalance.total > 0
@@ -1099,12 +1129,9 @@ function OrderFormFields({
             error={fieldErrors.partyName}
             allowCreate
             createLabel="Add new party"
-            onCreate={async (name) => {
-              const party = isPO
-                ? await store.addProducer({ name })
-                : await store.addRetailer({ name })
-              toast.success('Party added to directory', { description: party.name })
-              return { value: party.id, label: party.name, description: party.location }
+            onRequestCreate={draftName => {
+              setPartyModalInitial({ name: draftName })
+              setPartyModalOpen(true)
             }}
             emptyMessage="No parties in directory"
             onValueChange={(id, label) => {
@@ -1306,6 +1333,19 @@ function OrderFormFields({
           </div>
         </div>
       </Card>
+
+      <PartyFormModal
+        open={partyModalOpen}
+        onClose={() => {
+          if (partyModalSaving) return
+          setPartyModalOpen(false)
+          setPartyModalInitial(null)
+        }}
+        title="Add Party"
+        initial={partyModalInitial}
+        saving={partyModalSaving}
+        onSave={handleSaveNewParty}
+      />
     </>
   )
 }

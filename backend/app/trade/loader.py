@@ -68,7 +68,9 @@ def _producer_to_company(producer: dict) -> dict:
         "officialName": producer["name"],
         "aliases": [],
         "types": ["seller"],
-        "location": producer.get("location"),
+        "location": producer.get("city") or producer.get("location"),
+        "gst": producer.get("gst") or "",
+        "code": producer.get("code") or "",
     }
 
 
@@ -78,7 +80,9 @@ def _retailer_to_company(retailer: dict) -> dict:
         "officialName": retailer["name"],
         "aliases": [],
         "types": ["buyer"],
-        "location": retailer.get("location"),
+        "location": retailer.get("city") or retailer.get("location"),
+        "gst": retailer.get("gst") or "",
+        "code": retailer.get("code") or "",
     }
 
 
@@ -92,6 +96,8 @@ def _upsert_directory_company(companies: list[dict], company: dict) -> list[dict
         **existing,
         "officialName": company["officialName"],
         "location": company.get("location") or existing.get("location"),
+        "gst": company.get("gst") if company.get("gst") not in (None, "") else existing.get("gst"),
+        "code": company.get("code") if company.get("code") not in (None, "") else existing.get("code"),
         "types": types,
     }
     return [updated if i == idx else c for i, c in enumerate(companies)]

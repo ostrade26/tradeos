@@ -331,6 +331,11 @@ body {
   max-height: min(90vh, calc(100dvh - 2rem));
 }
 
+.max-h-modal-short {
+  max-height: min(72vh, calc(100vh - 4rem));
+  max-height: min(72vh, calc(100dvh - 4rem));
+}
+
 .wrapper {
   display: flex;
   height: 100vh;

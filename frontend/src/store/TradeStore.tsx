@@ -115,12 +115,42 @@ export interface AddProducerInput {
   name: string
   location?: string
   products?: string
+  code?: string
+  address?: string
+  city?: string
+  contactPerson?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  tan?: string
+  fssai?: string
+  bankName?: string
+  bankAccount?: string
+  ifsc?: string
+  pan?: string
+  aadhar?: string
+  gst?: string
 }
 
 export interface AddRetailerInput {
   name: string
   location?: string
   products?: string
+  code?: string
+  address?: string
+  city?: string
+  contactPerson?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  tan?: string
+  fssai?: string
+  bankName?: string
+  bankAccount?: string
+  ifsc?: string
+  pan?: string
+  aadhar?: string
+  gst?: string
 }
 
 export interface ConfirmCompanyLinkInput {

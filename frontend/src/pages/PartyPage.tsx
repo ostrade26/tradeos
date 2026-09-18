@@ -137,12 +137,35 @@ export function PartyPage() {
         >
           <p className="text-xs font-medium uppercase tracking-wide text-muted">{partyKind} details</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+              {(producer || retailer) && (() => {
+                const party = producer ?? retailer
+                if (!party) return null
+                const fields: { label: string; value: string }[] = [
+                  { label: 'Code No', value: party.code || '—' },
+                  { label: 'City', value: party.city || party.location || '—' },
+                  { label: 'Address', value: party.address || '—' },
+                  { label: 'Contact person', value: party.contactPerson || '—' },
+                  { label: 'Phone', value: party.phone || '—' },
+                  { label: 'WhatsApp', value: party.whatsapp || '—' },
+                  { label: 'Email', value: party.email || '—' },
+                  { label: 'GST No', value: party.gst || '—' },
+                  { label: 'TAN No', value: party.tan || party.tin || '—' },
+                  { label: 'PAN', value: party.pan || '—' },
+                  { label: 'Aadhaar', value: party.aadhar || '—' },
+                  { label: 'FSSAI No', value: party.fssai || '—' },
+                  { label: 'Bank name', value: party.bankName || '—' },
+                  { label: 'Bank A/C', value: party.bankAccount || '—' },
+                  { label: 'IFSC / RTGS', value: party.ifsc || '—' },
+                ]
+                return fields.map(field => (
+                  <div key={field.label}>
+                    <p className="text-xs text-muted">{field.label}</p>
+                    <p className="font-medium mt-0.5 break-words">{field.value}</p>
+                  </div>
+                ))
+              })()}
               {producer && (
                 <>
-                  <div>
-                    <p className="text-xs text-muted">Location</p>
-                    <p className="font-medium mt-0.5">{producer.location || '—'}</p>
-                  </div>
                   <div>
                     <p className="text-xs text-muted">Products</p>
                     <p className="font-medium mt-0.5">{producer.products.length ? producer.products.join(', ') : '—'}</p>
@@ -161,10 +184,6 @@ export function PartyPage() {
               )}
               {retailer && (
                 <>
-                  <div>
-                    <p className="text-xs text-muted">Location</p>
-                    <p className="font-medium mt-0.5">{retailer.location || '—'}</p>
-                  </div>
                   <div>
                     <p className="text-xs text-muted">Products</p>
                     <p className="font-medium mt-0.5">{retailer.products.length ? retailer.products.join(', ') : '—'}</p>

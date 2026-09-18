@@ -303,3 +303,62 @@ def parse_products(products: str | None) -> list[str]:
     if not products:
         return []
     return [p.strip() for p in products.split(",") if p.strip()]
+
+
+PARTY_DETAIL_KEYS = (
+    "code",
+    "address",
+    "city",
+    "contactPerson",
+    "phone",
+    "whatsapp",
+    "email",
+    "tan",
+    "fssai",
+    "bankName",
+    "bankAccount",
+    "ifsc",
+    "pan",
+    "aadhar",
+    "gst",
+)
+
+
+def party_details_from_input(input_data: dict) -> dict:
+    """Normalize optional party directory fields from create/update payloads."""
+    details: dict[str, str] = {}
+    for key in PARTY_DETAIL_KEYS:
+        raw = input_data.get(key)
+        details[key] = "" if raw is None else str(raw).strip()
+
+    # Migrate legacy TIN payloads into TAN.
+    if not details.get("tan"):
+        legacy_tin = input_data.get("tin")
+        if legacy_tin is not None and str(legacy_tin).strip():
+            details["tan"] = str(legacy_tin).strip()
+
+    city = details.get("city") or ""
+    location = (input_data.get("location") or "").strip()
+    if not city and location:
+        city = location
+        details["city"] = city
+    details["location"] = city or location
+    return details
+
+
+def assert_unique_party_code(
+    data: dict,
+    code: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    trimmed = (code or "").strip()
+    if not trimmed:
+        return
+    needle = trimmed.lower()
+    for collection in ("producers", "retailers"):
+        for row in data.get(collection) or []:
+            if exclude_id and row.get("id") == exclude_id:
+                continue
+            if str(row.get("code") or "").strip().lower() == needle:
+                raise ValueError("A party with this code already exists")

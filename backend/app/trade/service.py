@@ -8,6 +8,7 @@ from typing import Any
 
 from ..db import DEFAULT_STATE, get_state, save_state
 from .helpers import (
+    assert_unique_party_code,
     canonical_item_name,
     collect_item_names,
     deletion_date_from_now,
@@ -20,6 +21,7 @@ from .helpers import (
     normalize_company_name,
     organisation_trader_name,
     parse_products,
+    party_details_from_input,
     round_qty_mt,
     uid,
     upsert_string,
@@ -102,21 +104,27 @@ class TradeService:
         return order["orderQty"] * order["rate"] * (order.get("brokeragePct", 0) / 100)
 
     def _producer_to_company(self, producer: dict) -> dict:
+        location = producer.get("city") or producer.get("location")
         return {
             "id": producer["id"],
             "officialName": producer["name"],
             "aliases": [],
             "types": ["seller"],
-            "location": producer.get("location"),
+            "location": location,
+            "gst": producer.get("gst") or "",
+            "code": producer.get("code") or "",
         }
 
     def _retailer_to_company(self, retailer: dict) -> dict:
+        location = retailer.get("city") or retailer.get("location")
         return {
             "id": retailer["id"],
             "officialName": retailer["name"],
             "aliases": [],
             "types": ["buyer"],
-            "location": retailer.get("location"),
+            "location": location,
+            "gst": retailer.get("gst") or "",
+            "code": retailer.get("code") or "",
         }
 
     def _upsert_directory_company(self, companies: list[dict], company: dict) -> list[dict]:
@@ -129,6 +137,8 @@ class TradeService:
             **existing,
             "officialName": company["officialName"],
             "location": company.get("location") or existing.get("location"),
+            "gst": company.get("gst") if company.get("gst") not in (None, "") else existing.get("gst"),
+            "code": company.get("code") if company.get("code") not in (None, "") else existing.get("code"),
             "types": types,
         }
         return [updated if i == idx else c for i, c in enumerate(companies)]
@@ -1501,15 +1511,21 @@ class TradeService:
             raise ValueError("Name is required")
         if any(p.get("name", "").lower() == name.lower() for p in data.get("producers") or []):
             raise ValueError("A producer with this name already exists")
+        details = party_details_from_input(input_data)
+        assert_unique_party_code(data, details.get("code") or "")
         products = parse_products(input_data.get("products"))
         producer = {
             "id": uid(),
             "name": name,
-            "location": (input_data.get("location") or "").strip(),
+            "location": details.get("location") or "",
             "products": products,
             "contracts": 0,
             "avgRate": 0,
             "rating": 0,
+            **{k: details.get(k, "") for k in (
+                "code", "address", "city", "contactPerson", "phone", "whatsapp",
+                "email", "tan", "fssai", "bankName", "bankAccount", "ifsc", "pan", "aadhar", "gst",
+            )},
         }
         next_data = {
             **data,
@@ -1531,9 +1547,20 @@ class TradeService:
             for p in data.get("producers") or []
         ):
             raise ValueError("A producer with this name already exists")
+        details = party_details_from_input(input_data)
+        assert_unique_party_code(data, details.get("code") or "", exclude_id=producer_id)
         products = parse_products(input_data.get("products"))
         old_name = producer["name"]
-        updated = {**producer, "name": name, "location": (input_data.get("location") or "").strip(), "products": products}
+        updated = {
+            **producer,
+            "name": name,
+            "location": details.get("location") or "",
+            "products": products,
+            **{k: details.get(k, "") for k in (
+                "code", "address", "city", "contactPerson", "phone", "whatsapp",
+                "email", "tan", "fssai", "bankName", "bankAccount", "ifsc", "pan", "aadhar", "gst",
+            )},
+        }
         company = self._producer_to_company(updated)
         next_data = {
             **data,
@@ -1579,15 +1606,21 @@ class TradeService:
             raise ValueError("Name is required")
         if any(r.get("name", "").lower() == name.lower() for r in data.get("retailers") or []):
             raise ValueError("A buyer with this name already exists")
+        details = party_details_from_input(input_data)
+        assert_unique_party_code(data, details.get("code") or "")
         products = parse_products(input_data.get("products"))
         retailer = {
             "id": uid(),
             "name": name,
-            "location": (input_data.get("location") or "").strip(),
+            "location": details.get("location") or "",
             "products": products,
             "totalPurchases": 0,
             "outstanding": 0,
             "lastOrder": "",
+            **{k: details.get(k, "") for k in (
+                "code", "address", "city", "contactPerson", "phone", "whatsapp",
+                "email", "tan", "fssai", "bankName", "bankAccount", "ifsc", "pan", "aadhar", "gst",
+            )},
         }
         next_data = {
             **data,
@@ -1609,9 +1642,20 @@ class TradeService:
             for r in data.get("retailers") or []
         ):
             raise ValueError("A buyer with this name already exists")
+        details = party_details_from_input(input_data)
+        assert_unique_party_code(data, details.get("code") or "", exclude_id=retailer_id)
         products = parse_products(input_data.get("products"))
         old_name = retailer["name"]
-        updated = {**retailer, "name": name, "location": (input_data.get("location") or "").strip(), "products": products}
+        updated = {
+            **retailer,
+            "name": name,
+            "location": details.get("location") or "",
+            "products": products,
+            **{k: details.get(k, "") for k in (
+                "code", "address", "city", "contactPerson", "phone", "whatsapp",
+                "email", "tan", "fssai", "bankName", "bankAccount", "ifsc", "pan", "aadhar", "gst",
+            )},
+        }
         company = self._retailer_to_company(updated)
         next_data = {
             **data,

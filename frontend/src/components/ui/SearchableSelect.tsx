@@ -22,6 +22,8 @@ interface SearchableSelectProps {
   allowCustom?: boolean
   allowCreate?: boolean
   onCreate?: (name: string) => SearchableSelectOption | Promise<SearchableSelectOption>
+  /** When set, "Add new" opens an external flow (e.g. modal) instead of the inline name form. */
+  onRequestCreate?: (draftName: string) => void
   createLabel?: string
   searchable?: boolean
   emptyMessage?: string
@@ -61,6 +63,7 @@ export function SearchableSelect({
   allowCustom = false,
   allowCreate = false,
   onCreate,
+  onRequestCreate,
   createLabel = 'Add new',
   searchable = true,
   emptyMessage = 'No matches found',
@@ -378,7 +381,20 @@ export function SearchableSelect({
               Use “{query.trim()}” as new name
             </button>
           )}
-          {allowCreate && onCreate && (
+          {allowCreate && onRequestCreate && (
+            <button
+              type="button"
+              onClick={() => {
+                onRequestCreate(searchable && query.trim() ? query.trim() : '')
+                setOpen(false)
+              }}
+              className="w-full border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 text-left text-sm text-accent hover:bg-accent/5 cursor-pointer flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              {createLabel}
+            </button>
+          )}
+          {allowCreate && onCreate && !onRequestCreate && (
             creating ? (
               <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2">
                 <label htmlFor={createInputId} className="text-xs font-medium text-gray-500">{createLabel}</label>

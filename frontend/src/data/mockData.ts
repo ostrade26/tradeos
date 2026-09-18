@@ -14,6 +14,27 @@ export const CURRENT_TRADER_LOCATION = 'Kolhapur'
 
 export type CompanyType = 'seller' | 'buyer' | 'both'
 
+/** Shared optional directory fields for producers / retailers (parties). */
+export interface PartyDetails {
+  code?: string
+  address?: string
+  city?: string
+  contactPerson?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  tan?: string
+  /** @deprecated Prefer `tan` — kept for older saved trade_state. */
+  tin?: string
+  fssai?: string
+  bankName?: string
+  bankAccount?: string
+  ifsc?: string
+  pan?: string
+  aadhar?: string
+  gst?: string
+}
+
 export interface Company {
   id: string
   officialName: string
@@ -21,6 +42,7 @@ export interface Company {
   types: CompanyType[]
   gst?: string
   location?: string
+  code?: string
 }
 
 export interface TradeOrder {
@@ -258,7 +280,7 @@ export interface Broker {
   itemBrokerages?: BrokerItemBrokerage[]
 }
 
-export interface Producer {
+export interface Producer extends PartyDetails {
   id: string
   name: string
   location: string
@@ -268,7 +290,7 @@ export interface Producer {
   rating: number
 }
 
-export interface Retailer {
+export interface Retailer extends PartyDetails {
   id: string
   name: string
   location: string

@@ -17,6 +17,13 @@ import {
   type BrokerBrokerageFormState,
 } from '../components/directory/BrokerBrokerageForm'
 import {
+  PartyFormModal,
+  emptyPartyFormValues,
+  partyEntryToFormValues,
+  partyFormToInput,
+  type PartyFormValues,
+} from '../components/directory/PartyFormModal'
+import {
   brokerBrokerageSummary,
   brokerToFormRows,
   formRowsToItemBrokerages,
@@ -43,16 +50,19 @@ type PartyKind = 'producer' | 'retailer'
 
 type PartyEntry = (Producer | Retailer) & { kind: PartyKind }
 
-const emptyForm: DirectoryFormState = {
+type BrokerFormState = {
+  name: string
+  email: string
+  phone: string
+  brokerage: BrokerBrokerageFormState
+}
+
+const emptyBrokerForm = (): BrokerFormState => ({
   name: '',
   email: '',
   phone: '',
-  location: '',
-  products: '',
   brokerage: emptyBrokerBrokerageForm,
-}
-
-type DirectoryEntry = Broker | Producer | Retailer
+})
 
 function termsToFormFields(terms?: BrokerageTerms) {
   if (!terms) {
@@ -64,42 +74,22 @@ function termsToFormFields(terms?: BrokerageTerms) {
   }
 }
 
-function entryToForm(entry: DirectoryEntry, tab: DirectoryTab) {
-  if (tab === 'brokers') {
-    const b = entry as Broker
-    const purchase = termsToFormFields(b.purchaseBrokerage)
-    const sale = termsToFormFields(b.saleBrokerage)
-    return {
-      name: b.name,
-      email: b.email,
-      phone: b.phone,
-      location: '',
-      products: '',
-      brokerage: {
-        purchaseBrokerageMode: purchase.mode,
-        purchaseBrokerageValue: purchase.value,
-        saleBrokerageMode: sale.mode,
-        saleBrokerageValue: sale.value,
-        itemBrokerages: brokerToFormRows(b),
-      } satisfies BrokerBrokerageFormState,
-    }
-  }
-  const p = entry as Producer | Retailer
+function brokerToForm(b: Broker): BrokerFormState {
+  const purchase = termsToFormFields(b.purchaseBrokerage)
+  const sale = termsToFormFields(b.saleBrokerage)
   return {
-    name: p.name,
-    email: '',
-    phone: '',
-    location: p.location,
-    products: p.products.join(', '),
-    brokerage: emptyBrokerBrokerageForm,
+    name: b.name,
+    email: b.email,
+    phone: b.phone,
+    brokerage: {
+      purchaseBrokerageMode: purchase.mode,
+      purchaseBrokerageValue: purchase.value,
+      saleBrokerageMode: sale.mode,
+      saleBrokerageValue: sale.value,
+      itemBrokerages: brokerToFormRows(b),
+    },
   }
 }
-
-function partyEntryToForm(entry: PartyEntry) {
-  return entryToForm(entry, 'parties')
-}
-
-type DirectoryFormState = ReturnType<typeof entryToForm>
 
 export function DirectoryPage() {
   const store = useTradeStore()
@@ -120,10 +110,18 @@ export function DirectoryPage() {
   useEffect(() => {
     if (urlQ) setSearch(urlQ)
   }, [urlQ])
-  const [formOpen, setFormOpen] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
-  const [formError, setFormError] = useState('')
-  const [form, setForm] = useState(emptyForm)
+
+  const [brokerFormOpen, setBrokerFormOpen] = useState(false)
+  const [brokerEditId, setBrokerEditId] = useState<string | null>(null)
+  const [brokerFormError, setBrokerFormError] = useState('')
+  const [brokerForm, setBrokerForm] = useState(emptyBrokerForm)
+
+  const [partyFormOpen, setPartyFormOpen] = useState(false)
+  const [partyEditId, setPartyEditId] = useState<string | null>(null)
+  const [partyEditKind, setPartyEditKind] = useState<PartyKind>('producer')
+  const [partyInitial, setPartyInitial] = useState<Partial<PartyFormValues> | null>(null)
+  const [partySaving, setPartySaving] = useState(false)
+
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; kind?: PartyKind } | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [blockedDelete, setBlockedDelete] = useState<{ name: string; reason: string } | null>(null)
@@ -133,79 +131,97 @@ export function DirectoryPage() {
     setSearchParams(id === 'parties' ? {} : { tab: id }, { replace: true })
   }
 
-  const [partyEditKind, setPartyEditKind] = useState<PartyKind>('producer')
-
   const openAdd = () => {
-    setEditId(null)
-    setPartyEditKind('producer')
-    setForm(emptyForm)
-    setFormError('')
-    setFormOpen(true)
-  }
-
-  const openEdit = (entry: DirectoryEntry | PartyEntry) => {
-    setEditId(entry.id)
-    if (active === 'parties' && 'kind' in entry) {
-      setPartyEditKind(entry.kind)
-      setForm(partyEntryToForm(entry))
-    } else {
-      setForm(entryToForm(entry as DirectoryEntry, active))
+    if (active === 'brokers') {
+      setBrokerEditId(null)
+      setBrokerForm(emptyBrokerForm())
+      setBrokerFormError('')
+      setBrokerFormOpen(true)
+      return
     }
-    setFormError('')
-    setFormOpen(true)
+    setPartyEditId(null)
+    setPartyEditKind('producer')
+    setPartyInitial(emptyPartyFormValues())
+    setPartyFormOpen(true)
   }
 
-  const closeForm = () => {
-    setFormOpen(false)
-    setEditId(null)
-    setFormError('')
+  const openEditParty = (entry: PartyEntry) => {
+    setPartyEditId(entry.id)
+    setPartyEditKind(entry.kind)
+    setPartyInitial(partyEntryToFormValues(entry))
+    setPartyFormOpen(true)
   }
 
-  const handleSave = async () => {
-    setFormError('')
+  const openEditBroker = (entry: Broker) => {
+    setBrokerEditId(entry.id)
+    setBrokerForm(brokerToForm(entry))
+    setBrokerFormError('')
+    setBrokerFormOpen(true)
+  }
+
+  const closeBrokerForm = () => {
+    setBrokerFormOpen(false)
+    setBrokerEditId(null)
+    setBrokerFormError('')
+  }
+
+  const handleSaveBroker = async () => {
+    setBrokerFormError('')
     try {
-      const label = tabLabels[active]
-      if (active === 'brokers') {
-        const input = {
-          name: form.name,
-          email: form.email,
-          phone: form.phone,
-          purchaseBrokerage: formValueToBrokerageTerms(
-            form.brokerage.purchaseBrokerageMode,
-            form.brokerage.purchaseBrokerageValue,
-          ),
-          saleBrokerage: formValueToBrokerageTerms(
-            form.brokerage.saleBrokerageMode,
-            form.brokerage.saleBrokerageValue,
-          ),
-          itemBrokerages: formRowsToItemBrokerages(form.brokerage.itemBrokerages),
-        }
-        if (editId) {
-          await updateBroker(editId, input)
-          toast.success(`${label} updated`, { description: form.name.trim() })
-        } else {
-          await addBroker(input)
-          toast.success(`${label} added`, { description: form.name.trim() })
-        }
-      } else if (active === 'parties') {
-        const input = { name: form.name, location: form.location, products: form.products }
-        if (editId) {
-          if (partyEditKind === 'producer') {
-            await updateProducer(editId, input)
-          } else {
-            await updateRetailer(editId, input)
-          }
-          toast.success(`${label} updated`, { description: form.name.trim() })
-        } else {
-          await addProducer(input)
-          toast.success(`${label} added`, { description: form.name.trim() })
-        }
+      const input = {
+        name: brokerForm.name,
+        email: brokerForm.email,
+        phone: brokerForm.phone,
+        purchaseBrokerage: formValueToBrokerageTerms(
+          brokerForm.brokerage.purchaseBrokerageMode,
+          brokerForm.brokerage.purchaseBrokerageValue,
+        ),
+        saleBrokerage: formValueToBrokerageTerms(
+          brokerForm.brokerage.saleBrokerageMode,
+          brokerForm.brokerage.saleBrokerageValue,
+        ),
+        itemBrokerages: formRowsToItemBrokerages(brokerForm.brokerage.itemBrokerages),
       }
-      closeForm()
+      if (brokerEditId) {
+        await updateBroker(brokerEditId, input)
+        toast.success('Broker updated', { description: brokerForm.name.trim() })
+      } else {
+        await addBroker(input)
+        toast.success('Broker added', { description: brokerForm.name.trim() })
+      }
+      closeBrokerForm()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save'
-      setFormError(message)
-      toast.error(`Could not save ${tabLabels[active].toLowerCase()}`, { description: message })
+      setBrokerFormError(message)
+      toast.error('Could not save broker', { description: message })
+    }
+  }
+
+  const handleSaveParty = async (values: PartyFormValues) => {
+    setPartySaving(true)
+    try {
+      const input = partyFormToInput(values)
+      if (partyEditId) {
+        if (partyEditKind === 'producer') {
+          await updateProducer(partyEditId, input)
+        } else {
+          await updateRetailer(partyEditId, input)
+        }
+        toast.success('Party updated', { description: input.name })
+      } else {
+        await addProducer(input)
+        toast.success('Party added', { description: input.name })
+      }
+      setPartyFormOpen(false)
+      setPartyEditId(null)
+      setPartyInitial(null)
+    } catch (err) {
+      toast.error('Could not save party', {
+        description: err instanceof Error ? err.message : 'Failed to save',
+      })
+      throw err
+    } finally {
+      setPartySaving(false)
     }
   }
 
@@ -241,7 +257,7 @@ export function DirectoryPage() {
           type="button"
           title={`Edit ${r.name}`}
           aria-label={`Edit ${r.name}`}
-          onClick={e => { e.stopPropagation(); openEdit(r) }}
+          onClick={e => { e.stopPropagation(); openEditParty(r) }}
           className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
         >
           <Pencil className="h-4 w-4" />
@@ -263,13 +279,13 @@ export function DirectoryPage() {
     key: 'actions',
     header: '',
     className: 'w-24 text-right',
-    render: (r: DirectoryEntry) => (
+    render: (r: Broker) => (
       <div className="flex items-center justify-end gap-0.5">
         <button
           type="button"
           title={`Edit ${r.name}`}
           aria-label={`Edit ${r.name}`}
-          onClick={e => { e.stopPropagation(); openEdit(r) }}
+          onClick={e => { e.stopPropagation(); openEditBroker(r) }}
           className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
         >
           <Pencil className="h-4 w-4" />
@@ -300,7 +316,10 @@ export function DirectoryPage() {
     const q = search.toLowerCase()
     const match = (p: Producer | Retailer) =>
       p.name.toLowerCase().includes(q)
-      || p.location.toLowerCase().includes(q)
+      || (p.code ?? '').toLowerCase().includes(q)
+      || (p.city || p.location || '').toLowerCase().includes(q)
+      || (p.phone ?? '').toLowerCase().includes(q)
+      || (p.gst ?? '').toLowerCase().includes(q)
       || p.products.some(prod => prod.toLowerCase().includes(q))
     return [
       ...producers.filter(match).map(p => ({ ...p, kind: 'producer' as const })),
@@ -331,7 +350,6 @@ export function DirectoryPage() {
       }
     />
   )
-  const formTitle = `${editId ? 'Edit' : 'Add'} ${tabLabels[active]}`
 
   return (
     <div className="animate-fade-in">
@@ -372,103 +390,99 @@ export function DirectoryPage() {
           data={filteredBrokers}
           emptyState={emptyState}
           columns={[
-              { key: 'name', header: 'Name', render: r => (
-                <Link to={`/party?name=${encodeURIComponent(r.name)}`} className="font-medium text-heading hover:text-accent">
-                  {r.name}
-                </Link>
-              )},
-              { key: 'email', header: 'Email', render: r => r.email || '—' },
-              { key: 'phone', header: 'Phone', render: r => r.phone || '—' },
-              {
-                key: 'brokerage',
-                header: 'Brokerage',
-                className: 'hidden lg:table-cell',
-                render: r => (
-                  <span className="text-sm text-gray-500">{brokerBrokerageSummary(r)}</span>
-                ),
-              },
-              actionsColumn,
-            ]}
-          />
-        )}
-        {active === 'parties' && (
-          <DataTable<PartyEntry>
-            data={filteredParties}
-            emptyState={emptyState}
-            columns={[
-              { key: 'name', header: 'Name', render: r => (
-                <Link to={`/party?name=${encodeURIComponent(r.name)}`} className="font-medium text-heading hover:text-accent">
-                  {r.name}
-                </Link>
-              )},
-              { key: 'location', header: 'Location', render: r => r.location || '—' },
-              { key: 'products', header: 'Products', render: r => r.products.length ? r.products.join(', ') : '—' },
-              partyActionsColumn,
-            ]}
-          />
-        )}
+            { key: 'name', header: 'Name', render: r => (
+              <Link to={`/party?name=${encodeURIComponent(r.name)}`} className="font-medium text-heading hover:text-accent">
+                {r.name}
+              </Link>
+            )},
+            { key: 'email', header: 'Email', render: r => r.email || '—' },
+            { key: 'phone', header: 'Phone', render: r => r.phone || '—' },
+            {
+              key: 'brokerage',
+              header: 'Brokerage',
+              className: 'hidden lg:table-cell',
+              render: r => (
+                <span className="text-sm text-gray-500">{brokerBrokerageSummary(r)}</span>
+              ),
+            },
+            actionsColumn,
+          ]}
+        />
+      )}
+      {active === 'parties' && (
+        <DataTable<PartyEntry>
+          data={filteredParties}
+          emptyState={emptyState}
+          columns={[
+            { key: 'code', header: 'Code', className: 'hidden sm:table-cell', render: r => r.code || '—' },
+            { key: 'name', header: 'Name', render: r => (
+              <Link to={`/party?name=${encodeURIComponent(r.name)}`} className="font-medium text-heading hover:text-accent">
+                {r.name}
+              </Link>
+            )},
+            { key: 'city', header: 'City', render: r => r.city || r.location || '—' },
+            { key: 'phone', header: 'Phone', className: 'hidden md:table-cell', render: r => r.phone || '—' },
+            { key: 'gst', header: 'GST', className: 'hidden lg:table-cell', render: r => r.gst || '—' },
+            partyActionsColumn,
+          ]}
+        />
+      )}
 
       <Modal
-        open={formOpen}
-        onClose={closeForm}
-        title={formTitle}
+        open={brokerFormOpen}
+        onClose={closeBrokerForm}
+        title={`${brokerEditId ? 'Edit' : 'Add'} Broker`}
         size="lg"
         footer={
           <>
-            <Button variant="outline" onClick={closeForm}>Cancel</Button>
-            <Button onClick={handleSave}>{editId ? 'Update' : 'Save'}</Button>
+            <Button variant="outline" onClick={closeBrokerForm}>Cancel</Button>
+            <Button onClick={() => void handleSaveBroker()}>{brokerEditId ? 'Update' : 'Save'}</Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
             label="Name"
-            placeholder={`${tabLabels[active]} name`}
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="Broker name"
+            value={brokerForm.name}
+            onChange={e => setBrokerForm(f => ({ ...f, name: e.target.value }))}
             autoFocus
           />
-          {active === 'brokers' && (
-            <>
-              <Input
-                label="Email"
-                type="email"
-                placeholder="email@example.com"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              />
-              <Input
-                label="Phone"
-                placeholder="+91 ..."
-                value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              />
-              <BrokerBrokerageForm
-                value={form.brokerage}
-                onChange={brokerage => setForm(f => ({ ...f, brokerage }))}
-                itemOptions={items}
-              />
-            </>
-          )}
-          {(active === 'parties') && (
-            <>
-              <Input
-                label="Location"
-                placeholder="City, state"
-                value={form.location}
-                onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-              />
-              <Input
-                label="Products"
-                placeholder="Palm Oil, Soybean (comma-separated)"
-                value={form.products}
-                onChange={e => setForm(f => ({ ...f, products: e.target.value }))}
-              />
-            </>
-          )}
-          {formError && <p className="text-sm text-danger">{formError}</p>}
+          <Input
+            label="Email"
+            type="email"
+            placeholder="email@example.com"
+            value={brokerForm.email}
+            onChange={e => setBrokerForm(f => ({ ...f, email: e.target.value }))}
+          />
+          <Input
+            label="Phone"
+            placeholder="+91 ..."
+            value={brokerForm.phone}
+            onChange={e => setBrokerForm(f => ({ ...f, phone: e.target.value }))}
+          />
+          <BrokerBrokerageForm
+            value={brokerForm.brokerage}
+            onChange={brokerage => setBrokerForm(f => ({ ...f, brokerage }))}
+            itemOptions={items}
+          />
+          {brokerFormError && <p className="text-sm text-danger">{brokerFormError}</p>}
         </div>
       </Modal>
+
+      <PartyFormModal
+        open={partyFormOpen}
+        onClose={() => {
+          if (partySaving) return
+          setPartyFormOpen(false)
+          setPartyEditId(null)
+          setPartyInitial(null)
+        }}
+        title={`${partyEditId ? 'Edit' : 'Add'} Party`}
+        initial={partyInitial}
+        saving={partySaving}
+        onSave={handleSaveParty}
+      />
 
       <ConfirmDeleteModal
         open={!!deleteTarget}

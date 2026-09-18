@@ -286,16 +286,44 @@ function brokerRow(broker: Broker) {
 
 function producerRow(producer: Producer) {
   return withJson({
+    'Code No': producer.code ?? '',
     Name: producer.name,
-    Location: producer.location ?? '',
+    Address: producer.address ?? '',
+    City: producer.city || producer.location || '',
+    'Contact Person': producer.contactPerson ?? '',
+    Phone: producer.phone ?? '',
+    WhatsApp: producer.whatsapp ?? '',
+    Email: producer.email ?? '',
+    'TAN No': producer.tan || producer.tin || '',
+    'FSSAI No': producer.fssai ?? '',
+    'Bank Name': producer.bankName ?? '',
+    'Bank A/C': producer.bankAccount ?? '',
+    'IFSC / RTGS': producer.ifsc ?? '',
+    PAN: producer.pan ?? '',
+    Aadhaar: producer.aadhar ?? '',
+    'GST No': producer.gst ?? '',
     Products: Array.isArray(producer.products) ? producer.products.join('; ') : String(producer.products ?? ''),
   }, producer)
 }
 
 function retailerRow(retailer: Retailer) {
   return withJson({
+    'Code No': retailer.code ?? '',
     Name: retailer.name,
-    Location: retailer.location ?? '',
+    Address: retailer.address ?? '',
+    City: retailer.city || retailer.location || '',
+    'Contact Person': retailer.contactPerson ?? '',
+    Phone: retailer.phone ?? '',
+    WhatsApp: retailer.whatsapp ?? '',
+    Email: retailer.email ?? '',
+    'TAN No': retailer.tan || retailer.tin || '',
+    'FSSAI No': retailer.fssai ?? '',
+    'Bank Name': retailer.bankName ?? '',
+    'Bank A/C': retailer.bankAccount ?? '',
+    'IFSC / RTGS': retailer.ifsc ?? '',
+    PAN: retailer.pan ?? '',
+    Aadhaar: retailer.aadhar ?? '',
+    'GST No': retailer.gst ?? '',
     Products: Array.isArray(retailer.products) ? retailer.products.join('; ') : String(retailer.products ?? ''),
   }, retailer)
 }
