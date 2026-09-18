@@ -67,6 +67,8 @@ class OrganisationBody(BaseModel):
     plan_id: int | None = None
     billing_cycle: str = Field(default="annual", pattern="^(monthly|annual)$")
     primary_admin: PrimaryAdminBody | None = None
+    # Temporary QA/demo customer — listed under Test and deletable.
+    is_test: bool = False
 
 
 class OrganisationUpdateBody(BaseModel):
@@ -83,6 +85,7 @@ class OrganisationUpdateBody(BaseModel):
     primary_contact_name: str | None = None
     primary_contact_email: str | None = None
     primary_contact_mobile: str | None = None
+    is_test: bool | None = None
 
 
 class CreateUserBody(BaseModel):
@@ -182,8 +185,8 @@ def _org_list_fields() -> str:
         id, org_code, name, account_type, status, legal_name, gstin, pan,
         business_address, city, state, country, pincode,
         primary_contact_name, primary_contact_email, primary_contact_mobile,
-        sandbox_tools, created_at, updated_at
-    """  # sandbox_tools: 1 = test org (non-deletable)
+        sandbox_tools, is_test, created_at, updated_at
+    """  # sandbox_tools = system sandbox; is_test = temporary QA account (deletable)
 
 
 @router.get("/plans", summary="List subscription plans")
@@ -475,16 +478,17 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
                 row = conn.execute(
                     """
                     INSERT INTO organisations (
-                        name, account_type, status, sandbox_tools,
+                        name, account_type, status, sandbox_tools, is_test,
                         legal_name, gstin, pan, business_address, city, state, country, pincode,
                         created_at, updated_at
                     )
-                    VALUES (%s, %s, 'active', 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, 'active', 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         name,
                         body.account_type,
+                        1 if body.is_test else 0,
                         body.legal_name,
                         body.gstin,
                         body.pan,
@@ -581,15 +585,16 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
             cur = conn.execute(
                 """
                 INSERT INTO organisations (
-                    name, account_type, status, sandbox_tools,
+                    name, account_type, status, sandbox_tools, is_test,
                     legal_name, gstin, pan, business_address, city, state, country, pincode,
                     created_at, updated_at
                 )
-                VALUES (?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
                     body.account_type,
+                    1 if body.is_test else 0,
                     body.legal_name,
                     body.gstin,
                     body.pan,
@@ -648,6 +653,8 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         raise HTTPException(status_code=400, detail="Nothing to update")
     if data.get("status") == "disabled":
         data["status"] = "inactive"
+    if "is_test" in data:
+        data["is_test"] = 1 if data["is_test"] else 0
     old_status = None
     for key, val in data.items():
         updates.append(f"{key} = ?" if not uses_postgres() else f"{key} = %s")
@@ -714,13 +721,56 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         return detail
 
 
-@router.delete("/organisations/{org_id}", summary="Delete organisation (disabled)")
+@router.delete("/organisations/{org_id}", summary="Delete a test organisation")
 def remove_organisation(org_id: int, request: Request) -> dict[str, Any]:
-    _session(request)
-    raise HTTPException(
-        status_code=403,
-        detail="Organisations cannot be deleted. Deactivate the organisation instead to retain audit history.",
-    )
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .billing_repository import delete_organisation
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, sandbox_tools, is_test FROM organisations WHERE id = %s",
+                (org_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Organisation not found")
+            data = dict(row)
+            if data.get("sandbox_tools"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="The system sandbox organisation cannot be deleted.",
+                )
+            if not data.get("is_test"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only test accounts can be deleted. Mark the organisation as Test, or deactivate a real customer instead.",
+                )
+            snapshot = delete_organisation(conn, org_id, actor_user_id=session.user.id)
+            conn.commit()
+            return {"deleted": snapshot}
+    with _sqlite_connect() as conn:
+        row = conn.execute(
+            "SELECT id, name, sandbox_tools, is_test FROM organisations WHERE id = ?",
+            (org_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        data = dict(row)
+        if data.get("sandbox_tools"):
+            raise HTTPException(
+                status_code=403,
+                detail="The system sandbox organisation cannot be deleted.",
+            )
+        if not data.get("is_test"):
+            raise HTTPException(
+                status_code=403,
+                detail="Only test accounts can be deleted. Mark the organisation as Test, or deactivate a real customer instead.",
+            )
+        snapshot = delete_organisation(conn, org_id, actor_user_id=session.user.id)
+        conn.commit()
+        return {"deleted": snapshot}
 
 
 @router.post("/organisations/{org_id}/seats", summary="Add purchased seats")

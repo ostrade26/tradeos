@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import {
-  History, PanelRight, PanelRightClose, Pencil, Armchair, Bell, KeyRound, Ban, RotateCcw,
+  History, PanelRight, PanelRightClose, Pencil, Armchair, Bell, KeyRound, Ban, RotateCcw, Trash2,
 } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Button } from '../ui/Button'
@@ -9,6 +9,7 @@ import { EmptyState } from '../ui/EmptyState'
 import { DetailPanelMenu, groupMenuItems } from '../ui/DetailPanelMenu'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
 import { OrganisationSubscriptionPanel } from './OrganisationSubscriptionPanel'
+import { organisationIsTest } from './platformAdminRegisterColumns'
 
 const actionBtnClass = 'h-auto w-full py-2.5 text-sm'
 
@@ -29,6 +30,7 @@ interface PlatformOrganisationDetailDrawerProps {
   onEdit: () => void
   onDeactivate: () => void
   onReactivate: () => void
+  onDelete?: () => void
   onResetPrimaryAdminSignIn?: () => void
   onNotify?: () => void
 }
@@ -45,6 +47,7 @@ export function PlatformOrganisationDetailDrawer({
   onEdit,
   onDeactivate,
   onReactivate,
+  onDelete,
   onResetPrimaryAdminSignIn,
   onNotify,
 }: PlatformOrganisationDetailDrawerProps) {
@@ -53,6 +56,7 @@ export function PlatformOrganisationDetailDrawer({
   const subtitle = org?.org_code?.trim() || undefined
   const sub = detail?.subscription
   const isActive = org?.status === 'active'
+  const isTest = org ? organisationIsTest(org) : false
   const statusLabel = org ? organisationStatusLabel(org.status) : ''
 
   const headerBadges = org ? (
@@ -63,6 +67,7 @@ export function PlatformOrganisationDetailDrawer({
       >
         {statusLabel}
       </Badge>
+      {isTest ? <Badge variant="warning" className="shrink-0">Test</Badge> : null}
       {org.sandbox_tools ? <Badge variant="info" className="shrink-0">Sandbox</Badge> : null}
     </>
   ) : undefined
@@ -109,6 +114,15 @@ export function PlatformOrganisationDetailDrawer({
                 icon: RotateCcw,
                 onClick: onReactivate,
               },
+          ...(isTest && onDelete && !org.sandbox_tools
+            ? [{
+                type: 'button' as const,
+                label: 'Delete test account',
+                icon: Trash2,
+                tone: 'danger' as const,
+                onClick: onDelete,
+              }]
+            : []),
         ],
       },
     ])
@@ -116,9 +130,11 @@ export function PlatformOrganisationDetailDrawer({
     org,
     detail?.primary_admin_user,
     isActive,
+    isTest,
     onEdit,
     onDeactivate,
     onReactivate,
+    onDelete,
     onResetPrimaryAdminSignIn,
   ])
 

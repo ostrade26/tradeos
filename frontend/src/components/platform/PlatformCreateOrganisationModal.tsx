@@ -3,6 +3,7 @@ import { Modal } from '../ui/Drawer'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
+import { Checkbox } from '../ui/Checkbox'
 import { OrganisationLocationFields } from './OrganisationLocationFields'
 import { contactEmailError } from '../../lib/email'
 import { loginUsernameError } from '../../lib/username'
@@ -25,6 +26,7 @@ export const emptyOrganisationForm = () => ({
   admin_username: '',
   admin_email: '',
   admin_mobile: '',
+  is_test: false,
 })
 
 export type OrganisationFormState = ReturnType<typeof emptyOrganisationForm>
@@ -66,6 +68,25 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
     !emailError,
   )
 
+  const testAccountControl = (
+    <div className="flex min-w-0 items-start gap-2">
+      <Checkbox
+        id="create-org-is-test"
+        compact
+        checked={form.is_test}
+        onChange={e => setForm(f => ({ ...f, is_test: e.target.checked }))}
+        aria-label="Test account"
+        className="mt-0.5"
+      />
+      <label htmlFor="create-org-is-test" className="min-w-0 cursor-pointer">
+        <p className="text-sm text-heading">Test account</p>
+        <p className="text-xs text-muted mt-0.5 leading-relaxed">
+          For QA only — listed under Test and safe to delete later.
+        </p>
+      </label>
+    </div>
+  )
+
   return (
     <Modal
       open={open}
@@ -73,25 +94,32 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
       title="Add organisation"
       subtitle={step === 1 ? 'Customer account and plan.' : 'Primary admin and sign-in username.'}
       size="lg"
+      footerClassName="w-full items-center justify-between gap-3"
       footer={
         step === 1 ? (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button disabled={!accountValid} onClick={() => setStep(2)}>
-              Next
-            </Button>
-          </div>
+          <>
+            {testAccountControl}
+            <div className="flex shrink-0 gap-2">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button disabled={!accountValid} onClick={() => setStep(2)}>
+                Next
+              </Button>
+            </div>
+          </>
         ) : (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setStep(1)} disabled={loading}>
-              Back
-            </Button>
-            <Button loading={loading} disabled={!adminValid || loading} onClick={() => onSubmit(form)}>
-              Create organisation
-            </Button>
-          </div>
+          <>
+            {testAccountControl}
+            <div className="flex shrink-0 gap-2">
+              <Button variant="outline" onClick={() => setStep(1)} disabled={loading}>
+                Back
+              </Button>
+              <Button loading={loading} disabled={!adminValid || loading} onClick={() => onSubmit(form)}>
+                Create organisation
+              </Button>
+            </div>
+          </>
         )
       }
     >

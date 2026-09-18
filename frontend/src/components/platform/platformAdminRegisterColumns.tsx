@@ -64,6 +64,10 @@ export function organisationIsActive(org: PlatformOrganisation): boolean {
   return org.status === 'active'
 }
 
+export function organisationIsTest(org: PlatformOrganisation): boolean {
+  return Boolean(org.is_test)
+}
+
 export function organisationColumns(): Column<PlatformOrganisation>[] {
   return [
     {
@@ -108,6 +112,7 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
           >
             {organisationStatusLabel(r.status)}
           </Badge>
+          {organisationIsTest(r) ? <Badge variant="warning">Test</Badge> : null}
           {r.sandbox_tools ? <Badge variant="info">Sandbox</Badge> : null}
         </div>
       ),

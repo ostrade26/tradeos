@@ -36,6 +36,7 @@ import {
   mapAuditLogs,
   organisationColumns,
   organisationIsActive,
+  organisationIsTest,
   paymentColumns,
   platformSeatColumns,
   releaseColumns,
@@ -247,8 +248,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   } | null>(null)
   const [seatDecisionSubmitting, setSeatDecisionSubmitting] = useState(false)
 
-  const [orgListTab, setOrgListTab] = useState<'active' | 'deactivated'>('active')
+  const [orgListTab, setOrgListTab] = useState<'active' | 'test' | 'deactivated'>('active')
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false)
+  const [deleteTestConfirmOpen, setDeleteTestConfirmOpen] = useState(false)
+  const [deletingTestOrg, setDeletingTestOrg] = useState(false)
   const [togglingOrgStatus, setTogglingOrgStatus] = useState(false)
   const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
   const isLargeScreen = useLargeScreen()
@@ -371,16 +374,25 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const auditColumns = useMemo(() => auditLogColumns(), [])
 
   const activeOrganisationCount = useMemo(
-    () => organisations.filter(organisationIsActive).length,
+    () => organisations.filter(org => organisationIsActive(org) && !organisationIsTest(org)).length,
     [organisations],
   )
-  const deactivatedOrganisationCount = organisations.length - activeOrganisationCount
+  const testOrganisationCount = useMemo(
+    () => organisations.filter(organisationIsTest).length,
+    [organisations],
+  )
+  const deactivatedOrganisationCount = useMemo(
+    () => organisations.filter(org => !organisationIsActive(org) && !organisationIsTest(org)).length,
+    [organisations],
+  )
 
   const filteredOrganisations = useMemo(
     () =>
-      organisations.filter(org =>
-        orgListTab === 'active' ? organisationIsActive(org) : !organisationIsActive(org),
-      ),
+      organisations.filter(org => {
+        if (orgListTab === 'test') return organisationIsTest(org)
+        if (orgListTab === 'deactivated') return !organisationIsActive(org) && !organisationIsTest(org)
+        return organisationIsActive(org) && !organisationIsTest(org)
+      }),
     [organisations, orgListTab],
   )
 
@@ -860,10 +872,16 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           email: form.admin_email.trim(),
           mobile: form.admin_mobile.trim(),
         },
+        is_test: form.is_test,
       })
       setCreateOrgOpen(false)
       await load()
-      toast.success(`Organisation “${detail.organisation.name}” created`)
+      toast.success(
+        form.is_test
+          ? `Test account “${detail.organisation.name}” created`
+          : `Organisation “${detail.organisation.name}” created`,
+      )
+      if (form.is_test) setOrgListTab('test')
       if (detail.primary_admin?.temporary_password) {
         const pa = detail.primary_admin
         setSignInCredentials({
@@ -935,6 +953,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     country: string
     pincode: string
     status: string
+    is_test: boolean
   }) => {
     if (!orgDetail) return
     setSavingOrg(true)
@@ -949,12 +968,34 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             ? 'Organisation activated'
             : 'Organisation updated',
       )
-      setOrgListTab(organisationIsActive(updated.organisation) ? 'active' : 'deactivated')
+      if (organisationIsTest(updated.organisation)) setOrgListTab('test')
+      else setOrgListTab(organisationIsActive(updated.organisation) ? 'active' : 'deactivated')
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update organisation')
     } finally {
       setSavingOrg(false)
+    }
+  }
+
+  const deleteTestOrganisation = async () => {
+    if (!orgDetail || deletingTestOrg) return
+    const org = orgDetail.organisation
+    if (!organisationIsTest(org) || org.sandbox_tools) return
+    setDeletingTestOrg(true)
+    try {
+      await platformApi.deleteOrganisation(org.id)
+      toast.success(`Test account “${org.name}” deleted`)
+      setDeleteTestConfirmOpen(false)
+      setOrgDetailOpen(false)
+      setOrgDetail(null)
+      setSelectedOrgId(null)
+      setOrgListTab('test')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete test account')
+    } finally {
+      setDeletingTestOrg(false)
     }
   }
 
@@ -966,7 +1007,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       setOrgDetail(updated)
       setDeactivateConfirmOpen(false)
       toast.success(status === 'inactive' ? 'Organisation deactivated' : 'Organisation reactivated')
-      setOrgListTab(status === 'active' ? 'active' : 'deactivated')
+      if (organisationIsTest(updated.organisation)) setOrgListTab('test')
+      else setOrgListTab(status === 'active' ? 'active' : 'deactivated')
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update organisation status')
@@ -1050,8 +1092,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         subtitle={
           section === 'organisations'
             ? orgListTab === 'active'
-              ? `${activeOrganisationCount} active organisation${activeOrganisationCount === 1 ? '' : 's'}`
-              : `${deactivatedOrganisationCount} deactivated organisation${deactivatedOrganisationCount === 1 ? '' : 's'}`
+              ? `${activeOrganisationCount} customer organisation${activeOrganisationCount === 1 ? '' : 's'}`
+              : orgListTab === 'test'
+                ? `${testOrganisationCount} test account${testOrganisationCount === 1 ? '' : 's'}`
+                : `${deactivatedOrganisationCount} deactivated organisation${deactivatedOrganisationCount === 1 ? '' : 's'}`
             : section === 'seats'
               ? `${licensedSeats.length} in use`
               : section === 'plans'
@@ -1093,11 +1137,14 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       {section === 'organisations' ? (
         <Tabs
           active={orgListTab}
-          onChange={id => setOrgListTab(id === 'deactivated' ? 'deactivated' : 'active')}
+          onChange={id =>
+            setOrgListTab(id === 'test' ? 'test' : id === 'deactivated' ? 'deactivated' : 'active')
+          }
           className="gap-6"
           buttonClassName="pt-2.5 px-0"
           tabs={[
-            { id: 'active', label: 'Active orgs', count: activeOrganisationCount },
+            { id: 'active', label: 'Customers', count: activeOrganisationCount },
+            { id: 'test', label: 'Test', count: testOrganisationCount },
             {
               id: 'deactivated',
               label: 'Deactivated',
@@ -1128,9 +1175,20 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                   title="No deactivated organisations"
                   description="Deactivate an organisation from Edit to move it here. Data is kept for audit."
                 />
+              ) : orgListTab === 'test' ? (
+                <EmptyState
+                  title="No test accounts"
+                  description="When creating an organisation, check Test account for temporary QA orgs you can delete later."
+                  action={
+                    <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
+                      <Building2 className="h-4 w-4" aria-hidden />
+                      Add test account
+                    </Button>
+                  }
+                />
               ) : (
                 <EmptyState
-                  title="No active organisations"
+                  title="No customer organisations"
                   description="Add one with a plan and a primary admin."
                   action={
                     <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
@@ -1455,6 +1513,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onEdit={() => setEditOrgOpen(true)}
         onDeactivate={() => setDeactivateConfirmOpen(true)}
         onReactivate={() => void setOrganisationActiveStatus('active')}
+        onDelete={() => setDeleteTestConfirmOpen(true)}
         onResetPrimaryAdminSignIn={openResetPrimaryAdminSignIn}
         onNotify={() => void openNotify('org')}
       />
@@ -1526,6 +1585,24 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <p className="text-sm text-muted leading-relaxed">
           <span className="font-medium text-heading">{orgDetail?.organisation.name}</span> will move to
           Deactivated. Users from this organisation will not be able to sign in. All data is kept for audit.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteTestConfirmOpen}
+        onClose={() => !deletingTestOrg && setDeleteTestConfirmOpen(false)}
+        onConfirm={() => void deleteTestOrganisation()}
+        title="Delete test account?"
+        confirmLabel="Delete permanently"
+        slideLabel="Slide to delete"
+        variant="danger"
+        confirmLoading={deletingTestOrg}
+      >
+        <p className="text-sm text-muted leading-relaxed">
+          Permanently delete{' '}
+          <span className="font-medium text-heading">{orgDetail?.organisation.name}</span> and all of its
+          users, seats, trade data, and notices. This cannot be undone. Real customer organisations cannot
+          be deleted this way.
         </p>
       </ConfirmDialog>
     </div>

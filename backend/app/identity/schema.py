@@ -139,6 +139,23 @@ def _migrate_org_sandbox_tools(execute: Callable) -> None:
     )
 
 
+def _migrate_org_is_test(execute: Callable) -> None:
+    """Mark temporary QA/demo customer accounts (deletable) vs real customers."""
+    if uses_postgres():
+        execute(
+            """
+            ALTER TABLE organisations
+            ADD COLUMN IF NOT EXISTS is_test INTEGER NOT NULL DEFAULT 0
+            """
+        )
+        return
+
+    pragma = execute("PRAGMA table_info(organisations)")
+    cols = [r[1] for r in (pragma.fetchall() if hasattr(pragma, "fetchall") else pragma)]
+    if "is_test" not in cols:
+        execute("ALTER TABLE organisations ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+
+
 def _rename_legacy_default_org(execute: Callable, commit: Callable) -> None:
     now = _now()
     if uses_postgres():
@@ -384,6 +401,7 @@ def init_identity_schema() -> None:
                         CHECK (account_type IN ('wholesaler_retailer', 'broker')),
                     status TEXT NOT NULL DEFAULT 'active',
                     sandbox_tools INTEGER NOT NULL DEFAULT 0,
+                    is_test INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -462,6 +480,7 @@ def init_identity_schema() -> None:
             )
             _seed_roles_permissions(conn.execute, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit)
             _migrate_org_sandbox_tools(conn.execute)
+            _migrate_org_is_test(conn.execute)
             _migrate_trade_state_pg(conn)
             org_id = _ensure_default_org(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone())
             _seed_users(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit, org_id)
@@ -506,6 +525,7 @@ def init_identity_schema() -> None:
                     CHECK (account_type IN ('wholesaler_retailer', 'broker')),
                 status TEXT NOT NULL DEFAULT 'active',
                 sandbox_tools INTEGER NOT NULL DEFAULT 0,
+                is_test INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -584,6 +604,7 @@ def init_identity_schema() -> None:
         )
         _seed_roles_permissions(conn.execute, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit)
         _migrate_org_sandbox_tools(conn.execute)
+        _migrate_org_is_test(conn.execute)
         _migrate_trade_state_sqlite(conn)
         org_id = _ensure_default_org(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone())
         _seed_users(conn, conn.execute, lambda q, p: conn.execute(q, p).fetchone(), conn.commit, org_id)

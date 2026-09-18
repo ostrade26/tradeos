@@ -1040,21 +1040,23 @@ def create_organisation_with_primary_admin(
         )
 
     now = _now()
+    is_test = 1 if org.get("is_test") else 0
     if uses_postgres():
         row = conn.execute(
             """
             INSERT INTO organisations (
-                name, account_type, status, sandbox_tools,
+                name, account_type, status, sandbox_tools, is_test,
                 legal_name, gstin, pan, business_address, city, state, country, pincode,
                 primary_contact_name, primary_contact_email, primary_contact_mobile,
                 created_at, updated_at
             )
-            VALUES (%s, %s, 'active', 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, 'active', 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
                 org_name,
                 org.get("account_type", "wholesaler_retailer"),
+                is_test,
                 org.get("legal_name", ""),
                 org.get("gstin", ""),
                 org.get("pan", ""),
@@ -1085,16 +1087,17 @@ def create_organisation_with_primary_admin(
         cur = conn.execute(
             """
             INSERT INTO organisations (
-                name, account_type, status, sandbox_tools,
+                name, account_type, status, sandbox_tools, is_test,
                 legal_name, gstin, pan, business_address, city, state, country, pincode,
                 primary_contact_name, primary_contact_email, primary_contact_mobile,
                 created_at, updated_at
             )
-            VALUES (?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 org_name,
                 org.get("account_type", "wholesaler_retailer"),
+                is_test,
                 org.get("legal_name", ""),
                 org.get("gstin", ""),
                 org.get("pan", ""),

@@ -3,9 +3,11 @@ import { Modal } from '../ui/Drawer'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
+import { Checkbox } from '../ui/Checkbox'
 import { OrganisationLocationFields } from './OrganisationLocationFields'
 import { DEFAULT_ORGANISATION_COUNTRY } from '../../lib/organisationLocations'
 import type { PlatformOrganisation } from '../../api/platformApi'
+import { organisationIsTest } from './platformAdminRegisterColumns'
 
 interface Props {
   open: boolean
@@ -23,6 +25,7 @@ interface Props {
     country: string
     pincode: string
     status: string
+    is_test: boolean
   }) => void
 }
 
@@ -44,6 +47,7 @@ export function PlatformEditOrganisationModal({
     country: '',
     pincode: '',
     status: 'active',
+    is_test: false,
   })
 
   useEffect(() => {
@@ -62,10 +66,12 @@ export function PlatformEditOrganisationModal({
         organisation.status === 'disabled' || organisation.status === 'inactive'
           ? 'inactive'
           : 'active',
+      is_test: organisationIsTest(organisation),
     })
   }, [open, organisation])
 
   const valid = form.name.trim() && form.business_address.trim() && form.city.trim()
+  const isSandbox = Boolean(organisation?.sandbox_tools)
 
   return (
     <Modal
@@ -73,15 +79,38 @@ export function PlatformEditOrganisationModal({
       onClose={onClose}
       title="Edit organisation"
       size="lg"
+      footerClassName="w-full items-center justify-between gap-3"
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button loading={loading} disabled={!valid} onClick={() => onSubmit(form)}>
-            Save changes
-          </Button>
-        </div>
+        <>
+          {!isSandbox ? (
+            <div className="flex min-w-0 items-start gap-2">
+              <Checkbox
+                id="edit-org-is-test"
+                compact
+                checked={form.is_test}
+                onChange={e => setForm(f => ({ ...f, is_test: e.target.checked }))}
+                aria-label="Test account"
+                className="mt-0.5"
+              />
+              <label htmlFor="edit-org-is-test" className="min-w-0 cursor-pointer">
+                <p className="text-sm text-heading">Test account</p>
+                <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                  For QA only — listed under Test and safe to delete later.
+                </p>
+              </label>
+            </div>
+          ) : (
+            <span />
+          )}
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button loading={loading} disabled={!valid} onClick={() => onSubmit(form)}>
+              Save changes
+            </Button>
+          </div>
+        </>
       }
     >
       <div className="grid gap-4 sm:grid-cols-2 pt-1">

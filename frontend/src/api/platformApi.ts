@@ -32,6 +32,8 @@ export interface PlatformOrganisation {
   primary_contact_email?: string
   primary_contact_mobile?: string
   sandbox_tools?: number
+  /** Temporary QA/demo customer — listed under Test and deletable. */
+  is_test?: number | boolean
   created_at: string
   updated_at: string
   seats?: SeatSummary
@@ -144,6 +146,8 @@ export interface CreateOrganisationPayload {
     mobile?: string
     password?: string
   }
+  /** Temporary QA/demo customer account */
+  is_test?: boolean
 }
 
 export type OrgSeatTypeSlug = 'organisation_admin' | 'operator' | 'view_only'
@@ -449,10 +453,15 @@ export const platformApi = {
       body: JSON.stringify({ account_type: 'wholesaler_retailer', billing_cycle: 'annual', ...body }),
     }),
 
-  updateOrganisation: (orgId: number, body: Partial<PlatformOrganisation> & { status?: string }) =>
+  updateOrganisation: (orgId: number, body: Partial<PlatformOrganisation> & { status?: string; is_test?: boolean }) =>
     apiFetch<OrganisationDetailResponse>(`/platform/organisations/${orgId}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }),
+
+  deleteOrganisation: (orgId: number) =>
+    apiFetch<{ deleted: PlatformOrganisation }>(`/platform/organisations/${orgId}`, {
+      method: 'DELETE',
     }),
 
   deleteUser: (userId: number) =>
