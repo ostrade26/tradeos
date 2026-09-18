@@ -21,6 +21,7 @@ import {
   type NotificationKind,
   type PlatformDashboard,
   type PlatformOrganisation,
+  type FeatureInterest,
   type PlatformRelease,
   type PlatformUser,
   type SeatRequest,
@@ -65,8 +66,14 @@ import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
 import { platformBroadcastLabels } from '../lib/inboxLabels'
 import { PlatformReleaseModal, type ReleaseFormPayload } from '../components/platform/PlatformReleaseModal'
 import { PlatformPublishReleaseModal } from '../components/platform/PlatformPublishReleaseModal'
+import {
+  PlatformFeatureInterestModal,
+  type FeatureInterestRow,
+} from '../components/platform/PlatformFeatureInterestModal'
 import { PlatformWhatsNewModal } from '../components/platform/PlatformWhatsNewModal'
+import { PlatformFeatureCatalogPanel } from '../components/platform/PlatformFeatureCatalogPanel'
 import { useAuth } from '../hooks/useAuth'
+import { INBOX_REFRESH_EVENT } from '../hooks/useMeInbox'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
 const PLATFORM_SECTIONS = [
@@ -77,6 +84,8 @@ const PLATFORM_SECTIONS = [
   'amcs',
   'payments',
   'seat-requests',
+  'feature-interests',
+  'feature-catalog',
   'audit',
   'releases',
 ] as const
@@ -124,6 +133,16 @@ const SECTION_META: Record<
     title: 'Seat requests',
     subtitle: '',
     breadcrumb: 'Seat requests',
+  },
+  'feature-interests': {
+    title: 'Feature access',
+    subtitle: '',
+    breadcrumb: 'Feature access',
+  },
+  'feature-catalog': {
+    title: 'Add-ons catalog',
+    subtitle: '',
+    breadcrumb: 'Add-ons catalog',
   },
   audit: {
     title: 'Audit',
@@ -209,6 +228,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [releaseSort, setReleaseSort] = useState(() => loadRegisterSort('platform-releases', 'version'))
   const [auditSort, setAuditSort] = useState(() => loadRegisterSort('platform-audit', 'created_at'))
   const [seatRequests, setSeatRequests] = useState<SeatRequest[]>([])
+  const [featureInterests, setFeatureInterests] = useState<FeatureInterest[]>([])
+  const [featureInterestLoading, setFeatureInterestLoading] = useState(false)
+  const [reviewingFeatureInterest, setReviewingFeatureInterest] = useState<FeatureInterestRow | null>(null)
+  const [featureInterestBusy, setFeatureInterestBusy] = useState(false)
   const [seatRequestLoading, setSeatRequestLoading] = useState(false)
   const [seatRequestSort, setSeatRequestSort] = useState(() => loadRegisterSort('platform-seat-requests', 'created_at'))
   const [busySeatRequestId, setBusySeatRequestId] = useState<number | null>(null)
@@ -293,6 +316,18 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     void load()
   }, [load])
 
+  const releaseIdFromInbox = searchParams.get('releaseId')
+  const interestIdFromInbox = searchParams.get('interestId')
+  useEffect(() => {
+    if (!releaseIdFromInbox || releases.length === 0) return
+    const id = Number(releaseIdFromInbox)
+    if (!Number.isFinite(id)) return
+    const row = releases.find(r => r.id === id)
+    if (!row) return
+    setEditingRelease(row)
+    setReleaseModalOpen(true)
+  }, [releaseIdFromInbox, releases])
+
   useEffect(() => {
     if (!session) return
     if (session.preferences?.lastSeenPlatformWhatsNew === PLATFORM_WHATS_NEW_VERSION) {
@@ -322,6 +357,30 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     if (section === 'seat-requests') void loadSeatRequests()
   }, [section, loadSeatRequests])
+
+  const loadFeatureInterests = useCallback(async () => {
+    setFeatureInterestLoading(true)
+    try {
+      const res = await platformApi.listFeatureInterests()
+      setFeatureInterests(res.interests)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load feature requests')
+    } finally {
+      setFeatureInterestLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    if (section === 'feature-interests') void loadFeatureInterests()
+  }, [section, loadFeatureInterests])
+
+  useEffect(() => {
+    if (!interestIdFromInbox || featureInterests.length === 0) return
+    const id = Number(interestIdFromInbox)
+    if (!Number.isFinite(id)) return
+    const row = featureInterests.find(i => i.id === id)
+    if (row) setReviewingFeatureInterest(row as FeatureInterestRow)
+  }, [interestIdFromInbox, featureInterests])
 
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
@@ -952,6 +1011,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
       </Button>
+    ) : section === 'feature-interests' ? (
+      <Button variant="outline" size="sm" loading={featureInterestLoading} onClick={() => void loadFeatureInterests()}>
+        <RefreshCw className="h-4 w-4" aria-hidden />
+        Refresh
+      </Button>
     ) : section === 'releases' ? (
       <Button
         size="sm"
@@ -989,6 +1053,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                       ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
                       : section === 'seat-requests'
                         ? `${seatRequests.length} request${seatRequests.length === 1 ? '' : 's'}`
+                        : section === 'feature-interests'
+                          ? `${featureInterests.filter(i => i.status === 'interested').length} open`
+                          : section === 'feature-catalog'
+                            ? 'Production & marketplace'
                           : section === 'releases'
                           ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
                           : section === 'audit'
@@ -1173,6 +1241,65 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                 }
               />
             }
+          />
+        ))}
+
+      {section === 'feature-catalog' ? <PlatformFeatureCatalogPanel /> : null}
+
+      {section === 'feature-interests' &&
+        (featureInterestLoading && featureInterests.length === 0 ? (
+          <TableSkeleton rows={8} cols={5} />
+        ) : (
+          <DataTable
+            data={featureInterests}
+            columns={[
+              {
+                key: 'org',
+                header: 'Organisation',
+                render: r => r.organisation_name ?? `#${r.organisation_id}`,
+              },
+              {
+                key: 'feature',
+                header: 'Feature',
+                render: r => (
+                  <div>
+                    <p className="font-medium text-heading">{r.feature_title}</p>
+                    <p className="text-xs text-muted font-mono">{r.feature_key}</p>
+                  </div>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: r => r.status.replace(/_/g, ' '),
+              },
+              {
+                key: 'created',
+                header: 'Requested',
+                render: r => formatDateTime(r.created_at),
+              },
+              {
+                key: 'actions',
+                header: '',
+                actionsWide: 'compact',
+                render: r => (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={r.status === 'interested' ? 'primary' : 'outline'}
+                      className="whitespace-nowrap"
+                      onClick={() => setReviewingFeatureInterest(r as FeatureInterestRow)}
+                    >
+                      {r.status === 'interested' ? 'Review' : 'Change'}
+                    </Button>
+                  </div>
+                ),
+              },
+            ]}
+            getRowId={r => String(r.id)}
+            defaultPageSize={25}
+            emptyState={<EmptyState title="No feature access requests" description="Org users request access from feature launch notices." />}
           />
         ))}
 
@@ -1395,6 +1522,51 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       />
 
       <PlatformWhatsNewModal open={whatsNewOpen} onClose={dismissWhatsNew} />
+
+      <PlatformFeatureInterestModal
+        open={reviewingFeatureInterest != null}
+        interest={reviewingFeatureInterest}
+        loading={featureInterestBusy}
+        onClose={() => !featureInterestBusy && setReviewingFeatureInterest(null)}
+        onApprove={async note => {
+          if (!reviewingFeatureInterest) return
+          const wasRejected = reviewingFeatureInterest.status === 'rejected'
+          setFeatureInterestBusy(true)
+          try {
+            await platformApi.approveFeatureInterest(reviewingFeatureInterest.id, note)
+            toast.success(
+              wasRejected ? 'Access restored for organisation' : 'Feature enabled for organisation',
+            )
+            setReviewingFeatureInterest(null)
+            await loadFeatureInterests()
+            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not approve')
+          } finally {
+            setFeatureInterestBusy(false)
+          }
+        }}
+        onReject={async note => {
+          if (!reviewingFeatureInterest) return
+          const wasApproved = reviewingFeatureInterest.status === 'approved'
+          setFeatureInterestBusy(true)
+          try {
+            await platformApi.rejectFeatureInterest(reviewingFeatureInterest.id, note)
+            toast.success(
+              wasApproved
+                ? 'Access revoked — organisation notified'
+                : 'Request declined — organisation notified',
+            )
+            setReviewingFeatureInterest(null)
+            await loadFeatureInterests()
+            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not decline')
+          } finally {
+            setFeatureInterestBusy(false)
+          }
+        }}
+      />
 
       <PlatformSeatRequestDecisionModal
         open={seatDecision != null}

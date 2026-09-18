@@ -72,6 +72,11 @@ export function PlatformProductRequestModal({
               value={status}
               onChange={e => setStatus(e.target.value as ProductRequestStatus)}
             />
+            <p className="text-xs leading-relaxed text-muted">
+              New issues stay in your inbox until you reply or change status. Saving with a reply moves the request to{' '}
+              <span className="font-medium text-heading">In progress</span>. Choose{' '}
+              <span className="font-medium text-heading">Done</span> when it is fully resolved.
+            </p>
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Reply to requester</span>
               <textarea

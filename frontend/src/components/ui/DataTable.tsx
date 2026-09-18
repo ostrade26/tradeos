@@ -210,6 +210,8 @@ export function DataTable<T extends { id?: string | number }>({
       : lastColumn?.actionsWide
         ? STICKY_ACTIONS_COL_WIDE
         : STICKY_ACTIONS_COL
+  const stickyActionsColWidthPx =
+    lastColumn?.actionsWide === 'compact' ? 112 : lastColumn?.actionsWide ? 188 : 60
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(defaultPageSize)
@@ -307,7 +309,7 @@ export function DataTable<T extends { id?: string | number }>({
                     stickyFirstColumn && colIndex === 0
                       ? { minWidth: hasCheckboxColumn ? 88 : 80 }
                       : stickActions && colIndex === lastColIndex
-                        ? { width: 60 }
+                        ? { width: stickyActionsColWidthPx }
                         : undefined
                   }
                 />

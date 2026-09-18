@@ -8,3 +8,5 @@ startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
+# After deploy, register draft release + notify platform admins (set TRADEAL_API_URL + TRADEAL_API_TOKEN on a hook job):
+#   ../scripts/register-production-deploy.sh

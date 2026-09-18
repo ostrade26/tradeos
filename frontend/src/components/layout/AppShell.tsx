@@ -7,6 +7,7 @@ import { AccountSetupWelcome } from '../onboarding/AccountSetupWelcome'
 import { ProductGuideTour } from '../onboarding/ProductGuideTour'
 import {
   clearPendingAccountWelcome,
+  markPendingAccountWelcome,
   shouldShowAccountWelcome,
 } from '../../lib/firstLoginWelcome'
 import { Sidebar } from './Sidebar'
@@ -152,6 +153,20 @@ export function AppShell() {
     navigate(APP_HOME)
   }, [applySession, isPlatformAdmin, location.pathname, navigate, openProductTour, session?.token])
 
+  const replayAccountSetup = useCallback(async () => {
+    if (!session?.token || isPlatformAdmin) return
+    setProductTourOpen(false)
+    try {
+      const me = await authApi.updatePreferences({ completedOrgAccountWelcome: false })
+      applySession(sessionFromApi(me, session.token))
+    } catch {
+      /* still open setup UI */
+    }
+    markPendingAccountWelcome()
+    tourStartedRef.current = true
+    setAccountWelcomeOpen(true)
+  }, [applySession, isPlatformAdmin, session?.token])
+
   useEffect(() => initOverlayScrollbars(), [])
 
   useEffect(() => {
@@ -182,7 +197,7 @@ export function AppShell() {
   return (
     <DetailPanelSlotProvider>
       <DetailPanelRouteSync />
-      <ProductTourProvider replayProductTour={replayProductTour}>
+      <ProductTourProvider replayProductTour={replayProductTour} replayAccountSetup={replayAccountSetup}>
       <div className="flex h-viewport overflow-hidden bg-body wrapper">
         <a href="#main-content" className="skip-to-main">
           Skip to main content

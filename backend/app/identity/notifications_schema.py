@@ -22,7 +22,7 @@ def _create_tables(conn) -> None:
         f"""
         CREATE TABLE IF NOT EXISTS user_notifications (
             id {pk},
-            organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE,
             recipient_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             kind TEXT NOT NULL,
             title TEXT NOT NULL,

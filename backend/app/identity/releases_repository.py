@@ -13,9 +13,26 @@ from ..db import row_dict, uses_postgres
 from .repository import append_audit_log
 
 RELEASE_CATEGORIES = frozenset(
-    {"bug_fix", "improvement", "cosmetic", "new_feature", "product_update"}
+    {
+        "ui_and_fixes",
+        "feature_enhancement",
+        "bug_fix",
+        "improvement",
+        "cosmetic",
+        "new_feature",
+        "product_update",
+    }
 )
-GATED_CATEGORIES = frozenset({"new_feature", "product_update"})
+INFORM_CATEGORIES = frozenset({"ui_and_fixes", "bug_fix", "improvement", "cosmetic"})
+GATED_CATEGORIES = frozenset({"feature_enhancement", "new_feature", "product_update"})
+
+
+def is_inform_release_category(category: str) -> bool:
+    return category in INFORM_CATEGORIES
+
+
+def is_gated_release_category(category: str) -> bool:
+    return category in GATED_CATEGORIES
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -62,15 +79,93 @@ def _validate_version(version: str) -> str:
 
 def _item_row(row: Any) -> dict[str, Any]:
     item = dict(row_dict(row))
-    item["gated"] = item.get("category") in GATED_CATEGORIES
+    item["gated"] = is_gated_release_category(str(item.get("category") or ""))
     return item
 
 
 def _release_row(row: Any, items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     data = dict(row_dict(row))
     data["items"] = items if items is not None else []
-    data["gated"] = any(i.get("category") in GATED_CATEGORIES for i in data["items"])
+    data["gated"] = any(is_gated_release_category(str(i.get("category") or "")) for i in data["items"])
+    data.setdefault("source", "manual")
+    data.setdefault("deploy_commit_sha", "")
+    data.setdefault("deploy_environment", "")
     return data
+
+
+def _normalize_commit_sha(value: str) -> str:
+    sha = (value or "").strip().lower()
+    if not sha:
+        raise HTTPException(status_code=400, detail="commit_sha is required")
+    if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+        raise HTTPException(status_code=400, detail="commit_sha must be a git SHA (7–40 hex chars)")
+    return sha
+
+
+def latest_deploy_commit_sha(conn) -> str:
+    if uses_postgres():
+        row = conn.execute(
+            """
+            SELECT deploy_commit_sha FROM platform_releases
+            WHERE deploy_commit_sha IS NOT NULL AND deploy_commit_sha <> ''
+            ORDER BY id DESC LIMIT 1
+            """
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT deploy_commit_sha FROM platform_releases
+            WHERE deploy_commit_sha IS NOT NULL AND deploy_commit_sha <> ''
+            ORDER BY id DESC LIMIT 1
+            """
+        ).fetchone()
+    if not row:
+        return ""
+    return str(dict(row_dict(row)).get("deploy_commit_sha") or "").strip()
+
+
+def infer_category_from_commit_subject(subject: str) -> str:
+    text = (subject or "").strip()
+    lower = text.lower()
+    if not text:
+        return "ui_and_fixes"
+    if lower.startswith("fix") or lower.startswith("bugfix") or lower.startswith("ui:") or lower.startswith("style"):
+        return "ui_and_fixes"
+    if "[feature]" in lower or lower.startswith("feat") or "[enhancement]" in lower:
+        return "feature_enhancement"
+    if lower.startswith("chore") or lower.startswith("docs") or lower.startswith("ci") or lower.startswith("test"):
+        return "ui_and_fixes"
+    return "ui_and_fixes"
+
+
+def _summary_from_items(items: list[dict[str, Any]], *, env: str, sha: str) -> str:
+    lines = [f"Environment: {env}", f"Commit: {sha}", ""]
+    for item in items:
+        label = _category_label(str(item.get("category") or "improvement"))
+        title = str(item.get("title") or "").strip()
+        if title:
+            lines.append(f"• {label}: {title}")
+    lines.append("")
+    lines.append("Review this draft, then publish to organisations when ready.")
+    return "\n".join(lines)
+
+
+def get_release_by_deploy_commit(conn, commit_sha: str) -> dict[str, Any] | None:
+    sha = _normalize_commit_sha(commit_sha)
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT * FROM platform_releases WHERE deploy_commit_sha = %s LIMIT 1",
+            (sha,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM platform_releases WHERE deploy_commit_sha = ? LIMIT 1",
+            (sha,),
+        ).fetchone()
+    if not row:
+        return None
+    data = dict(row_dict(row))
+    return _release_row(data, _items_for_release(conn, int(data["id"])))
 
 
 def latest_published_version(conn) -> str:
@@ -142,7 +237,7 @@ def _normalize_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raise HTTPException(status_code=400, detail="Each change needs a title")
         detail = str(raw.get("detail") or "").strip()
         feature_key = str(raw.get("feature_key") or "").strip()
-        if category in GATED_CATEGORIES:
+        if is_gated_release_category(category):
             feature_key = normalize_feature_key(feature_key, title)
         else:
             feature_key = ""
@@ -195,6 +290,99 @@ def _assert_unique_version(conn, version: str, exclude_id: int | None = None) ->
     found = int(dict(row_dict(row))["id"])
     if exclude_id is None or found != exclude_id:
         raise HTTPException(status_code=400, detail=f"Version {version} already exists")
+
+
+def create_deploy_draft_release(
+    conn,
+    *,
+    commit_sha: str,
+    environment: str,
+    title: str,
+    summary: str,
+    items: list[dict[str, Any]],
+    actor_user_id: int,
+    notify_platform_admins: bool = True,
+) -> dict[str, Any]:
+    from .notifications_repository import notify_platform_admins
+
+    sha = _normalize_commit_sha(commit_sha)
+    existing = get_release_by_deploy_commit(conn, sha)
+    if existing:
+        return {"release": existing, "created": False, "notified": 0}
+
+    env = (environment or "production").strip() or "production"
+    latest = latest_published_version(conn)
+    raw_items = items or []
+    if not raw_items:
+        short = sha[:7]
+        raw_items = [
+            {
+                "category": "improvement",
+                "title": f"Production deploy {short}",
+                "detail": f"Deployed to {env}. Edit this draft before publishing to organisations.",
+            }
+        ]
+    cleaned = _normalize_items(raw_items)
+    version = suggest_next_version(latest, [i["category"] for i in cleaned])
+    _assert_unique_version(conn, version)
+    release_title = (title or "").strip() or f"Production deploy · {sha[:7]}"
+    summary_text = (summary or "").strip()
+    if not summary_text:
+        summary_text = _summary_from_items(cleaned, env=env, sha=sha)
+    now = _now_iso()
+    if uses_postgres():
+        row = conn.execute(
+            """
+            INSERT INTO platform_releases
+            (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
+             created_at, updated_at, created_by_user_id)
+            VALUES (%s, %s, %s, 'draft', 'deploy', %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (version, release_title, summary_text, sha, env, now, now, actor_user_id),
+        ).fetchone()
+        release_id = int(dict(row_dict(row))["id"])
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO platform_releases
+            (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
+             created_at, updated_at, created_by_user_id)
+            VALUES (?, ?, ?, 'draft', 'deploy', ?, ?, ?, ?, ?)
+            """,
+            (version, release_title, summary_text, sha, env, now, now, actor_user_id),
+        )
+        release_id = int(cur.lastrowid)
+    _replace_items(conn, release_id, cleaned)
+    append_audit_log(
+        organisation_id=None,
+        actor_user_id=actor_user_id,
+        action="release.deploy_draft",
+        entity_type="platform_release",
+        entity_id=str(release_id),
+        new_value={"version": version, "commit_sha": sha, "environment": env},
+    )
+    release = _get_release(conn, release_id)
+    notified = 0
+    if notify_platform_admins:
+        href = f"/platform-admin/releases?releaseId={release_id}"
+        result = notify_platform_admins(
+            conn,
+            kind="deploy_review",
+            title=f"Production deploy ready · v{version}",
+            body=summary_text[:500],
+            payload={
+                "cta": "review",
+                "release_id": str(release_id),
+                "version": version,
+                "deploy_commit_sha": sha,
+                "deploy_environment": env,
+            },
+            href=href,
+            actor_user_id=actor_user_id,
+        )
+        notified = int(result.get("sent") or 0)
+    return {"release": release, "created": True, "notified": notified}
 
 
 def create_release(
@@ -296,6 +484,20 @@ def update_release(
     return _get_release(conn, release_id)
 
 
+def _changelog_payload(items: list[dict[str, Any]]) -> str:
+    return json.dumps(
+        [
+            {
+                "category": i["category"],
+                "title": i["title"],
+                "detail": i.get("detail") or "",
+                "feature_key": i.get("feature_key") or "",
+            }
+            for i in items
+        ]
+    )
+
+
 def publish_release(
     conn,
     release_id: int,
@@ -311,53 +513,79 @@ def publish_release(
 
     release = _get_release(conn, release_id)
     items = release["items"]
-    gated = [i for i in items if i.get("category") in GATED_CATEGORIES]
-    feature_keys = [i["feature_key"] for i in gated if i.get("feature_key")]
+    inform_items = [i for i in items if is_inform_release_category(str(i.get("category") or ""))]
+    feature_items = [i for i in items if is_gated_release_category(str(i.get("category") or ""))]
+    if not inform_items and not feature_items:
+        raise HTTPException(status_code=400, detail="Release has no publishable items")
+
     lines = [f"{_category_label(i['category'])}: {i['title']}" for i in items]
     apply_scope = "user" if audience == "user" else "org"
-    if gated:
-        kind = "product_update"
-        payload = {
-            "cta": "update",
-            "feature_key": feature_keys[0] if feature_keys else f"release-{release['version']}",
-            "feature_keys": "\n".join(feature_keys),
-            "items": "\n".join(i["title"] for i in items),
-            "changelog": json.dumps(
-                [{"category": i["category"], "title": i["title"], "detail": i.get("detail") or ""} for i in items]
-            ),
-            "release_id": str(release_id),
-            "version": release["version"],
-            "apply_scope": apply_scope,
-        }
-    else:
-        kind = "release_notes"
-        payload = {
-            "cta": "",
-            "items": "\n".join(i["title"] for i in items),
-            "changelog": json.dumps(
-                [{"category": i["category"], "title": i["title"], "detail": i.get("detail") or ""} for i in items]
-            ),
-            "release_id": str(release_id),
-            "version": release["version"],
-            "apply_scope": apply_scope,
-        }
+    base_title = f"Tradeal {release['version']}"
+    default_body = release.get("summary") or "\n".join(lines)
+    sent_total = 0
+    skipped_amc = 0
 
-    body = release.get("summary") or "\n".join(lines)
-    title = f"Tradeal {release['version']}"
-    result = create_notifications_for_audience(
-        conn,
-        audience=audience,
-        organisation_id=organisation_id,
-        recipient_user_id=recipient_user_id,
-        recipient_scope=recipient_scope if audience != "user" else "org_admin",
-        exclude_expired_amc=exclude_expired_amc,
-        kind=kind,
-        title=title,
-        body=body,
-        payload=payload,
-        href="",
-        actor_user_id=actor_user_id,
-    )
+    if inform_items:
+        inform_body = default_body
+        inform_lines = [f"{_category_label(i['category'])}: {i['title']}" for i in inform_items]
+        if len(inform_items) < len(items):
+            inform_body = "\n".join(inform_lines)
+        inform_result = create_notifications_for_audience(
+            conn,
+            audience=audience,
+            organisation_id=organisation_id,
+            recipient_user_id=recipient_user_id,
+            recipient_scope=recipient_scope if audience != "user" else "org_admin",
+            exclude_expired_amc=exclude_expired_amc,
+            kind="release_notes",
+            title=f"{base_title} · Updates",
+            body=inform_body,
+            payload={
+                "cta": "acknowledge",
+                "items": "\n".join(i["title"] for i in inform_items),
+                "changelog": _changelog_payload(inform_items),
+                "release_id": str(release_id),
+                "version": release["version"],
+            },
+            href="",
+            actor_user_id=actor_user_id,
+        )
+        sent_total += int(inform_result.get("sent") or 0)
+        skipped_amc = max(skipped_amc, int(inform_result.get("skipped_expired_amc") or 0))
+
+    if feature_items:
+        feature_keys = [i["feature_key"] for i in feature_items if i.get("feature_key")]
+        feature_lines = [f"{i['title']}" for i in feature_items]
+        feature_body = "\n".join(f"• {line}" for line in feature_lines)
+        if release.get("summary") and not inform_items:
+            feature_body = f"{release['summary'].strip()}\n\n{feature_body}"
+        feature_result = create_notifications_for_audience(
+            conn,
+            audience=audience,
+            organisation_id=organisation_id,
+            recipient_user_id=recipient_user_id,
+            recipient_scope=recipient_scope if audience != "user" else "org_admin",
+            exclude_expired_amc=exclude_expired_amc,
+            kind="feature_launch",
+            title=f"{base_title} · Enhancements",
+            body=feature_body,
+            payload={
+                "cta": "interest",
+                "feature_key": feature_keys[0] if feature_keys else f"release-{release['version']}",
+                "feature_keys": "\n".join(feature_keys),
+                "items": "\n".join(feature_lines),
+                "changelog": _changelog_payload(feature_items),
+                "release_id": str(release_id),
+                "version": release["version"],
+                "apply_scope": apply_scope,
+            },
+            href="",
+            actor_user_id=actor_user_id,
+        )
+        sent_total += int(feature_result.get("sent") or 0)
+        skipped_amc = max(skipped_amc, int(feature_result.get("skipped_expired_amc") or 0))
+
+    result = {"sent": sent_total, "skipped_expired_amc": skipped_amc}
     now = _now_iso()
     if uses_postgres():
         conn.execute(
@@ -389,7 +617,8 @@ def publish_release(
             "version": release["version"],
             "audience": audience,
             "sent": result.get("sent"),
-            "gated": bool(gated),
+            "gated": bool(feature_items),
+            "inform": bool(inform_items),
         },
     )
     updated = _get_release(conn, release_id)
@@ -400,6 +629,8 @@ def publish_release(
 
 def _category_label(category: str) -> str:
     return {
+        "ui_and_fixes": "Bug fix & UI uplift",
+        "feature_enhancement": "Feature enhancement",
         "bug_fix": "Bug fix",
         "improvement": "Improvement",
         "cosmetic": "Cosmetic",

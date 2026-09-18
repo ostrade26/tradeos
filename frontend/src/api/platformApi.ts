@@ -323,12 +323,13 @@ export type NotificationKind =
   | 'feature_launch'
   | 'release_notes'
   | 'product_request'
+  | 'deploy_review'
 export type NotificationAudience = 'user' | 'org' | 'active_licences'
 export type NotificationRecipientScope = 'org_admin' | 'all_users'
 
 export interface UserNotification {
   id: number
-  organisation_id: number
+  organisation_id: number | null
   recipient_user_id: number
   kind: NotificationKind | string
   title: string
@@ -343,7 +344,14 @@ export interface UserNotification {
   created_at: string
 }
 
-export type ReleaseCategory = 'bug_fix' | 'improvement' | 'cosmetic' | 'new_feature' | 'product_update'
+export type ReleaseCategory =
+  | 'ui_and_fixes'
+  | 'feature_enhancement'
+  | 'bug_fix'
+  | 'improvement'
+  | 'cosmetic'
+  | 'new_feature'
+  | 'product_update'
 
 export interface PlatformReleaseItem {
   id?: number
@@ -366,8 +374,58 @@ export interface PlatformRelease {
   created_at: string
   updated_at: string
   published_at: string | null
+  source?: 'manual' | 'deploy' | string
+  deploy_commit_sha?: string
+  deploy_environment?: string
   sent?: number
   skipped_expired_amc?: number
+}
+
+export interface FeatureInterest {
+  id: number
+  organisation_id: number
+  organisation_name?: string
+  requested_by_user_id: number
+  requested_by_name?: string
+  requested_by_username?: string
+  feature_key: string
+  feature_title: string
+  feature_detail?: string
+  status: string
+  platform_note?: string
+  created_at: string
+  reviewed_at?: string | null
+}
+
+export interface PlatformFeatureOffer {
+  id: number
+  feature_key: string
+  title: string
+  description: string
+  pricing_type: 'free' | 'paid' | 'contact'
+  price_cents: number
+  currency: string
+  catalog_status: 'draft' | 'listed' | 'retired'
+  sort_order: number
+  created_at: string
+  updated_at: string
+  listed_at?: string | null
+  listed_by_user_id?: number | null
+  active_orgs?: number
+  pending_requests?: number
+}
+
+export interface ProductionUpdatesSummary {
+  release: PlatformRelease | null
+  feature_items: Array<{
+    category: string
+    title: string
+    detail?: string
+    feature_key: string
+    catalog_status?: string | null
+    catalog_offer_id?: number | null
+  }>
+  ui_items: Array<{ title: string }>
 }
 
 export const platformApi = {
@@ -611,5 +669,63 @@ export const platformApi = {
     apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}/publish`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  listFeatureInterests: (status?: string) =>
+    apiFetch<{ interests: FeatureInterest[] }>(
+      `/platform/feature-interests${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+
+  approveFeatureInterest: (interestId: number, note = '') =>
+    apiFetch<{ interest: FeatureInterest }>(`/platform/feature-interests/${interestId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  rejectFeatureInterest: (interestId: number, note = '') =>
+    apiFetch<{ interest: FeatureInterest }>(`/platform/feature-interests/${interestId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  productionUpdates: () => apiFetch<ProductionUpdatesSummary>('/platform/production-updates'),
+
+  listFeatureOffers: () => apiFetch<{ offers: PlatformFeatureOffer[] }>('/platform/feature-offers'),
+
+  createFeatureOffer: (body: {
+    feature_key: string
+    title: string
+    description?: string
+    pricing_type?: string
+    price_cents?: number
+    currency?: string
+    sort_order?: number
+  }) =>
+    apiFetch<{ offer: PlatformFeatureOffer }>('/platform/feature-offers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateFeatureOffer: (
+    offerId: number,
+    body: {
+      feature_key: string
+      title: string
+      description?: string
+      pricing_type?: string
+      price_cents?: number
+      currency?: string
+      sort_order?: number
+    },
+  ) =>
+    apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  setFeatureOfferCatalogStatus: (offerId: number, catalog_status: string) =>
+    apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}/catalog-status`, {
+      method: 'POST',
+      body: JSON.stringify({ catalog_status }),
     }),
 }

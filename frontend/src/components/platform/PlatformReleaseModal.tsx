@@ -20,7 +20,7 @@ export type ReleaseFormPayload = {
 }
 
 function emptyItem(): ReleaseFormPayload['items'][number] {
-  return { category: 'improvement', title: '', detail: '', feature_key: '' }
+  return { category: 'ui_and_fixes', title: '', detail: '', feature_key: '' }
 }
 
 function formFromRelease(release: PlatformRelease | null, nextVersion: string): ReleaseFormPayload {
@@ -187,17 +187,21 @@ export function PlatformReleaseModal({
               />
             </label>
             {isGatedReleaseCategory(item.category) ? (
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 space-y-2">
                 <Input
-                  label="Update key"
+                  label="Feature key"
                   value={item.feature_key}
                   onChange={e => setItem(index, { feature_key: e.target.value })}
                   placeholder="inventory-lots-v2"
                 />
+                <p className="text-xs text-muted leading-relaxed">
+                  Users can opt in to this enhancement from their inbox. Use a stable key so you can track who enabled it.
+                </p>
               </div>
             ) : (
-              <p className="text-xs text-muted sm:col-span-2">
-                Ships with production. Recipients are notified; they do not need to click Update.
+              <p className="text-xs text-muted sm:col-span-2 leading-relaxed">
+                {RELEASE_CATEGORIES.find(c => c.value === item.category)?.hint ??
+                  'Users are notified about what changed; no opt-in required.'}
               </p>
             )}
           </div>

@@ -71,6 +71,7 @@ export function SettingsLayout() {
   const canManageTeam = hasPermission('organisation.edit')
   const showPlanSection = (canViewSubscription || canRequestSeats) && canManageTeam
   const showTeamSection = canManageTeam
+  const showAddonsSection = canViewSubscription && !isPlatformAdmin
 
   const themeApi = useTheme()
   const { density, setDensity } = useTableDensity()
@@ -85,6 +86,7 @@ export function SettingsLayout() {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [replayingProductGuide, setReplayingProductGuide] = useState(false)
+  const [replayingAccountSetup, setReplayingAccountSetup] = useState(false)
 
   const handleReplayProductGuide = useCallback(async () => {
     if (!productTour || replayingProductGuide) return
@@ -104,6 +106,25 @@ export function SettingsLayout() {
       setReplayingProductGuide(false)
     }
   }, [productTour, replayingProductGuide, toast])
+
+  const handleReplayAccountSetup = useCallback(async () => {
+    if (!productTour || replayingAccountSetup) return
+    setReplayingAccountSetup(true)
+    try {
+      await productTour.replayAccountSetup()
+      toast.success('Account setup opened')
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not open account setup',
+      )
+    } finally {
+      setReplayingAccountSetup(false)
+    }
+  }, [productTour, replayingAccountSetup, toast])
 
   const { billing, billingLoading, reloadBilling } = useSettingsBilling(showPlanSection || showTeamSection)
 
@@ -174,6 +195,9 @@ export function SettingsLayout() {
       showProductGuideReplay: !isPlatformAdmin && !!productTour,
       onReplayProductGuide: () => void handleReplayProductGuide(),
       replayingProductGuide,
+      showAccountSetupReplay: !isPlatformAdmin && !!productTour,
+      onReplayAccountSetup: () => void handleReplayAccountSetup(),
+      replayingAccountSetup,
       onExport: format => void handleExport(format),
       exporting,
       onImportClick: () => importRef.current?.click(),
@@ -199,15 +223,17 @@ export function SettingsLayout() {
       downloadingTemplate,
       handleDownloadTemplate,
       handleReplayProductGuide,
+      handleReplayAccountSetup,
       isPlatformAdmin,
       productTour,
       replayingProductGuide,
+      replayingAccountSetup,
     ],
   )
 
   return (
     <>
-      <Outlet context={{ sectionHandlers, showPlanSection, showTeamSection }} />
+      <Outlet context={{ sectionHandlers, showPlanSection, showTeamSection, showAddonsSection }} />
       <ChangePasswordModal open={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} />
       <ConfirmDialog
         open={pendingImport != null}
@@ -300,23 +326,25 @@ type SettingsOutletContext = {
   sectionHandlers: SettingsSectionHandlers
   showPlanSection: boolean
   showTeamSection: boolean
+  showAddonsSection: boolean
 }
 
 function useSettingsOutlet(): SettingsOutletContext {
   return useOutletContext<SettingsOutletContext>()
 }
 
-function visibleSections(showPlanSection: boolean, showTeamSection: boolean) {
+function visibleSections(showPlanSection: boolean, showTeamSection: boolean, showAddonsSection: boolean) {
   return SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanSection) return false
     if (s.teamSection && !showTeamSection) return false
+    if (s.addonsSection && !showAddonsSection) return false
     return true
   })
 }
 
 export function SettingsHubPage() {
-  const { showPlanSection, showTeamSection } = useSettingsOutlet()
-  const sections = visibleSections(showPlanSection, showTeamSection)
+  const { showPlanSection, showTeamSection, showAddonsSection } = useSettingsOutlet()
+  const sections = visibleSections(showPlanSection, showTeamSection, showAddonsSection)
 
   return (
     <div className="animate-fade-in max-w-3xl">
@@ -350,7 +378,7 @@ export function SettingsHubPage() {
 
 export function SettingsSectionPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
-  const { sectionHandlers, showPlanSection, showTeamSection } = useSettingsOutlet()
+  const { sectionHandlers, showPlanSection, showTeamSection, showAddonsSection } = useSettingsOutlet()
 
   if (!sectionParam || !isSettingsSectionId(sectionParam)) {
     return <Navigate to={appPath('/settings')} replace />
@@ -363,10 +391,19 @@ export function SettingsSectionPage() {
   if (section === 'team' && !showTeamSection) {
     return <Navigate to={appPath('/settings')} replace />
   }
+  if (section === 'addons' && !showAddonsSection) {
+    return <Navigate to={appPath('/settings')} replace />
+  }
 
   const meta = SETTINGS_SECTIONS.find(s => s.id === section)
   const sectionMaxWidth =
-    section === 'team' ? 'w-full max-w-none' : section === 'plan' ? 'max-w-3xl' : 'max-w-2xl'
+    section === 'team'
+      ? 'w-full max-w-none'
+      : section === 'addons'
+        ? 'w-full max-w-none'
+        : section === 'plan'
+          ? 'max-w-3xl'
+          : 'max-w-2xl'
 
   const breadcrumb = (
     <Breadcrumb

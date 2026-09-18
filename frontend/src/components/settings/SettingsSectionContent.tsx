@@ -12,6 +12,8 @@ import {
   Palette,
   Rows3,
   KeyRound,
+  Sparkles,
+  UserRoundCheck,
 } from 'lucide-react'
 import { Card, CardHeader } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -19,6 +21,7 @@ import { cn } from '../../lib/utils'
 import { CUSTOM_ACCENT_ID } from '../../lib/accentColor'
 import type { TableDensity } from '../../lib/tableDensity'
 import type { SettingsSectionId } from '../../lib/settingsSections'
+import { AddOnsMarketplace } from './AddOnsMarketplace'
 import { appPath } from '../../lib/appShellMode'
 import { SettingsSubscriptionPanelContent } from './SettingsSubscriptionSidePanel'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
@@ -65,6 +68,12 @@ export type SettingsSectionHandlers = {
   onSeatsChanged: () => void
   onMembersChanged: () => void
   onOpenPassword: () => void
+  showProductGuideReplay?: boolean
+  onReplayProductGuide?: () => void
+  replayingProductGuide?: boolean
+  showAccountSetupReplay?: boolean
+  onReplayAccountSetup?: () => void
+  replayingAccountSetup?: boolean
   onExport: (format: 'json' | 'excel' | 'csv') => void
   exporting: 'json' | 'excel' | 'csv' | null
   onImportClick: () => void
@@ -247,6 +256,42 @@ export function SettingsSectionContent({
                 </Button>
               }
             />
+            {h.showAccountSetupReplay ? (
+              <SettingRow
+                icon={UserRoundCheck}
+                title="Account setup"
+                description="Replay profile, theme, and focus preferences"
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={h.replayingAccountSetup}
+                    disabled={h.replayingAccountSetup}
+                    onClick={() => h.onReplayAccountSetup?.()}
+                  >
+                    Run setup
+                  </Button>
+                }
+              />
+            ) : null}
+            {h.showProductGuideReplay ? (
+              <SettingRow
+                icon={Sparkles}
+                title="Product guide"
+                description="Walk through navigation and key workflows again"
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={h.replayingProductGuide}
+                    disabled={h.replayingProductGuide}
+                    onClick={() => h.onReplayProductGuide?.()}
+                  >
+                    Replay tour
+                  </Button>
+                }
+              />
+            ) : null}
           </div>
         </Card>
       )
@@ -364,6 +409,9 @@ export function SettingsSectionContent({
           onSeatsChanged={h.onSeatsChanged}
         />
       )
+
+    case 'addons':
+      return <AddOnsMarketplace />
 
     case 'shortcuts':
       return (

@@ -21,6 +21,7 @@ NOTIFICATION_KINDS = frozenset(
         "feature_launch",
         "release_notes",
         "product_request",
+        "deploy_review",
     }
 )
 UPDATE_KINDS = frozenset({"product_update", "feature_launch"})
@@ -86,7 +87,7 @@ def _resolve_recipient(conn, organisation_id: int, recipient_user_id: int | None
 def _insert_notification(
     conn,
     *,
-    organisation_id: int,
+    organisation_id: int | None,
     recipient_user_id: int,
     kind: str,
     title: str,
@@ -293,7 +294,8 @@ def create_notifications_for_audience(
     payload = dict(payload or {})
     if kind in UPDATE_KINDS:
         feature_key = normalize_feature_key(str(payload.get("feature_key") or ""), title)
-        payload["cta"] = "update"
+        if payload.get("cta") not in ("choose", "update"):
+            payload["cta"] = "update"
         payload["feature_key"] = feature_key
 
     if organisation_id:
@@ -361,6 +363,56 @@ def create_notifications_for_audience(
     }
 
 
+def notify_platform_admins(
+    conn,
+    *,
+    kind: str,
+    title: str,
+    body: str,
+    payload: dict[str, Any] | None,
+    href: str,
+    actor_user_id: int,
+) -> dict[str, Any]:
+    from .platform_admins_repository import list_platform_admins
+
+    if kind not in NOTIFICATION_KINDS:
+        raise HTTPException(status_code=400, detail="Invalid notification type")
+    title = title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    admins = list_platform_admins(conn)
+    if not admins:
+        return {"sent": 0, "notifications": []}
+    items = [
+        _insert_notification(
+            conn,
+            organisation_id=None,
+            recipient_user_id=int(admin["id"]),
+            kind=kind,
+            title=title,
+            body=body.strip(),
+            payload=payload,
+            href=href or "",
+            actor_user_id=actor_user_id,
+        )
+        for admin in admins
+    ]
+    append_audit_log(
+        organisation_id=None,
+        actor_user_id=actor_user_id,
+        action="notification.sent",
+        entity_type="user_notification",
+        entity_id=str(items[0]["id"]),
+        new_value={
+            "kind": kind,
+            "audience": "platform_admins",
+            "sent": len(items),
+            "title": title,
+        },
+    )
+    return {"sent": len(items), "notifications": items}
+
+
 def list_notifications_for_user(conn, user_id: int, limit: int = 50) -> list[dict[str, Any]]:
     if uses_postgres():
         rows = conn.execute(
@@ -404,6 +456,40 @@ def unread_count_for_user(conn, user_id: int) -> int:
         ).fetchone()
     data = dict(row_dict(row)) if row else {}
     return int(data.get("n") or 0)
+
+
+def mark_notifications_read_for_feature_interest(conn, interest_id: int) -> int:
+    """Clear platform (and other) inbox notices tied to a feature access request."""
+    now = _now_iso()
+    key = str(int(interest_id))
+    href_like = f"%interestId={key}%"
+    if uses_postgres():
+        cur = conn.execute(
+            """
+            UPDATE user_notifications
+            SET read_at = %s
+            WHERE (read_at IS NULL OR read_at = '')
+              AND (
+                payload_json::jsonb ->> 'feature_interest_id' = %s
+                OR href LIKE %s
+              )
+            """,
+            (now, key, href_like),
+        )
+        return int(getattr(cur, "rowcount", 0) or 0)
+    cur = conn.execute(
+        """
+        UPDATE user_notifications
+        SET read_at = ?
+        WHERE (read_at IS NULL OR read_at = '')
+          AND (
+            json_extract(payload_json, '$.feature_interest_id') = ?
+            OR href LIKE ?
+          )
+        """,
+        (now, key, href_like),
+    )
+    return int(getattr(cur, "rowcount", 0) or 0)
 
 
 def mark_notification_read(conn, notification_id: int, user_id: int) -> dict[str, Any]:
@@ -574,6 +660,20 @@ def _is_org_admin(conn, user_id: int) -> bool:
 
 def _feature_keys_from_notification(item: dict[str, Any]) -> list[str]:
     payload = item.get("payload") or {}
+    changelog_raw = payload.get("changelog")
+    if changelog_raw:
+        try:
+            entries = json.loads(changelog_raw)
+            if isinstance(entries, list):
+                from_changelog = [
+                    normalize_feature_key(str(entry.get("feature_key") or ""), str(entry.get("title") or ""))
+                    for entry in entries
+                    if str(entry.get("feature_key") or "").strip()
+                ]
+                if from_changelog:
+                    return from_changelog
+        except (TypeError, json.JSONDecodeError):
+            pass
     raw = payload.get("feature_keys") or item.get("feature_key") or payload.get("feature_key") or ""
     if isinstance(raw, list):
         parts = [str(x) for x in raw]
@@ -594,7 +694,7 @@ def _insert_applied_key(
     feature_key: str,
     version: str,
     release_id: int | None,
-    notification_id: int,
+    notification_id: int | None,
     now: str,
 ) -> None:
     if uses_postgres():
@@ -639,7 +739,13 @@ def _insert_applied_key(
     )
 
 
-def apply_notification_update(conn, notification_id: int, user_id: int) -> dict[str, Any]:
+def apply_notification_update(
+    conn,
+    notification_id: int,
+    user_id: int,
+    *,
+    selected_feature_keys: list[str] | None = None,
+) -> dict[str, Any]:
     if uses_postgres():
         row = conn.execute(
             "SELECT * FROM user_notifications WHERE id = %s AND recipient_user_id = %s",
@@ -654,13 +760,17 @@ def apply_notification_update(conn, notification_id: int, user_id: int) -> dict[
         raise HTTPException(status_code=404, detail="Notification not found")
     item = _row(row)
     payload = item.get("payload") or {}
-    if item["kind"] not in UPDATE_KINDS and payload.get("cta") != "update":
+    cta = str(payload.get("cta") or "")
+    if item["kind"] not in UPDATE_KINDS and cta not in ("update", "choose"):
         raise HTTPException(status_code=400, detail="This notice cannot be applied as an update")
     now = _now_iso()
     if item.get("applied_at"):
         return item
 
-    org_id = int(item["organisation_id"])
+    org_raw = item.get("organisation_id")
+    if org_raw in (None, ""):
+        raise HTTPException(status_code=400, detail="This notice is not for an organisation account")
+    org_id = int(org_raw)
     apply_scope = str(payload.get("apply_scope") or "user")
     if apply_scope == "org" and not _is_org_admin(conn, user_id):
         raise HTTPException(status_code=403, detail="Ask your organisation admin to apply this update")
@@ -671,6 +781,25 @@ def apply_notification_update(conn, notification_id: int, user_id: int) -> dict[
     except (TypeError, ValueError):
         release_id = None
     keys = _feature_keys_from_notification(item)
+    if cta == "choose":
+        if not selected_feature_keys:
+            raise HTTPException(status_code=400, detail="Select at least one enhancement to enable")
+        allowed = set(keys)
+        picked: list[str] = []
+        for raw in selected_feature_keys:
+            key = normalize_feature_key(str(raw or "").strip(), str(raw or ""))
+            if key in allowed:
+                picked.append(key)
+        if not picked:
+            raise HTTPException(status_code=400, detail="Selected enhancements are not valid for this notice")
+        keys = picked
+    elif selected_feature_keys:
+        allowed = set(keys)
+        keys = [
+            normalize_feature_key(str(raw or "").strip(), str(raw or ""))
+            for raw in selected_feature_keys
+            if normalize_feature_key(str(raw or "").strip(), str(raw or "")) in allowed
+        ] or keys
     primary = keys[0]
     for key in keys:
         _insert_applied_key(

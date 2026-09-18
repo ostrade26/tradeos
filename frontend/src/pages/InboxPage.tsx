@@ -32,6 +32,7 @@ export function InboxPage() {
 
   const { handleSelect, modals } = useInboxItemActions({
     platformConsole,
+    inboxItems: items,
     markRead,
     refresh,
     refreshPlatform,

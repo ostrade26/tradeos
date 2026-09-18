@@ -1,0 +1,32 @@
+# After production deploy, auto-create a draft platform release from git commits (no manual typing).
+# Requires repo secrets: TRADEAL_API_URL, TRADEAL_API_TOKEN
+name: Register production release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  register-release:
+    runs-on: ubuntu-latest
+    # Skip duplicate runs while you tune this; remove if you want every push to register.
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Register deploy draft + notify platform admins
+        env:
+          TRADEAL_API_URL: ${{ secrets.TRADEAL_API_URL }}
+          TRADEAL_API_TOKEN: ${{ secrets.TRADEAL_API_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          TRADEAL_DEPLOY_ENV: production
+        run: |
+          if [[ -z "${TRADEAL_API_URL}" || -z "${TRADEAL_API_TOKEN}" ]]; then
+            echo "Skipping: set TRADEAL_API_URL and TRADEAL_API_TOKEN repository secrets."
+            exit 0
+          fi
+          chmod +x scripts/register-production-deploy.sh
+          ./scripts/register-production-deploy.sh

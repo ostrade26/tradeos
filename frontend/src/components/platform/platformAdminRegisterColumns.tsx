@@ -792,9 +792,14 @@ export function releaseColumns(handlers: {
       sortable: true,
       sortValue: r => r.status,
       render: r => (
-        <Badge variant={r.status === 'published' ? 'success' : 'info'}>
-          {r.status === 'published' ? 'Published' : 'Draft'}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={r.status === 'published' ? 'success' : 'info'}>
+            {r.status === 'published' ? 'Published' : 'Draft'}
+          </Badge>
+          {r.source === 'deploy' ? (
+            <Badge variant="default">Deploy</Badge>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -803,7 +808,9 @@ export function releaseColumns(handlers: {
       sortable: true,
       sortValue: r => (r.gated ? 1 : 0),
       render: r => (
-        <span className="text-[14px] text-muted">{r.gated ? 'Update required' : 'Announcement'}</span>
+        <span className="text-[14px] text-muted">
+          {r.gated ? 'Opt-in enhancements' : 'Notify only'}
+        </span>
       ),
     },
     {

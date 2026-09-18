@@ -29,6 +29,18 @@ export interface OrganisationMember {
   signed_in: boolean
 }
 
+export interface OrgFeatureOffer {
+  id: number
+  feature_key: string
+  title: string
+  description: string
+  pricing_type: 'free' | 'paid' | 'contact'
+  price_cents: number
+  currency: string
+  catalog_status: string
+  entitlement_status: 'available' | 'pending' | 'active'
+}
+
 export interface OrganisationSeatRequestContext {
   subscription: OrganisationSubscription | null
   addon_seat_unit_price_cents: number
@@ -120,9 +132,34 @@ export const organisationApi = {
   markAllNotificationsRead: () =>
     apiFetch<{ ok: boolean; updated: number }>('/me/notifications/read-all', { method: 'POST' }),
 
-  applyNotificationUpdate: (notificationId: number) =>
+  expressFeatureInterest: (notificationId: number, featureKeys: string[]) =>
+    apiFetch<{ interests: unknown[]; submitted: number }>(
+      `/me/notifications/${notificationId}/express-interest`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ feature_keys: featureKeys }),
+      },
+    ),
+
+  applyNotificationUpdate: (notificationId: number, featureKeys?: string[]) =>
     apiFetch<{ notification: UserNotification; applied: boolean }>(
       `/me/notifications/${notificationId}/apply`,
+      {
+        method: 'POST',
+        body: JSON.stringify(featureKeys?.length ? { feature_keys: featureKeys } : {}),
+      },
+    ),
+
+  listAddOns: () => apiFetch<{ offers: OrgFeatureOffer[] }>('/organisation/add-ons'),
+
+  enableAddOn: (featureKey: string) =>
+    apiFetch<{ offer: OrgFeatureOffer }>(`/organisation/add-ons/${encodeURIComponent(featureKey)}/enable`, {
+      method: 'POST',
+    }),
+
+  requestAddOn: (featureKey: string) =>
+    apiFetch<{ offer: OrgFeatureOffer; interest_id: number }>(
+      `/organisation/add-ons/${encodeURIComponent(featureKey)}/request`,
       { method: 'POST' },
     ),
 }

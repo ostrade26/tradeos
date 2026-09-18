@@ -56,6 +56,8 @@ const platformAdminNavGroups = [
     label: 'Product',
     items: [
       { to: '/platform-admin/releases', icon: Sparkles, label: 'Releases' },
+      { to: '/platform-admin/feature-catalog', icon: Sparkles, label: 'Add-ons catalog' },
+      { to: '/platform-admin/feature-interests', icon: Sparkles, label: 'Feature access' },
       { to: '/platform-admin/notifications', icon: Bell, label: platformActionInboxLabels.sidebarNav },
       { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
     ],
@@ -81,10 +83,12 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
     canManageOrganisation &&
     (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
   const showTeamInSettings = canManageOrganisation
+  const showAddonsInSettings = hasPermission('organisation.subscription.view') && !isPlatformAdmin
   const { pendingCount: openSeatRequests, openProductRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
     if (s.planSection && !showPlanInSettings) return false
     if (s.teamSection && !showTeamInSettings) return false
+    if (s.addonsSection && !showAddonsInSettings) return false
     return true
   })
   const showLabels = !collapsed || mobileOpen

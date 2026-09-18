@@ -16,7 +16,8 @@ from .seat_request_repository import list_seat_requests_platform
 FilterKind = Literal["open", "all"]
 
 OPEN_SEAT_STATUSES = frozenset({"pending_payment", "paid"})
-OPEN_PRODUCT_STATUSES = frozenset({"received", "in_progress"})
+OPEN_PRODUCT_STATUSES = frozenset({"received"})
+OPEN_FEATURE_INTEREST_STATUS = "interested"
 
 _KIND_LABEL = {"issue": "Issue", "improvement": "Improvement", "requirement": "New need"}
 _PRIORITY_SHORT = {"p1": "P1", "p2": "P2", "p3": "P3"}
@@ -115,6 +116,32 @@ def _seat_items(conn, limit: int) -> list[dict[str, Any]]:
     return out
 
 
+def _feature_interest_items(conn, limit: int) -> list[dict[str, Any]]:
+    from .feature_interests_repository import list_open_interests_platform
+
+    out: list[dict[str, Any]] = []
+    for row in list_open_interests_platform(conn, limit=limit):
+        org = (row.get("organisation_name") or f"Organisation #{row.get('organisation_id')}").strip()
+        title = str(row.get("feature_title") or row.get("feature_key") or "Feature")
+        who = (row.get("requested_by_name") or row.get("requested_by_username") or "A user").strip()
+        out.append(
+            _inbox_item(
+                item_id=f"feature-interest-{row['id']}",
+                kind="feature_interest",
+                category="work",
+                status="open",
+                unread=True,
+                title=f"{org} · {title}",
+                subtitle=f"{who} requested access",
+                from_label=org,
+                date_iso=str(row.get("created_at") or ""),
+                actionable=True,
+                href=f"/platform-admin/feature-interests?interestId={row['id']}",
+            )
+        )
+    return out
+
+
 def _product_items(conn, limit: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in list_product_requests_platform(conn, limit=limit):
@@ -176,6 +203,7 @@ def list_inbox_for_session(
     if role_slug == "platform_admin":
         items.extend(_seat_items(conn, limit))
         items.extend(_product_items(conn, limit))
+        items.extend(_feature_interest_items(conn, limit))
     elif organisation_id is not None:
         items.extend(_trade_items(organisation_id))
     items = _sort_items(items)[:limit]
@@ -194,10 +222,14 @@ def inbox_work_open_count(
     organisation_id: int | None,
 ) -> int:
     if role_slug == "platform_admin":
+        from .feature_interests_repository import count_open_interests_platform
+
         seats = list_seat_requests_platform(conn, limit=500)
         products = list_product_requests_platform(conn, limit=500)
-        return sum(1 for s in seats if _seat_open(str(s.get("status") or ""))) + sum(
-            1 for p in products if _product_open(str(p.get("status") or ""))
+        return (
+            sum(1 for s in seats if _seat_open(str(s.get("status") or "")))
+            + sum(1 for p in products if _product_open(str(p.get("status") or "")))
+            + count_open_interests_platform(conn)
         )
     if organisation_id is not None:
         return len(_trade_items(organisation_id))

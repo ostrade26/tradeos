@@ -70,6 +70,64 @@ def _create_tables(conn) -> None:
     )
     _add_column(conn, "user_applied_updates", "version", "TEXT NOT NULL DEFAULT ''")
     _add_column(conn, "user_applied_updates", "release_id", "INTEGER")
+    _add_column(conn, "platform_releases", "source", "TEXT NOT NULL DEFAULT 'manual'")
+    _add_column(conn, "platform_releases", "deploy_commit_sha", "TEXT")
+    _add_column(conn, "platform_releases", "deploy_environment", "TEXT")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_releases_deploy_sha
+        ON platform_releases(deploy_commit_sha)
+        WHERE deploy_commit_sha IS NOT NULL AND deploy_commit_sha <> ''
+        """
+    )
+    _relax_notifications_nullable_org(conn)
+
+
+def _relax_notifications_nullable_org(conn) -> None:
+    if uses_postgres():
+        conn.execute("ALTER TABLE user_notifications ALTER COLUMN organisation_id DROP NOT NULL")
+        return
+    cols = conn.execute("PRAGMA table_info(user_notifications)").fetchall()
+    org_col = next((c for c in cols if c[1] == "organisation_id"), None)
+    if not org_col or org_col[3] == 0:
+        return
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_notifications__nullable_org (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE,
+            recipient_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            href TEXT NOT NULL DEFAULT '',
+            read_at TEXT,
+            created_at TEXT NOT NULL,
+            created_by_user_id INTEGER REFERENCES users(id),
+            applied_at TEXT,
+            feature_key TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO user_notifications__nullable_org
+        (id, organisation_id, recipient_user_id, kind, title, body, payload_json, href,
+         read_at, created_at, created_by_user_id, applied_at, feature_key)
+        SELECT id, organisation_id, recipient_user_id, kind, title, body, payload_json, href,
+               read_at, created_at, created_by_user_id, applied_at, feature_key
+        FROM user_notifications
+        """
+    )
+    conn.execute("DROP TABLE user_notifications")
+    conn.execute("ALTER TABLE user_notifications__nullable_org RENAME TO user_notifications")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient
+            ON user_notifications(recipient_user_id, created_at DESC)
+        """
+    )
 
 
 def _add_column(conn, table: str, name: str, ddl: str) -> None:

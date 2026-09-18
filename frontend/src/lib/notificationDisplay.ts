@@ -12,6 +12,7 @@ export const notificationKindIcon: Record<string, LucideIcon> = {
   feature_launch: Sparkles,
   release_notes: Megaphone,
   product_request: MessageSquare,
+  deploy_review: Sparkles,
 }
 
 export function notificationKindLabel(kind: string): string {
@@ -20,6 +21,7 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'product_update') return 'Product update'
   if (kind === 'feature_launch') return 'New feature'
   if (kind === 'release_notes') return 'Release'
+  if (kind === 'deploy_review') return 'Deploy review'
   if (kind === 'product_request') return 'Tradeal reply'
   if (kind === 'sent_request') return 'Your request'
   if (kind === 'seat_request') return 'Seat request'
@@ -51,8 +53,22 @@ export function isReleaseStyleNoticeKind(kind: string): boolean {
   return kind === 'release_notes' || kind === 'product_update' || kind === 'feature_launch'
 }
 
+export function isFeatureInterestNotice(item: UserNotification): boolean {
+  return item.kind === 'feature_launch' && item.payload?.cta === 'interest'
+}
+
+export function isFeatureDecisionNotice(item: UserNotification): boolean {
+  return item.payload?.cta === 'decision'
+}
+
+export function isFeatureEnhancementNotice(item: UserNotification): boolean {
+  const cta = item.payload?.cta
+  return cta === 'choose'
+}
+
 export function isProductUpdateNotice(item: UserNotification): boolean {
   const cta = item.payload?.cta
+  if (cta === 'choose' || cta === 'acknowledge') return false
   return cta === 'update' || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))
 }
 

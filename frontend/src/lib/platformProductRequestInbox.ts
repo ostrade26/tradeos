@@ -3,7 +3,7 @@ import type { InboxAction } from './actionInbox'
 import { productRequestKindLabel, productRequestPriorityShort, productRequestStatusLabel } from './platformLabels'
 
 export function isOpenProductRequest(status: string): boolean {
-  return status === 'received' || status === 'in_progress'
+  return status === 'received'
 }
 
 export function buildPlatformProductRequestInbox(requests: ProductRequest[]): InboxAction[] {

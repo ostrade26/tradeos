@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
+from pydantic import BaseModel, Field
 
 from .. import auth
 from ..db import _pg_connect, _sqlite_connect, uses_postgres
@@ -188,17 +189,77 @@ def mark_my_notification_read(notification_id: int, request: Request) -> dict[st
         return {"notification": item}
 
 
-@router.post("/notifications/{notification_id}/apply", summary="Apply a product update from a notice")
-def apply_my_notification_update(notification_id: int, request: Request) -> dict[str, Any]:
+class ApplyNotificationBody(BaseModel):
+    feature_keys: list[str] = Field(default_factory=list)
+
+
+class ExpressFeatureInterestBody(BaseModel):
+    feature_keys: list[str] = Field(default_factory=list)
+
+
+@router.post(
+    "/notifications/{notification_id}/express-interest",
+    summary="Request access to a launched feature (sales flow)",
+)
+def express_feature_interest(
+    notification_id: int,
+    request: Request,
+    body: ExpressFeatureInterestBody,
+) -> dict[str, Any]:
     session = _session(request)
-    from .notifications_repository import apply_notification_update
+    if not session.user.organisation_id:
+        raise HTTPException(status_code=400, detail="Organisation account required")
+    from .feature_interests_repository import express_interest_from_notification
 
     if uses_postgres():
         with _pg_connect() as conn:
-            item = apply_notification_update(conn, notification_id, session.user.id)
+            result = express_interest_from_notification(
+                conn,
+                notification_id=notification_id,
+                user_id=session.user.id,
+                organisation_id=int(session.user.organisation_id),
+                feature_keys=body.feature_keys,
+            )
+            conn.commit()
+            return result
+    with _sqlite_connect() as conn:
+        result = express_interest_from_notification(
+            conn,
+            notification_id=notification_id,
+            user_id=session.user.id,
+            organisation_id=int(session.user.organisation_id),
+            feature_keys=body.feature_keys,
+        )
+        conn.commit()
+        return result
+
+
+@router.post("/notifications/{notification_id}/apply", summary="Apply a product update from a notice")
+def apply_my_notification_update(
+    notification_id: int,
+    request: Request,
+    body: ApplyNotificationBody | None = None,
+) -> dict[str, Any]:
+    session = _session(request)
+    from .notifications_repository import apply_notification_update
+
+    selected = body.feature_keys if body and body.feature_keys else None
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = apply_notification_update(
+                conn,
+                notification_id,
+                session.user.id,
+                selected_feature_keys=selected,
+            )
             conn.commit()
             return {"notification": item, "applied": bool(item.get("applied_at"))}
     with _sqlite_connect() as conn:
-        item = apply_notification_update(conn, notification_id, session.user.id)
+        item = apply_notification_update(
+            conn,
+            notification_id,
+            session.user.id,
+            selected_feature_keys=selected,
+        )
         conn.commit()
         return {"notification": item, "applied": bool(item.get("applied_at"))}

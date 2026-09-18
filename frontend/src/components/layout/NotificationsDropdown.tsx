@@ -16,12 +16,13 @@ export function NotificationsDropdown() {
   const { isPlatformAdmin } = useAuth()
   const mode = isPlatformAdmin ? 'platform' : 'org'
   const platformConsole = isPlatformAdmin
-  const { openItems, badgeCount, refresh, markAllRead, markRead, refreshPlatform } = useUnifiedInbox(mode)
+  const { items, openItems, badgeCount, refresh, markAllRead, markRead, refreshPlatform } = useUnifiedInbox(mode)
   const labels = isPlatformAdmin ? platformActionInboxLabels : orgNoticesLabels
   const inboxPath = isPlatformAdmin ? '/platform-admin/notifications' : appPath('/notifications')
 
   const { handleSelect, modals } = useInboxItemActions({
     platformConsole,
+    inboxItems: items,
     markRead,
     refresh,
     refreshPlatform,

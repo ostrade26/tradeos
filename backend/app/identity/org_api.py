@@ -397,6 +397,84 @@ def mark_all_my_notifications_read(request: Request) -> dict[str, Any]:
         return {"ok": True, "updated": count}
 
 
+@router.get("/add-ons", summary="Listed add-ons for your organisation")
+def list_org_add_ons(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_permission(session, "organisation.subscription.view")
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .feature_offers_repository import list_marketplace_for_org
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"offers": list_marketplace_for_org(conn, int(org_id))}
+    with _sqlite_connect() as conn:
+        return {"offers": list_marketplace_for_org(conn, int(org_id))}
+
+
+@router.post("/add-ons/{feature_key}/enable", summary="Enable a free add-on")
+def enable_org_add_on(feature_key: str, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_permission(session, "organisation.edit")
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .feature_offers_repository import enable_free_for_org
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = enable_free_for_org(
+                conn,
+                organisation_id=int(org_id),
+                user_id=session.user.id,
+                feature_key=feature_key,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"offer": offer}
+    with _sqlite_connect() as conn:
+        offer = enable_free_for_org(
+            conn,
+            organisation_id=int(org_id),
+            user_id=session.user.id,
+            feature_key=feature_key,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"offer": offer}
+
+
+@router.post("/add-ons/{feature_key}/request", summary="Request a paid add-on")
+def request_org_add_on(feature_key: str, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_permission(session, "organisation.edit")
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .feature_offers_repository import request_paid_for_org
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            result = request_paid_for_org(
+                conn,
+                organisation_id=int(org_id),
+                user_id=session.user.id,
+                feature_key=feature_key,
+            )
+            conn.commit()
+            return result
+    with _sqlite_connect() as conn:
+        result = request_paid_for_org(
+            conn,
+            organisation_id=int(org_id),
+            user_id=session.user.id,
+            feature_key=feature_key,
+        )
+        conn.commit()
+        return result
+
+
 @router.post("/notifications/{notification_id}/read", summary="Mark a notification read")
 def mark_my_notification_read(notification_id: int, request: Request) -> dict[str, Any]:
     session = _session(request)

@@ -20,16 +20,16 @@ const KIND_OPTIONS: { value: NotificationKind; label: string; title: string; bod
     body: 'A licence or AMC payment is due. Please complete payment so we can keep your account in good standing.',
   },
   {
-    value: 'product_update',
-    label: 'Product update',
+    value: 'release_notes',
+    label: 'Bug fix & UI uplift',
     title: 'Tradeal update',
-    body: 'We have released product updates for your organisation.',
+    body: 'We have shipped fixes and UI improvements. Here is what changed.',
   },
   {
     value: 'feature_launch',
-    label: 'New feature',
-    title: 'New on Tradeal',
-    body: 'A new feature is available in your Tradeal workspace.',
+    label: 'Feature enhancements (opt-in)',
+    title: 'New enhancements on Tradeal',
+    body: 'Choose which enhancements to enable on your account.',
   },
 ]
 
@@ -98,7 +98,9 @@ export function PlatformNotifyModal({
   )
 
   const needsOrg = audience !== 'active_licences'
-  const isUpdateKind = kind === 'product_update' || kind === 'feature_launch'
+  const isFeatureOffer = kind === 'feature_launch'
+  const isInformNotice = kind === 'release_notes'
+  const showItemList = isFeatureOffer || isInformNotice
   const canSend = Boolean(title.trim() && (!needsOrg || orgId))
 
   return (
@@ -126,8 +128,8 @@ export function PlatformNotifyModal({
                 kind,
                 title: title.trim(),
                 body: body.trim(),
-                feature_key: isUpdateKind ? featureKey.trim() : undefined,
-                items: isUpdateKind ? items.trim() : undefined,
+                feature_key: isFeatureOffer ? featureKey.trim() : undefined,
+                items: showItemList ? items.trim() : undefined,
               })
             }
           >
@@ -217,9 +219,9 @@ export function PlatformNotifyModal({
             ]}
           />
         )}
-        {isUpdateKind ? (
+        {isFeatureOffer ? (
           <Input
-            label="Update key"
+            label="Feature key (optional if listing several lines)"
             value={featureKey}
             onChange={e => setFeatureKey(e.target.value)}
             placeholder="inventory-lots-v2"
@@ -227,17 +229,27 @@ export function PlatformNotifyModal({
         ) : (
           <div className="hidden sm:block" />
         )}
-        {isUpdateKind ? (
+        {showItemList ? (
           <label className="flex flex-col gap-2.5 sm:col-span-2">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">What's included</span>
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              {isFeatureOffer ? 'Enhancements (one per line)' : 'What changed (one per line)'}
+            </span>
             <textarea
               value={items}
               onChange={e => setItems(e.target.value)}
               rows={4}
-              placeholder={'Faster lift matching\nPurchase register improvements'}
+              placeholder={
+                isFeatureOffer
+                  ? 'Advanced lift matching\nBroker commission report'
+                  : 'Fixed PO save on slow networks\nClearer lift timeline labels'
+              }
               className="min-h-[6.5rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
             />
-            <p className="text-xs text-muted">One feature or change per line.</p>
+            <p className="text-xs text-muted">
+              {isFeatureOffer
+                ? 'Each line becomes an opt-in enhancement users can enable separately.'
+                : 'Users see this list as an informational update.'}
+            </p>
           </label>
         ) : null}
         <label className="flex flex-col gap-2.5 sm:col-span-2">
@@ -245,7 +257,7 @@ export function PlatformNotifyModal({
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
-            rows={isUpdateKind ? 4 : 5}
+            rows={showItemList ? 4 : 5}
             className="min-h-[6.5rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
           />
         </label>

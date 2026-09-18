@@ -37,6 +37,12 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         { id: 'amcs', label: 'AMC', group: 'Commerce', action: () => navigate('/platform-admin/amcs') },
         { id: 'payments', label: 'Payments', group: 'Commerce', action: () => navigate('/platform-admin/payments') },
         { id: 'releases', label: 'Releases', group: 'Product', action: () => navigate('/platform-admin/releases') },
+        {
+          id: 'feature-catalog',
+          label: 'Add-ons catalog',
+          group: 'Product',
+          action: () => navigate('/platform-admin/feature-catalog'),
+        },
         { id: 'inbox', label: 'Inbox', group: 'Product', action: () => navigate('/platform-admin/notifications') },
         { id: 'audit', label: 'Audit log', group: 'Product', action: () => navigate('/platform-admin/audit') },
         { id: 'profile', label: 'Profile', group: 'Account', action: () => navigate('/platform-admin/profile') },

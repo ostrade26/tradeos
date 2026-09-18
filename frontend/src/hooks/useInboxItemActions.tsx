@@ -16,17 +16,41 @@ import { authApi } from '../api/tradeApi'
 import { sessionFromApi } from '../lib/authSession'
 import { saveAuthSession } from '../lib/auth'
 import { appPath } from '../lib/appShellMode'
-import { isProductUpdateNotice, isReleaseStyleNoticeKind } from '../lib/notificationDisplay'
+import {
+  isFeatureDecisionNotice,
+  isFeatureEnhancementNotice,
+  isFeatureInterestNotice,
+  isProductUpdateNotice,
+  isReleaseStyleNoticeKind,
+} from '../lib/notificationDisplay'
+import { FeatureEnhancementModal } from '../components/feedback/FeatureEnhancementModal'
+import { FeatureLaunchInterestModal } from '../components/feedback/FeatureLaunchInterestModal'
 import type { ProductRequestStatus, UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
+import { INBOX_REFRESH_EVENT } from './useMeInbox'
+
+function markFeatureInterestInboxNotices(
+  items: UnifiedInboxItem[],
+  interestId: string,
+  markRead: (itemId: string) => Promise<void>,
+) {
+  for (const item of items) {
+    const payloadId = item.notice?.payload?.feature_interest_id
+    if (payloadId != null && String(payloadId) === interestId && item.unread) {
+      void markRead(item.id)
+    }
+  }
+}
 
 export function useInboxItemActions({
   platformConsole,
+  inboxItems,
   markRead,
   refresh,
   refreshPlatform,
 }: {
   platformConsole: boolean
+  inboxItems: UnifiedInboxItem[]
   markRead: (itemId: string) => Promise<void>
   refresh: () => Promise<void>
   refreshPlatform: () => Promise<void>
@@ -37,6 +61,10 @@ export function useInboxItemActions({
 
   const [readNotice, setReadNotice] = useState<UserNotification | null>(null)
   const [updating, setUpdating] = useState<UserNotification | null>(null)
+  const [featureOffer, setFeatureOffer] = useState<UserNotification | null>(null)
+  const [featureOfferBusy, setFeatureOfferBusy] = useState(false)
+  const [featureInterest, setFeatureInterest] = useState<UserNotification | null>(null)
+  const [featureInterestBusy, setFeatureInterestBusy] = useState(false)
   const [reviewingRequest, setReviewingRequest] = useState<UnifiedInboxItem['productRequest']>()
   const [reviewingBusy, setReviewingBusy] = useState(false)
   const [seatDecision, setSeatDecision] = useState<{
@@ -45,9 +73,9 @@ export function useInboxItemActions({
   } | null>(null)
   const [seatDecisionBusy, setSeatDecisionBusy] = useState(false)
 
-  const applyNotice = useCallback(async (notificationId: number) => {
+  const applyNotice = useCallback(async (notificationId: number, featureKeys?: string[]) => {
     const { organisationApi } = await import('../api/organisationApi')
-    await organisationApi.applyNotificationUpdate(notificationId)
+    await organisationApi.applyNotificationUpdate(notificationId, featureKeys)
     if (session?.token) {
       const me = await authApi.me()
       saveAuthSession(sessionFromApi(me, session.token))
@@ -65,7 +93,47 @@ export function useInboxItemActions({
       return
     }
     if (row.notice) {
-      if (isProductUpdateNotice(row.notice) && !row.notice.applied && !row.notice.applied_at) {
+      if (row.notice.kind === 'deploy_review') {
+        const releaseId = row.notice.payload?.release_id
+        if (releaseId) {
+          navigate(`/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`)
+        } else if (row.notice.href) {
+          navigate(row.notice.href.startsWith('/') ? row.notice.href : appPath(row.notice.href))
+        }
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
+      if (row.notice.payload?.cta === 'review_interest' && platformConsole) {
+        const interestId = row.notice.payload?.feature_interest_id
+        if (interestId) {
+          markFeatureInterestInboxNotices(inboxItems, String(interestId), markRead)
+          navigate(`/platform-admin/feature-interests?interestId=${encodeURIComponent(interestId)}`)
+        } else if (row.notice.href) {
+          navigate(row.notice.href.startsWith('/') ? row.notice.href : appPath(row.notice.href))
+        }
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
+      if (isFeatureInterestNotice(row.notice)) {
+        setFeatureInterest(row.notice)
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
+      if (isFeatureDecisionNotice(row.notice)) {
+        setReadNotice(row.notice)
+        if (row.notice.payload?.decision === 'approved' && session?.token) {
+          void authApi.me().then(me => saveAuthSession(sessionFromApi(me, session.token!)))
+        }
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
+      if (
+        isFeatureEnhancementNotice(row.notice) &&
+        !row.notice.applied &&
+        !row.notice.applied_at
+      ) {
+        setFeatureOffer(row.notice)
+      } else if (isProductUpdateNotice(row.notice) && !row.notice.applied && !row.notice.applied_at) {
         setUpdating(row.notice)
       } else {
         setReadNotice(row.notice)
@@ -73,11 +141,24 @@ export function useInboxItemActions({
       if (row.category === 'notice' && row.unread) void markRead(row.id)
       return
     }
+    if (row.kind === 'feature_interest' && platformConsole) {
+      const interestId = row.id.startsWith('feature-interest-')
+        ? row.id.slice('feature-interest-'.length)
+        : ''
+      if (interestId) {
+        markFeatureInterestInboxNotices(inboxItems, interestId, markRead)
+      }
+      if (row.href) {
+        const path = row.href.startsWith('/app/') ? row.href : appPath(row.href)
+        navigate(path)
+      }
+      return
+    }
     if (row.href) {
       const path = row.href.startsWith('/app/') ? row.href : appPath(row.href)
       navigate(path)
     }
-  }, [markRead, navigate, platformConsole])
+  }, [inboxItems, markRead, navigate, platformConsole, session?.token])
 
   const saveProductReview = async (body: { status: ProductRequestStatus; reply: string }) => {
     if (!reviewingRequest) return
@@ -87,6 +168,7 @@ export function useInboxItemActions({
       toast.success('Requester notified')
       setReviewingRequest(undefined)
       await refreshPlatform()
+      window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save')
     } finally {
@@ -148,11 +230,56 @@ export function useInboxItemActions({
         </Modal>
       )}
 
+      <FeatureLaunchInterestModal
+        open={featureInterest != null}
+        notice={featureInterest}
+        loading={featureInterestBusy}
+        onClose={() => !featureInterestBusy && setFeatureInterest(null)}
+        onSubmitInterest={async (notificationId, featureKeys) => {
+          setFeatureInterestBusy(true)
+          try {
+            const { organisationApi } = await import('../api/organisationApi')
+            await organisationApi.expressFeatureInterest(notificationId, featureKeys)
+            toast.success('Request sent — Tradeal will review and notify your organisation')
+            setFeatureInterest(null)
+            await refresh()
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not send request')
+          } finally {
+            setFeatureInterestBusy(false)
+          }
+        }}
+      />
+
+      <FeatureEnhancementModal
+        open={featureOffer != null}
+        notice={featureOffer}
+        appliedKeys={session?.appliedUpdates ?? []}
+        loading={featureOfferBusy}
+        onClose={() => !featureOfferBusy && setFeatureOffer(null)}
+        onEnable={async (notificationId, featureKeys) => {
+          setFeatureOfferBusy(true)
+          try {
+            await applyNotice(notificationId, featureKeys)
+            toast.success(
+              featureKeys.length === 1
+                ? 'Enhancement enabled on your account'
+                : `${featureKeys.length} enhancements enabled`,
+            )
+            setFeatureOffer(null)
+          } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : 'Could not enable enhancements')
+          } finally {
+            setFeatureOfferBusy(false)
+          }
+        }}
+      />
+
       <SystemUpdateModal
         open={!!updating}
         notification={updating}
         onClose={() => setUpdating(null)}
-        onApply={applyNotice}
+        onApply={id => applyNotice(id)}
       />
 
       <PlatformProductRequestModal

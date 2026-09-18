@@ -158,6 +158,26 @@ def _session(request: Request) -> auth.Session:
     return session
 
 
+def _session_or_deploy_token(request: Request) -> auth.Session | None:
+    session = getattr(request.state, "session", None)
+    if session:
+        return session
+    if auth.is_api_token_request(request):
+        return None
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+
+def _deploy_actor_user_id(conn, session: auth.Session | None) -> int:
+    if session:
+        return session.user.id
+    from .platform_admins_repository import list_platform_admins
+
+    admins = list_platform_admins(conn)
+    if not admins:
+        raise HTTPException(status_code=503, detail="No Tradeal platform admin account to attribute deploy")
+    return int(admins[0]["id"])
+
+
 def _org_list_fields() -> str:
     return """
         id, org_code, name, account_type, status, legal_name, gstin, pan,
@@ -1293,6 +1313,246 @@ def review_platform_product_request(
         return {"request": req}
 
 
+class FeatureInterestReviewBody(BaseModel):
+    note: str = ""
+
+
+@router.get("/feature-interests/summary", summary="Open feature access requests")
+def feature_interests_summary(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_interests_repository import count_open_interests_platform, list_open_interests_platform
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {
+                "open_count": count_open_interests_platform(conn),
+                "open": list_open_interests_platform(conn, limit=20),
+            }
+    with _sqlite_connect() as conn:
+        return {
+            "open_count": count_open_interests_platform(conn),
+            "open": list_open_interests_platform(conn, limit=20),
+        }
+
+
+@router.get("/feature-interests", summary="List organisation feature access requests")
+def list_feature_interests(
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_interests_repository import list_interests_platform
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"interests": list_interests_platform(conn, status=status, limit=limit)}
+    with _sqlite_connect() as conn:
+        return {"interests": list_interests_platform(conn, status=status, limit=limit)}
+
+
+@router.post("/feature-interests/{interest_id}/approve", summary="Approve feature access for an organisation")
+def approve_feature_interest(
+    interest_id: int,
+    body: FeatureInterestReviewBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_interests_repository import approve_interest
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = approve_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
+            conn.commit()
+            return {"interest": item}
+    with _sqlite_connect() as conn:
+        item = approve_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
+        conn.commit()
+        return {"interest": item}
+
+
+@router.post("/feature-interests/{interest_id}/reject", summary="Decline feature access for an organisation")
+def reject_feature_interest(
+    interest_id: int,
+    body: FeatureInterestReviewBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_interests_repository import reject_interest
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = reject_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
+            conn.commit()
+            return {"interest": item}
+    with _sqlite_connect() as conn:
+        item = reject_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
+        conn.commit()
+        return {"interest": item}
+
+
+class FeatureOfferBody(BaseModel):
+    feature_key: str
+    title: str
+    description: str = ""
+    pricing_type: str = "free"
+    price_cents: int = 0
+    currency: str = "INR"
+    sort_order: int = 0
+
+
+class FeatureOfferStatusBody(BaseModel):
+    catalog_status: str
+
+
+@router.get("/production-updates", summary="Latest deploy and catalog gaps")
+def platform_production_updates(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import production_updates_summary
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return production_updates_summary(conn)
+    with _sqlite_connect() as conn:
+        return production_updates_summary(conn)
+
+
+@router.get("/feature-offers", summary="Add-ons catalog")
+def list_platform_feature_offers(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import list_offers_platform_enriched
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"offers": list_offers_platform_enriched(conn)}
+    with _sqlite_connect() as conn:
+        return {"offers": list_offers_platform_enriched(conn)}
+
+
+@router.post("/feature-offers", summary="Create add-on offer")
+def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import upsert_offer
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = upsert_offer(
+                conn,
+                offer_id=None,
+                feature_key=body.feature_key,
+                title=body.title,
+                description=body.description,
+                pricing_type=body.pricing_type,
+                price_cents=body.price_cents,
+                currency=body.currency,
+                sort_order=body.sort_order,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"offer": offer}
+    with _sqlite_connect() as conn:
+        offer = upsert_offer(
+            conn,
+            offer_id=None,
+            feature_key=body.feature_key,
+            title=body.title,
+            description=body.description,
+            pricing_type=body.pricing_type,
+            price_cents=body.price_cents,
+            currency=body.currency,
+            sort_order=body.sort_order,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"offer": offer}
+
+
+@router.patch("/feature-offers/{offer_id}", summary="Update add-on offer")
+def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import upsert_offer
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = upsert_offer(
+                conn,
+                offer_id=offer_id,
+                feature_key=body.feature_key,
+                title=body.title,
+                description=body.description,
+                pricing_type=body.pricing_type,
+                price_cents=body.price_cents,
+                currency=body.currency,
+                sort_order=body.sort_order,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"offer": offer}
+    with _sqlite_connect() as conn:
+        offer = upsert_offer(
+            conn,
+            offer_id=offer_id,
+            feature_key=body.feature_key,
+            title=body.title,
+            description=body.description,
+            pricing_type=body.pricing_type,
+            price_cents=body.price_cents,
+            currency=body.currency,
+            sort_order=body.sort_order,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"offer": offer}
+
+
+@router.post("/feature-offers/{offer_id}/catalog-status", summary="List, retire, or draft an offer")
+def set_platform_feature_offer_status(
+    offer_id: int,
+    body: FeatureOfferStatusBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import set_catalog_status
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = set_catalog_status(
+                conn,
+                offer_id,
+                catalog_status=body.catalog_status,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"offer": offer}
+    with _sqlite_connect() as conn:
+        offer = set_catalog_status(
+            conn,
+            offer_id,
+            catalog_status=body.catalog_status,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"offer": offer}
+
+
 @router.get("/audit-logs", summary="Platform audit log")
 def list_audit_logs(
     request: Request,
@@ -1519,9 +1779,40 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
     auth.require_permission(session, "organisations.edit")
     from .notifications_repository import create_notifications_for_audience
 
+    import json as _json
+
+    from .notifications_repository import normalize_feature_key
+
     payload = dict(body.payload or {})
     if body.feature_key.strip():
         payload["feature_key"] = body.feature_key.strip()
+    raw_items = str(payload.get("items") or "").strip()
+    if body.kind == "release_notes":
+        payload.setdefault("cta", "acknowledge")
+        if raw_items:
+            lines = [ln.strip() for ln in raw_items.splitlines() if ln.strip()]
+            payload["items"] = "\n".join(lines)
+            payload["changelog"] = _json.dumps(
+                [{"category": "ui_and_fixes", "title": line, "detail": line} for line in lines]
+            )
+    if body.kind == "feature_launch":
+        payload.setdefault("cta", "interest")
+        lines = [ln.strip() for ln in raw_items.splitlines() if ln.strip()] if raw_items else []
+        if not lines and body.title.strip():
+            lines = [body.title.strip()]
+        entries = []
+        keys = []
+        for line in lines:
+            key = normalize_feature_key(body.feature_key.strip() if len(lines) == 1 else "", line)
+            entries.append(
+                {"category": "feature_enhancement", "title": line, "detail": line, "feature_key": key}
+            )
+            keys.append(key)
+        if entries:
+            payload["changelog"] = _json.dumps(entries)
+            payload["feature_keys"] = "\n".join(keys)
+            payload["feature_key"] = keys[0]
+            payload["items"] = "\n".join(lines)
     kwargs = dict(
         audience=body.audience,
         organisation_id=body.organisation_id,
@@ -1570,6 +1861,44 @@ class PublishReleaseBody(BaseModel):
     exclude_expired_amc: bool = True
 
 
+class DeployReleaseItemBody(BaseModel):
+    category: str
+    title: str
+    detail: str = ""
+    feature_key: str = ""
+
+
+class DeployReleaseBody(BaseModel):
+    commit_sha: str
+    environment: str = "production"
+    title: str = ""
+    summary: str = ""
+    items: list[DeployReleaseItemBody] = Field(default_factory=list)
+    notify_platform_admins: bool = True
+
+
+@router.get(
+    "/releases/deploy-anchor",
+    summary="Last registered production deploy commit (for automatic changelogs in CI)",
+)
+def deploy_release_anchor(request: Request) -> dict[str, Any]:
+    session = _session_or_deploy_token(request)
+    if session:
+        auth.require_platform(session)
+        auth.require_permission(session, "organisations.edit")
+    elif not auth.API_TOKEN:
+        raise HTTPException(status_code=503, detail="Deploy hook is not configured (set TRADEAL_API_TOKEN)")
+    from .releases_repository import latest_deploy_commit_sha
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            since = latest_deploy_commit_sha(conn)
+    else:
+        with _sqlite_connect() as conn:
+            since = latest_deploy_commit_sha(conn)
+    return {"since_commit_sha": since or None}
+
+
 @router.get("/releases", summary="List versioned product releases")
 def list_platform_releases(request: Request) -> dict[str, Any]:
     session = _session(request)
@@ -1582,6 +1911,51 @@ def list_platform_releases(request: Request) -> dict[str, Any]:
             return list_releases(conn)
     with _sqlite_connect() as conn:
         return list_releases(conn)
+
+
+@router.post(
+    "/releases/from-deploy",
+    summary="Register a production deploy as a draft release (CI / deploy hook)",
+)
+def register_deploy_release(body: DeployReleaseBody, request: Request) -> dict[str, Any]:
+    session = _session_or_deploy_token(request)
+    if session:
+        auth.require_platform(session)
+        auth.require_permission(session, "organisations.edit")
+    elif not auth.API_TOKEN:
+        raise HTTPException(status_code=503, detail="Deploy hook is not configured (set TRADEAL_API_TOKEN)")
+    from .releases_repository import create_deploy_draft_release
+
+    items = [item.model_dump() for item in body.items]
+    if uses_postgres():
+        with _pg_connect() as conn:
+            actor_user_id = _deploy_actor_user_id(conn, session)
+            result = create_deploy_draft_release(
+                conn,
+                commit_sha=body.commit_sha,
+                environment=body.environment,
+                title=body.title,
+                summary=body.summary,
+                items=items,
+                actor_user_id=actor_user_id,
+                notify_platform_admins=body.notify_platform_admins,
+            )
+            conn.commit()
+            return result
+    with _sqlite_connect() as conn:
+        actor_user_id = _deploy_actor_user_id(conn, session)
+        result = create_deploy_draft_release(
+            conn,
+            commit_sha=body.commit_sha,
+            environment=body.environment,
+            title=body.title,
+            summary=body.summary,
+            items=items,
+            actor_user_id=actor_user_id,
+            notify_platform_admins=body.notify_platform_admins,
+        )
+        conn.commit()
+        return result
 
 
 @router.post("/releases", summary="Create a draft product release")

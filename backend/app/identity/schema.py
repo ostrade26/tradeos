@@ -488,6 +488,12 @@ def init_identity_schema() -> None:
         from .product_requests_schema import init_product_requests_schema
 
         init_product_requests_schema()
+        from .feature_interests_schema import init_feature_interests_schema
+
+        init_feature_interests_schema()
+        from .feature_offers_schema import init_feature_offers_schema
+
+        init_feature_offers_schema()
         return
 
     with _sqlite_connect() as conn:
@@ -599,3 +605,9 @@ def init_identity_schema() -> None:
     from .product_requests_schema import init_product_requests_schema
 
     init_product_requests_schema()
+    from .feature_interests_schema import init_feature_interests_schema
+
+    init_feature_interests_schema()
+    from .feature_offers_schema import init_feature_offers_schema
+
+    init_feature_offers_schema()
