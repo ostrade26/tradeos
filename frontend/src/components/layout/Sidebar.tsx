@@ -3,8 +3,12 @@ import {
   LayoutDashboard, Package,
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
-  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Sparkles, Bell,
+  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Bell,
 } from 'lucide-react'
+import {
+  platformFeaturesAccessNavIcon,
+  platformReleaseIcon,
+} from '../../lib/platformProductIcons'
 import { cn } from '../../lib/utils'
 import { isPlatformAdminPath, APP_HOME, appPath } from '../../lib/appShellMode'
 import { isSettingsAreaPath, SETTINGS_SECTIONS, settingsPath } from '../../lib/settingsSections'
@@ -55,9 +59,8 @@ const platformAdminNavGroups = [
   {
     label: 'Product',
     items: [
-      { to: '/platform-admin/releases', icon: Sparkles, label: 'Releases' },
-      { to: '/platform-admin/feature-catalog', icon: Sparkles, label: 'Add-ons catalog' },
-      { to: '/platform-admin/feature-interests', icon: Sparkles, label: 'Feature access' },
+      { to: '/platform-admin/releases', icon: platformReleaseIcon, label: 'Releases' },
+      { to: '/platform-admin/add-ons', icon: platformFeaturesAccessNavIcon, label: 'Features & Access' },
       { to: '/platform-admin/notifications', icon: Bell, label: platformActionInboxLabels.sidebarNav },
       { to: '/platform-admin/audit', icon: ScrollText, label: 'Audit' },
     ],

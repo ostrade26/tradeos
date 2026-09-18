@@ -58,7 +58,10 @@ export function PlatformEditOrganisationModal({
       state: organisation.state ?? '',
       country: organisation.country ?? '',
       pincode: organisation.pincode ?? '',
-      status: organisation.status ?? 'active',
+      status:
+        organisation.status === 'disabled' || organisation.status === 'inactive'
+          ? 'inactive'
+          : 'active',
     })
   }, [open, organisation])
 
@@ -113,7 +116,7 @@ export function PlatformEditOrganisationModal({
           onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
           options={[
             { value: 'active', label: 'Active' },
-            { value: 'disabled', label: 'Disabled' },
+            { value: 'inactive', label: 'Deactivated' },
           ]}
         />
       </div>

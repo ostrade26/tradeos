@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
-import { History, PanelRight, PanelRightClose, Pencil, Trash2, Armchair, Bell, KeyRound } from 'lucide-react'
+import {
+  History, PanelRight, PanelRightClose, Pencil, Armchair, Bell, KeyRound, Ban, RotateCcw,
+} from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -9,6 +11,11 @@ import type { OrganisationDetailResponse } from '../../api/platformApi'
 import { OrganisationSubscriptionPanel } from './OrganisationSubscriptionPanel'
 
 const actionBtnClass = 'h-auto w-full py-2.5 text-sm'
+
+function organisationStatusLabel(status: string): string {
+  if (status === 'inactive' || status === 'disabled') return 'deactivated'
+  return status.replace(/_/g, ' ')
+}
 
 interface PlatformOrganisationDetailDrawerProps {
   detail: OrganisationDetailResponse | null
@@ -20,7 +27,8 @@ interface PlatformOrganisationDetailDrawerProps {
   onAddSeat: () => void
   addingSeat: boolean
   onEdit: () => void
-  onDelete: () => void
+  onDeactivate: () => void
+  onReactivate: () => void
   onResetPrimaryAdminSignIn?: () => void
   onNotify?: () => void
 }
@@ -35,23 +43,25 @@ export function PlatformOrganisationDetailDrawer({
   onAddSeat,
   addingSeat,
   onEdit,
-  onDelete,
+  onDeactivate,
+  onReactivate,
   onResetPrimaryAdminSignIn,
   onNotify,
 }: PlatformOrganisationDetailDrawerProps) {
   const org = detail?.organisation
   const title = org?.name ?? 'Organisation'
   const subtitle = org?.org_code?.trim() || undefined
-  const canDelete = org && !org.sandbox_tools
   const sub = detail?.subscription
+  const isActive = org?.status === 'active'
+  const statusLabel = org ? organisationStatusLabel(org.status) : ''
 
   const headerBadges = org ? (
     <>
       <Badge
-        variant={org.status === 'active' ? 'success' : 'default'}
+        variant={isActive ? 'success' : 'default'}
         className="capitalize shrink-0"
       >
-        {org.status.replace(/_/g, ' ')}
+        {statusLabel}
       </Badge>
       {org.sandbox_tools ? <Badge variant="info" className="shrink-0">Sandbox</Badge> : null}
     </>
@@ -83,19 +93,34 @@ export function PlatformOrganisationDetailDrawer({
           },
         ],
       },
-      ...(canDelete
-        ? [{
-            items: [{
-              type: 'button' as const,
-              label: 'Delete organisation',
-              icon: Trash2,
-              tone: 'danger' as const,
-              onClick: onDelete,
-            }],
-          }]
-        : []),
+      {
+        items: [
+          isActive
+            ? {
+                type: 'button' as const,
+                label: 'Deactivate organisation',
+                icon: Ban,
+                tone: 'danger' as const,
+                onClick: onDeactivate,
+              }
+            : {
+                type: 'button' as const,
+                label: 'Reactivate organisation',
+                icon: RotateCcw,
+                onClick: onReactivate,
+              },
+        ],
+      },
     ])
-  }, [org, detail?.primary_admin_user, canDelete, onEdit, onDelete, onResetPrimaryAdminSignIn])
+  }, [
+    org,
+    detail?.primary_admin_user,
+    isActive,
+    onEdit,
+    onDeactivate,
+    onReactivate,
+    onResetPrimaryAdminSignIn,
+  ])
 
   const dockToggle = onDockChange && (
     <button

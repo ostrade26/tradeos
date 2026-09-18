@@ -23,8 +23,9 @@ import { ContractPdfUpload } from '../components/orders/ContractPdfUpload'
 import { CaptionCard } from '../components/ui/CaptionCard'
 import { formatDate, formatCurrency, formatQty, roundQtyMt, availableQtyClass, cn } from '../lib/utils'
 import { soRemainingQtyClass } from '../components/ui/AvailableQtyHint'
-import { type OrderSide, type DeliveryType, type TradeOrder, toBeLifted, CURRENT_TRADER } from '../data/mockData'
+import { type OrderSide, type DeliveryType, type TradeOrder, toBeLifted } from '../data/mockData'
 import { lockedAccountPartyFields, displayPartyConfirmedBy } from '../lib/accountBuyer'
+import { useAccountTrader } from '../lib/useAccountTrader'
 import { parseIndianAmount, formatIndianAmount } from '../lib/indianAmount'
 import { formatContractRate, orderLineAmount, parseRateNumber, rateInputLabel, syncedRateFields } from '../lib/orderRate'
 import { brokerageTypeFromOrder, orderToFormValues } from '../lib/orderForm'
@@ -154,6 +155,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   const navigate = useNavigate()
   const store = useTradeStore()
   const toast = useToast()
+  const { name: accountTrader } = useAccountTrader()
   const isPO = side === 'purchase'
   const isEdit = !!editRef
   const editingOrder = isEdit ? store.getOrderByRef(editRef, side) : undefined
@@ -189,8 +191,8 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     extractedBuyerName: '',
     sellerConfirmedBy: '',
     buyerConfirmedBy: '',
-    sellerName: isPO ? '' : CURRENT_TRADER,
-    buyerName: isPO ? CURRENT_TRADER : '',
+    sellerName: isPO ? '' : accountTrader,
+    buyerName: isPO ? accountTrader : '',
     itemName: '',
     spot: '',
     quantity: '',
@@ -231,7 +233,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     form.setValues(v => ({
       ...v,
       ...imported,
-      ...(lockedAccountPartyFields(side, store.companies)),
+      ...(lockedAccountPartyFields(side, store.companies, accountTrader)),
       ref: v.ref || store.getNextRef(side),
       poRef: linkedPoRef ?? v.poRef,
       brokerName: v.brokerName,
@@ -273,7 +275,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       brokeragePerTon: '',
       paymentTerms: 'Against delivery',
       remarks: '',
-      ...lockedAccountPartyFields('sale', store.companies),
+      ...lockedAccountPartyFields('sale', store.companies, accountTrader),
     }))
     setPdfImported(false)
     setPdfUploadKey(k => k + 1)
@@ -293,7 +295,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
 
   useEffect(() => {
     form.setValues(v => {
-      const next = { ...v, ...lockedAccountPartyFields(side, store.companies) }
+      const next = { ...v, ...lockedAccountPartyFields(side, store.companies, accountTrader) }
       if (isEdit || orderBaselineReady.current) syncBaselineAfterAutofill(next)
       return next
     })
@@ -304,7 +306,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     if (isEdit && editingOrder) {
       const loaded = {
         ...orderToFormValues(editingOrder),
-        ...(lockedAccountPartyFields(side, store.companies)),
+        ...(lockedAccountPartyFields(side, store.companies, accountTrader)),
       }
       form.setValues(v => ({ ...v, ...loaded }))
       orderBaseline.current = serializeOrderFormValues(loaded)
@@ -447,7 +449,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       return
     }
 
-    const account = lockedAccountPartyFields(side, store.companies)
+    const account = lockedAccountPartyFields(side, store.companies, accountTrader)
 
     const contractRate = parseRateNumber(form.rate)
     const rateFields = syncedRateFields(contractRate)
@@ -654,6 +656,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
             isEdit={isEdit}
             fieldErrors={fieldErrors}
             onFieldEdit={clearFieldError}
+            accountTrader={accountTrader}
             quantityAvailability={(() => {
               const enteredQty = parseFloat(form.quantity) || 0
               const lot = store.lots.find(l => l.lotNumber === `LOT-${form.ref || editingOrder?.ref}`)
@@ -745,6 +748,7 @@ function SOEntryForm({
   sellFromLot?: OrderEntryPageProps['sellFromLot']
   saveLoading?: boolean
 }) {
+  const { name: accountTrader } = useAccountTrader()
   const availablePOs = useMemo(() => {
     const base = store.getPOsAvailableForSO()
     if (isEdit && editingOrder?.poRef && !base.some(p => p.ref === editingOrder.poRef)) {
@@ -885,6 +889,7 @@ function SOEntryForm({
             brokers={store.brokers}
             isEdit={isEdit}
             poFieldsLocked={!!selectedPO}
+            accountTrader={accountTrader}
             linkedPoRate={
               selectedPO
                 ? formatContractRate(selectedPO.rate, selectedPO.rateBasis, selectedPO.ratePerBasis)
@@ -937,7 +942,7 @@ function SOEntryForm({
   )
 }
 
-function ContractPartiesCard({ form, isPO }: { form: FormApi; isPO: boolean }) {
+function ContractPartiesCard({ form, isPO, accountTrader }: { form: FormApi; isPO: boolean; accountTrader: string }) {
   return (
     <Card className="border-gray-200 dark:border-gray-700">
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -947,16 +952,16 @@ function ContractPartiesCard({ form, isPO }: { form: FormApi; isPO: boolean }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
         <div>
           <p className="text-xs text-muted">Seller</p>
-          <p className="font-medium">{isPO ? (form.sellerName || 'Select seller') : CURRENT_TRADER}</p>
+          <p className="font-medium">{isPO ? (form.sellerName || 'Select seller') : accountTrader}</p>
           <p className="text-xs text-muted mt-0.5">
-            Confirmed by: {displayPartyConfirmedBy(form.sellerConfirmedBy)}
+            Confirmed by: {displayPartyConfirmedBy(form.sellerConfirmedBy, accountTrader)}
           </p>
         </div>
         <div>
           <p className="text-xs text-muted">Buyer</p>
-          <p className="font-medium">{isPO ? CURRENT_TRADER : (form.buyerName || 'Select buyer')}</p>
+          <p className="font-medium">{isPO ? accountTrader : (form.buyerName || 'Select buyer')}</p>
           <p className="text-xs text-muted mt-0.5">
-            Confirmed by: {displayPartyConfirmedBy(form.buyerConfirmedBy)}
+            Confirmed by: {displayPartyConfirmedBy(form.buyerConfirmedBy, accountTrader)}
           </p>
         </div>
       </div>
@@ -980,6 +985,7 @@ function OrderFormFields({
   maxQtyMessage,
   poFieldsLocked = false,
   linkedPoRate,
+  accountTrader,
 }: {
   isPO: boolean
   shortLabel: string
@@ -992,6 +998,7 @@ function OrderFormFields({
   poFieldsLocked?: boolean
   linkedPoRate?: string
   fieldErrors?: OrderFieldErrors
+  accountTrader: string
   onFieldEdit?: (key: keyof OrderFieldErrors) => void
   quantityAvailability?: {
     label: string
@@ -1061,7 +1068,7 @@ function OrderFormFields({
 
   return (
     <>
-      {(isPO || form.sellerName || form.buyerName) && <ContractPartiesCard form={form} isPO={isPO} />}
+      {(isPO || form.sellerName || form.buyerName) && <ContractPartiesCard form={form} isPO={isPO} accountTrader={accountTrader} />}
 
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

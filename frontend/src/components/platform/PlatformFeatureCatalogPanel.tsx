@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { RefreshCw, Sparkles } from 'lucide-react'
+import { platformFeatureIcon as FeatureIcon } from '../../lib/platformProductIcons'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Card, CardHeader } from '../ui/Card'
@@ -32,7 +32,14 @@ function pricingLabel(offer: PlatformFeatureOffer): string {
   return 'Paid'
 }
 
-export function PlatformFeatureCatalogPanel() {
+export type PlatformFeatureCatalogPanelHandle = {
+  refresh: () => Promise<void>
+}
+
+export const PlatformFeatureCatalogPanel = forwardRef<
+  PlatformFeatureCatalogPanelHandle,
+  object
+>(function PlatformFeatureCatalogPanel(_props, ref) {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
@@ -67,7 +74,7 @@ export function PlatformFeatureCatalogPanel() {
       setOffers(offersRes.offers)
       setSummary(summaryRes)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load add-ons catalog')
+      toast.error(err instanceof ApiError ? err.message : 'Could not load features catalog')
     } finally {
       setLoading(false)
     }
@@ -76,6 +83,8 @@ export function PlatformFeatureCatalogPanel() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useImperativeHandle(ref, () => ({ refresh: load }), [load])
 
   const closeModal = () => {
     setModalOpen(false)
@@ -120,87 +129,82 @@ export function PlatformFeatureCatalogPanel() {
     }
   }
 
-  const releaseLabel = summary?.release
+  const hasProductionUpdates =
+    (summary?.ui_items?.length ?? 0) > 0 || (summary?.feature_items?.length ?? 0) > 0
+  const releaseSubtitle = summary?.release
     ? `${summary.release.version ?? 'Draft'} · ${summary.release.title ?? 'Deploy'}`
-    : 'No deploy release yet'
+    : undefined
 
   return (
     <div className="space-y-4">
-      <Card padding={false}>
-        <div className="px-6 pt-6 flex flex-wrap items-start justify-between gap-3">
-          <CardHeader
-            title="Production updates"
-            subtitle={releaseLabel}
-          />
-          <Button variant="outline" size="sm" loading={loading} onClick={() => void load()}>
-            <RefreshCw className="h-4 w-4" aria-hidden />
-            Refresh
-          </Button>
-        </div>
-        <div className="px-6 pb-6 space-y-4">
-          {summary?.ui_items?.length ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">Shipped (UI & fixes)</p>
-              <ul className="mt-2 text-sm text-heading list-disc pl-5 space-y-1">
-                {summary.ui_items.map((item, i) => (
-                  <li key={`${item.title}-${i}`}>{item.title}</li>
-                ))}
-              </ul>
-              <p className="text-xs text-muted mt-2">Publish these via Releases → bell notifications only.</p>
-            </div>
-          ) : null}
-          {summary?.feature_items?.length ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">Feature enhancements (Add-ons)</p>
-              <ul className="mt-2 space-y-2">
-                {summary.feature_items.map(item => (
-                  <li
-                    key={`${item.feature_key}-${item.title}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-heading">{item.title}</p>
-                      <p className="text-xs text-muted font-mono">{item.feature_key || '—'}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {item.catalog_status === 'listed' ? (
-                        <Badge variant="success">In catalog</Badge>
-                      ) : item.catalog_offer_id ? (
-                        <Badge variant="info">{item.catalog_status ?? 'draft'}</Badge>
-                      ) : (
-                        <Badge variant="warning">No offer</Badge>
-                      )}
-                      {!item.catalog_offer_id && item.feature_key ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditing(null)
-                            setModalOpen(true)
-                            setSearchParams(
-                              prev => {
-                                const next = new URLSearchParams(prev)
-                                next.set('createKey', item.feature_key!)
-                                next.set('createTitle', String(item.title ?? item.feature_key))
-                                return next
-                              },
-                              { replace: true },
-                            )
-                          }}
-                        >
-                          Create offer
-                        </Button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : !loading ? (
-            <p className="text-sm text-muted">No gated feature items on the latest deploy release.</p>
-          ) : null}
-        </div>
-      </Card>
+      {hasProductionUpdates ? (
+        <Card padding={false}>
+          <div className="px-6 pt-6">
+            <CardHeader title="Production updates" subtitle={releaseSubtitle} />
+          </div>
+          <div className="px-6 pb-6 space-y-4">
+            {summary?.ui_items?.length ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">Shipped (UI & fixes)</p>
+                <ul className="mt-2 text-sm text-heading list-disc pl-5 space-y-1">
+                  {summary.ui_items.map((item, i) => (
+                    <li key={`${item.title}-${i}`}>{item.title}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted mt-2">Publish these via Releases → bell notifications only.</p>
+              </div>
+            ) : null}
+            {summary?.feature_items?.length ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">Feature enhancements</p>
+                <ul className="mt-2 space-y-2">
+                  {summary.feature_items.map(item => (
+                    <li
+                      key={`${item.feature_key}-${item.title}`}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-heading">{item.title}</p>
+                        <p className="text-xs text-muted font-mono">{item.feature_key || '—'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.catalog_status === 'listed' ? (
+                          <Badge variant="success">In catalog</Badge>
+                        ) : item.catalog_offer_id ? (
+                          <Badge variant="info">{item.catalog_status ?? 'draft'}</Badge>
+                        ) : (
+                          <Badge variant="warning">No offer</Badge>
+                        )}
+                        {!item.catalog_offer_id && item.feature_key ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditing(null)
+                              setModalOpen(true)
+                              setSearchParams(
+                                prev => {
+                                  const next = new URLSearchParams(prev)
+                                  next.set('createKey', item.feature_key!)
+                                  next.set('createTitle', String(item.title ?? item.feature_key))
+                                  return next
+                                },
+                                { replace: true },
+                              )
+                            }}
+                          >
+                            Create offer
+                          </Button>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="flex justify-end">
         <Button
@@ -210,7 +214,7 @@ export function PlatformFeatureCatalogPanel() {
             setModalOpen(true)
           }}
         >
-          <Sparkles className="h-4 w-4" aria-hidden />
+          <FeatureIcon className="h-4 w-4" aria-hidden />
           New offer
         </Button>
       </div>
@@ -258,8 +262,10 @@ export function PlatformFeatureCatalogPanel() {
             {
               key: 'actions',
               header: '',
+              actionsWide: true,
+              className: 'text-center',
               render: r => (
-                <div className="flex flex-wrap gap-2 justify-end">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={() => {
                     setEditing(r)
                     setModalOpen(true)
@@ -306,8 +312,8 @@ export function PlatformFeatureCatalogPanel() {
           defaultPageSize={25}
           emptyState={
             <EmptyState
-              title="No add-on offers"
-              description="Create offers for feature enhancements orgs can enable from Settings → Add-ons."
+              title="No feature offers"
+              description="Create offers for enhancements orgs can browse and enable from Settings → Add-ons."
             />
           }
         />
@@ -323,4 +329,4 @@ export function PlatformFeatureCatalogPanel() {
       />
     </div>
   )
-}
+})

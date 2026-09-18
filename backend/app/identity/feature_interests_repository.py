@@ -234,7 +234,7 @@ def express_interest_from_notification(
                 "feature_key": key,
                 "organisation_id": str(organisation_id),
             },
-            href=f"/platform-admin/feature-interests?interestId={item['id']}",
+            href=f"/platform-admin/add-ons?tab=access&interestId={item['id']}",
             actor_user_id=user_id,
         )
 

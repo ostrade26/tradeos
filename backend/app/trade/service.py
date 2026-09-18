@@ -8,7 +8,6 @@ from typing import Any
 
 from ..db import DEFAULT_STATE, get_state, save_state
 from .helpers import (
-    CURRENT_TRADER,
     canonical_item_name,
     collect_item_names,
     deletion_date_from_now,
@@ -19,6 +18,7 @@ from .helpers import (
     format_qty,
     item_matches,
     normalize_company_name,
+    organisation_trader_name,
     parse_products,
     round_qty_mt,
     uid,
@@ -59,6 +59,12 @@ from .loader import (
 class TradeService:
     def __init__(self, organisation_id: int) -> None:
         self.organisation_id = organisation_id
+        self._account_trader_name: str | None = None
+
+    def _trader_name(self) -> str:
+        if self._account_trader_name is None:
+            self._account_trader_name = organisation_trader_name(self.organisation_id)
+        return self._account_trader_name
 
     def _read(self) -> dict:
         return apply_lift_totals(load_and_normalize(get_state(self.organisation_id)))
@@ -197,12 +203,12 @@ class TradeService:
         seller_company_id = input_data.get("sellerCompanyId")
         buyer_company_id = input_data.get("buyerCompanyId")
 
-        account = find_account_company(companies)
+        account = find_account_company(companies, self._trader_name())
         if input_data.get("side") == "purchase":
-            resolved_buyer_name = CURRENT_TRADER
+            resolved_buyer_name = self._trader_name()
             buyer_company_id = account.get("id") or buyer_company_id
         if input_data.get("side") == "sale":
-            resolved_seller_name = CURRENT_TRADER
+            resolved_seller_name = self._trader_name()
             seller_company_id = account.get("id") or seller_company_id
 
         lifted_qty = existing.get("liftedQty", 0) if existing else 0
@@ -281,7 +287,7 @@ class TradeService:
             "title": title,
             "description": description,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "user": CURRENT_TRADER,
+            "user": self._trader_name(),
             "entityRef": entity_ref,
         }
 
@@ -960,7 +966,7 @@ class TradeService:
         first = allocations[0]
         po = next(o for o in data["tradeOrders"] if o["ref"] == first["poRef"] and o["side"] == "purchase")
         if stock_lift:
-            buyer_name = CURRENT_TRADER
+            buyer_name = self._trader_name()
             seller_name = po["partyName"]
             so_rate = po["rate"]
             so_ref = ""
@@ -991,7 +997,7 @@ class TradeService:
             "allocations": allocations,
             "date": input_data["date"],
             "status": "pending",
-            "buyerName": buyer_name or CURRENT_TRADER,
+            "buyerName": buyer_name or self._trader_name(),
             "sellerName": seller_name or po["partyName"],
             "itemName": po["itemName"],
             "deliveryPeriod": format_delivery_period(po),
@@ -1098,7 +1104,7 @@ class TradeService:
         first = allocations[0]
         po = next(o for o in data["tradeOrders"] if o["ref"] == first["poRef"] and o["side"] == "purchase")
         if stock_lift:
-            buyer_name = CURRENT_TRADER
+            buyer_name = self._trader_name()
             seller_name = po["partyName"]
             so_rate = po["rate"]
             so_ref = ""
@@ -1127,7 +1133,7 @@ class TradeService:
             "soRef": so_ref,
             "allocations": allocations,
             "date": input_data["date"],
-            "buyerName": buyer_name or CURRENT_TRADER,
+            "buyerName": buyer_name or self._trader_name(),
             "sellerName": seller_name or po["partyName"],
             "itemName": po["itemName"],
             "deliveryPeriod": format_delivery_period(po),

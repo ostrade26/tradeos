@@ -1,11 +1,12 @@
 import {
-  CURRENT_TRADER,
   formatDeliveryPeriod,
   toBeLifted,
   type Lift,
   type OrderStatus,
   type TradeOrder,
 } from '../data/mockData'
+import { getAccountTraderName } from './accountBuyer'
+import { loadAuthSession } from './auth'
 import { formatContractRate } from './orderRate'
 import { getLiftTankers } from './liftTankers'
 import { getLiftAllocations } from './liftAllocations'
@@ -35,8 +36,12 @@ function section(title: string, lines: string[]): string {
   return `\n*${title}*\n${body.join('\n')}`
 }
 
+function accountTraderLabel(): string {
+  return getAccountTraderName(loadAuthSession()?.organisationName)
+}
+
 function footer(): string {
-  return `\n${DIVIDER}\n_Shared from Tradeal · ${CURRENT_TRADER}_`
+  return `\n${DIVIDER}\n_Shared from Tradeal · ${accountTraderLabel()}_`
 }
 
 export function openWhatsAppShare(text: string, phone?: string) {
@@ -57,8 +62,8 @@ export function formatOrderWhatsAppMessage(order: TradeOrder): string {
 
   const partyLines = [
     bullet(isPO ? 'Seller' : 'Buyer', order.partyName),
-    isPO ? bullet('Buyer', order.buyerName || CURRENT_TRADER) : '',
-    !isPO ? bullet('Seller', order.sellerName || CURRENT_TRADER) : '',
+    isPO ? bullet('Buyer', order.buyerName || accountTraderLabel()) : '',
+    !isPO ? bullet('Seller', order.sellerName || accountTraderLabel()) : '',
     !isPO ? bullet('Linked PO', order.poRef ?? 'Not linked yet') : '',
   ]
 

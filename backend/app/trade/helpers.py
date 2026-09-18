@@ -8,7 +8,7 @@ import random
 import string
 from datetime import datetime
 
-CURRENT_TRADER = "Shri Kubera Traders"
+CURRENT_TRADER = "Shri Kubera Traders"  # Sandbox/demo seed identity only
 CURRENT_TRADER_LOCATION = "Kolhapur"
 ORDER_DELETE_GRACE_DAYS = 7
 
@@ -17,6 +17,27 @@ LEGAL_SUFFIX_PATTERN = re.compile(
     re.IGNORECASE,
 )
 LOCATION_TAIL_PATTERN = re.compile(r",\s*[A-Za-z][A-Za-z\s.-]{1,40}$")
+
+
+def organisation_trader_name(organisation_id: int) -> str:
+    """Live account party name for this org — never invent demo branding for real tenants."""
+    from ..db import _pg_connect, _sqlite_connect, uses_postgres
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            row = conn.execute(
+                "SELECT name FROM organisations WHERE id = %s",
+                (organisation_id,),
+            ).fetchone()
+    else:
+        with _sqlite_connect() as conn:
+            row = conn.execute(
+                "SELECT name FROM organisations WHERE id = ?",
+                (organisation_id,),
+            ).fetchone()
+    name = (row["name"] if row else "") or ""
+    name = str(name).strip()
+    return name or CURRENT_TRADER
 
 
 def uid() -> str:
@@ -259,13 +280,14 @@ def is_deletion_due(iso: str, now: datetime | None = None) -> bool:
     return target <= now
 
 
-def find_account_company(companies: list[dict]) -> dict:
+def find_account_company(companies: list[dict], trader_name: str | None = None) -> dict:
+    account = (trader_name or CURRENT_TRADER).strip() or CURRENT_TRADER
     for c in companies:
-        if normalize_company_name(c.get("officialName", "")) == normalize_company_name(CURRENT_TRADER):
+        if normalize_company_name(c.get("officialName", "")) == normalize_company_name(account):
             return c
     return {
         "id": "",
-        "officialName": CURRENT_TRADER,
+        "officialName": account,
         "aliases": [],
         "types": ["buyer", "seller"],
         "location": CURRENT_TRADER_LOCATION,

@@ -107,7 +107,9 @@ export function useInboxItemActions({
         const interestId = row.notice.payload?.feature_interest_id
         if (interestId) {
           markFeatureInterestInboxNotices(inboxItems, String(interestId), markRead)
-          navigate(`/platform-admin/feature-interests?interestId=${encodeURIComponent(interestId)}`)
+          navigate(
+            `/platform-admin/add-ons?tab=access&interestId=${encodeURIComponent(interestId)}`,
+          )
         } else if (row.notice.href) {
           navigate(row.notice.href.startsWith('/') ? row.notice.href : appPath(row.notice.href))
         }

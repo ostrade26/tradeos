@@ -161,7 +161,7 @@ export function PlatformFeatureInterestModal({
               isApproved
                 ? 'Revoked — access was granted by mistake.'
                 : isRejected
-                  ? 'Approved — enabling this add-on for your organisation.'
+                  ? 'Approved — enabling this feature for the organisation.'
                   : 'Approved — we will enable this on your licence.'
             }
           />

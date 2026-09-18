@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
-import { CreditCard, Database, Keyboard, Palette, Sparkles, User, Users } from 'lucide-react'
+import { CreditCard, Database, Keyboard, Palette, User, Users } from 'lucide-react'
+import { platformFeatureIcon } from './platformProductIcons'
 import { appPath } from './appShellMode'
 
 export type SettingsSectionId = 'appearance' | 'account' | 'data' | 'plan' | 'addons' | 'team' | 'shortcuts'
@@ -53,7 +54,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     segment: 'addons',
     label: 'Add-ons',
     description: 'Optional features for your organisation',
-    icon: Sparkles,
+    icon: platformFeatureIcon,
     addonsSection: true,
   },
   {

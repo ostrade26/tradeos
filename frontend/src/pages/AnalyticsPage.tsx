@@ -3,11 +3,10 @@ import { Breadcrumb } from '../components/ui/Tabs'
 import { Card, CardHeader, StatCard } from '../components/ui/Card'
 import { StatGrid, ContentGrid } from '../components/layout/PageGrid'
 import { formatCurrency, formatQty } from '../lib/utils'
-import { SEED_PRICE_TRENDS } from '../data/seedData'
 import { useTradeStore } from '../store/TradeStore'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, BarChart, Bar
+  BarChart, Bar
 } from 'recharts'
 
 export function AnalyticsPage() {
@@ -26,7 +25,7 @@ export function AnalyticsPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Analytics"
-        subtitle="Trade performance and market trends"
+        subtitle="Trade performance from your registers"
         breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Analytics' }]} />}
       />
 
@@ -39,27 +38,11 @@ export function AnalyticsPage() {
 
       <ContentGrid cols={2} className="mb-4">
         <Card>
-          <CardHeader title="Commodity Price Trends" subtitle="₹/10 KG · Last 6 weeks" />
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={SEED_PRICE_TRENDS}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#a1a1aa' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e4e4e7', fontSize: 12 }} />
-                <Line type="monotone" dataKey="palmOil" stroke="#2563eb" strokeWidth={2} dot={false} name="Palm Oil" />
-                <Line type="monotone" dataKey="soybean" stroke="#059669" strokeWidth={2} dot={false} name="Soybean Oil" />
-                <Line type="monotone" dataKey="coconut" stroke="#d97706" strokeWidth={2} dot={false} name="Coconut Oil" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex gap-4 mt-2 justify-center">
-            {[{ label: 'Palm Oil', color: '#2563eb' }, { label: 'Soybean', color: '#059669' }, { label: 'Coconut', color: '#d97706' }].map(item => (
-              <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted">
-                <div className="h-2 w-2 rounded-full" style={{ background: item.color }} />
-                {item.label}
-              </div>
-            ))}
+          <CardHeader title="Commodity Price Trends" subtitle="Market feed" />
+          <div className="flex h-64 items-center justify-center px-6 text-center">
+            <p className="text-sm text-muted leading-relaxed max-w-xs">
+              Live commodity prices are not connected yet. Charts here will use your market feed when available — not sample data.
+            </p>
           </div>
         </Card>
 

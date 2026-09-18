@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
-import { Megaphone, Rocket, Sparkles } from 'lucide-react'
+import { Megaphone } from 'lucide-react'
+import { platformFeatureIcon, platformReleaseIcon } from './platformProductIcons'
 import type { NotificationKind } from '../api/platformApi'
 
 export type AnnouncementVariant = 'release' | 'feature' | 'update'
@@ -16,7 +17,7 @@ export type AnnouncementTheme = {
 /** Primary brand styling — aligned with service-issue 404 / app accent. */
 const accentRelease: AnnouncementTheme = {
   label: 'New version',
-  icon: Rocket,
+  icon: platformReleaseIcon,
   gradient: 'from-accent via-[#4a6fe0] to-accent-hover dark:from-accent dark:via-accent-hover dark:to-[#2f4eb0]',
   badge: 'bg-white/20 text-white backdrop-blur-sm',
   ring: 'ring-accent/35',
@@ -33,7 +34,7 @@ export const ANNOUNCEMENT_THEMES: Record<AnnouncementVariant, AnnouncementTheme>
   feature: {
     ...accentRelease,
     label: 'New feature',
-    icon: Sparkles,
+    icon: platformFeatureIcon,
   },
 }
 

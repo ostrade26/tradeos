@@ -131,6 +131,7 @@ class ProfilePatchBody(BaseModel):
     phone: str | None = None
     location: str | None = None
     username: str | None = None
+    email: str | None = None
 
 
 class PreferencesPatchBody(BaseModel):

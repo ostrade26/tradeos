@@ -60,7 +60,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   ])
 
   const updateProfile = useCallback(async (patch: Partial<UserProfile>) => {
-    const { role: _role, email: _email, ...writable } = patch
+    const { role: _role, ...writable } = patch
     const previous = profile
     const next = { ...profile, ...patch }
     setProfile(next)
@@ -75,6 +75,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         phone: writable.phone ?? profile.phone,
         location: writable.location ?? profile.location,
         username: writable.username ?? profile.username,
+        email: writable.email ?? profile.email,
       })
       const current = loadAuthSession()
       if (current?.token) {

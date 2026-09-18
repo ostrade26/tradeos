@@ -55,6 +55,15 @@ type Column<T> = {
   actionsWide?: boolean | 'compact'
 }
 
+function organisationStatusLabel(status: string): string {
+  if (status === 'inactive' || status === 'disabled') return 'deactivated'
+  return status.replace(/_/g, ' ')
+}
+
+export function organisationIsActive(org: PlatformOrganisation): boolean {
+  return org.status === 'active'
+}
+
 export function organisationColumns(): Column<PlatformOrganisation>[] {
   return [
     {
@@ -93,7 +102,12 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
       sortValue: r => r.status,
       render: r => (
         <div className="flex flex-wrap items-center gap-1.5">
-          {platformStatusBadge(r.status)}
+          <Badge
+            variant={r.status === 'active' ? 'success' : 'default'}
+            className="capitalize"
+          >
+            {organisationStatusLabel(r.status)}
+          </Badge>
           {r.sandbox_tools ? <Badge variant="info">Sandbox</Badge> : null}
         </div>
       ),

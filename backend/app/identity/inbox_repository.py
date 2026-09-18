@@ -136,7 +136,7 @@ def _feature_interest_items(conn, limit: int) -> list[dict[str, Any]]:
                 from_label=org,
                 date_iso=str(row.get("created_at") or ""),
                 actionable=True,
-                href=f"/platform-admin/feature-interests?interestId={row['id']}",
+                href=f"/platform-admin/add-ons?tab=access&interestId={row['id']}",
             )
         )
     return out

@@ -1,6 +1,7 @@
 import {
-  AlertCircle, KeyRound, Megaphone, MessageSquare, Sparkles, UserPlus, Wallet, type LucideIcon,
+  AlertCircle, ClipboardCheck, KeyRound, Megaphone, MessageSquare, UserPlus, Wallet, type LucideIcon,
 } from 'lucide-react'
+import { platformAccessIcon, platformFeatureIcon, platformReleaseIcon } from './platformProductIcons'
 import { formatDateTime } from './utils'
 import type { UserNotification } from '../api/platformApi'
 
@@ -9,10 +10,10 @@ export const notificationKindIcon: Record<string, LucideIcon> = {
   credentials: KeyRound,
   payment_reminder: Wallet,
   product_update: Megaphone,
-  feature_launch: Sparkles,
-  release_notes: Megaphone,
+  feature_launch: platformFeatureIcon,
+  release_notes: platformReleaseIcon,
   product_request: MessageSquare,
-  deploy_review: Sparkles,
+  deploy_review: ClipboardCheck,
 }
 
 export function notificationKindLabel(kind: string): string {
@@ -72,7 +73,8 @@ export function isProductUpdateNotice(item: UserNotification): boolean {
   return cta === 'update' || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))
 }
 
-export function notificationIcon(kind: string): LucideIcon {
+export function notificationIcon(kind: string, payload?: UserNotification['payload']): LucideIcon {
+  if (payload?.cta === 'review_interest') return platformAccessIcon
   return notificationKindIcon[kind] ?? AlertCircle
 }
 

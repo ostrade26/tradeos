@@ -25,8 +25,8 @@ import { formatDeletionDate } from '../../lib/orderDeletion'
 import { formatContractRate, orderLineAmount, contractRateFromOrder } from '../../lib/orderRate'
 import { formatOrderRef } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
+import { useAccountTrader } from '../../lib/useAccountTrader'
 import {
-  CURRENT_TRADER,
   type TradeOrder,
   type OrderSide,
   toBeLifted,
@@ -78,6 +78,7 @@ export function OrderDetailDrawer({
 }: OrderDetailDrawerProps) {
   const store = useTradeStore()
   const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
+  const { name: accountTrader } = useAccountTrader()
   const [buyBackOpen, setBuyBackOpen] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
 
@@ -185,8 +186,8 @@ export function OrderDetailDrawer({
   const linkedSOs = isPO ? store.getSOsForPO(order.ref) : []
   const buyBackTotal = isPO ? totalBuyBackQty(order) : 0
 
-  const seller = order.sellerName || (isPO ? order.partyName : CURRENT_TRADER)
-  const buyer = order.buyerName || (!isPO ? order.partyName : CURRENT_TRADER)
+  const seller = order.sellerName || (isPO ? order.partyName : accountTrader)
+  const buyer = order.buyerName || (!isPO ? order.partyName : accountTrader)
 
   const dockToggle = onDockChange && (
     <button

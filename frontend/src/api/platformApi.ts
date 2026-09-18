@@ -455,9 +455,6 @@ export const platformApi = {
       body: JSON.stringify(body),
     }),
 
-  deleteOrganisation: (orgId: number) =>
-    apiFetch<{ ok: boolean }>(`/platform/organisations/${orgId}`, { method: 'DELETE' }),
-
   deleteUser: (userId: number) =>
     apiFetch<{ ok: boolean }>(`/platform/users/${userId}`, { method: 'DELETE' }),
 

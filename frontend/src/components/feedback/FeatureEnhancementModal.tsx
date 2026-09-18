@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { platformFeatureIcon as FeatureIcon } from '../../lib/platformProductIcons'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
@@ -152,7 +152,7 @@ export function FeatureEnhancementModal({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 shrink-0 text-accent mt-0.5" aria-hidden />
+                    <FeatureIcon className="h-4 w-4 shrink-0 text-accent mt-0.5" aria-hidden />
                     <div>
                       <p className="text-sm font-semibold text-heading">{option.title}</p>
                       <p className="text-xs text-muted mt-0.5">

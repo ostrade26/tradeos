@@ -41,7 +41,6 @@ PERMISSIONS: list[tuple[str, str]] = [
     ("organisations.create", "Create organisations"),
     ("organisations.view", "View organisations"),
     ("organisations.edit", "Edit organisations"),
-    ("organisations.delete", "Delete organisations"),
     ("subscriptions.view", "View subscriptions"),
     ("subscriptions.manage", "Manage subscriptions and seats"),
     ("subscription_plans.manage", "Manage subscription plans"),

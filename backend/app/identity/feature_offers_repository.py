@@ -388,15 +388,15 @@ def request_paid_for_org(
     notify_platform_admins(
         conn,
         kind="release_notes",
-        title=f"Add-on request · {title}",
-        body=f"An organisation requested {title} from the Add-ons marketplace.",
+        title=f"Feature access · {title}",
+        body=f"An organisation requested access to {title} from Settings → Add-ons.",
         payload={
             "cta": "review_interest",
             "feature_interest_id": str(interest_id),
             "feature_key": key,
             "organisation_id": str(organisation_id),
         },
-        href=f"/platform-admin/feature-interests?interestId={interest_id}",
+        href=f"/platform-admin/add-ons?tab=access&interestId={interest_id}",
         actor_user_id=user_id,
     )
     append_audit_log(

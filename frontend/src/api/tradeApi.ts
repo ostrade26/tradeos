@@ -215,7 +215,13 @@ export const authApi = {
       }),
     }),
 
-  updateProfile: (body: { name?: string; phone?: string; location?: string; username?: string }) =>
+  updateProfile: (body: {
+    name?: string
+    phone?: string
+    location?: string
+    username?: string
+    email?: string
+  }) =>
     apiFetch<AuthMeResponse>('/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(body),

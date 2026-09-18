@@ -56,7 +56,27 @@ def _now_iso() -> str:
 
 
 def _mapping(row: Any) -> dict[str, Any]:
-    return row_dict(row)
+    return row_dict(row) if not isinstance(row, dict) else row
+
+
+def _organisation_is_active_for_access(row: Any) -> bool:
+    """Org users cannot sign in or keep a session when the organisation is deactivated."""
+    r = _mapping(row)
+    if r.get("organisation_id") is None:
+        return True
+    status = str(r.get("organisation_status") or "active").strip().lower()
+    return status == "active"
+
+
+def _reject_inactive_organisation(row: Any, *, for_login: bool) -> None:
+    if _organisation_is_active_for_access(row):
+        return
+    if for_login:
+        raise HTTPException(
+            status_code=403,
+            detail="This organisation has been deactivated. Contact Tradeal support.",
+        )
+    raise HTTPException(status_code=403, detail="Organisation is deactivated")
 
 
 def _permissions_for_role(role_id: int, conn) -> frozenset[str]:
@@ -120,7 +140,8 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
                u.account_type, u.status, u.role_id,
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
-               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools
+               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id
         LEFT JOIN organisations o ON o.id = u.organisation_id
@@ -134,6 +155,8 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
                 return None
             if row["status"] != "active":
                 return None
+            if not _organisation_is_active_for_access(row):
+                return None
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             if not user_has_org_seat_access(conn, user.id, user.role_slug):
@@ -145,6 +168,8 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
         if not row:
             return None
         if row["status"] != "active":
+            return None
+        if not _organisation_is_active_for_access(row):
             return None
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
@@ -159,7 +184,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
                u.account_type, u.status, u.role_id,
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
-               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools
+               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id
         LEFT JOIN organisations o ON o.id = u.organisation_id
@@ -171,6 +197,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
             row = conn.execute(q, (user_id,)).fetchone()
             if not row or row["status"] != "active":
                 return None
+            if not _organisation_is_active_for_access(row):
+                return None
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             if not user_has_org_seat_access(conn, user.id, user.role_slug):
@@ -180,6 +208,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
     with _sqlite_connect() as conn:
         row = conn.execute(q, (user_id,)).fetchone()
         if not row or row["status"] != "active":
+            return None
+        if not _organisation_is_active_for_access(row):
             return None
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
@@ -197,7 +227,8 @@ def authenticate(username: str, password: str) -> AuthUser:
                u.account_type, u.status, u.role_id,
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
-               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools
+               o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id
         LEFT JOIN organisations o ON o.id = u.organisation_id
@@ -211,6 +242,7 @@ def authenticate(username: str, password: str) -> AuthUser:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
             if not verify_password(password, row["password_hash"]):
                 raise HTTPException(status_code=401, detail="Invalid username or password")
+            _reject_inactive_organisation(row, for_login=True)
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -222,6 +254,7 @@ def authenticate(username: str, password: str) -> AuthUser:
             raise HTTPException(status_code=401, detail="Invalid username or password")
         if not verify_password(password, row["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        _reject_inactive_organisation(row, for_login=True)
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
         _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -352,9 +385,14 @@ def update_user_profile(
     phone: str | None = None,
     location: str | None = None,
     username: str | None = None,
+    email: str | None = None,
 ) -> AuthUser:
+    from .billing_repository import login_identity_in_use
+    from .email_validation import optional_contact_email
+
     fields: list[str] = []
     params: list[Any] = []
+    normalized_email: str | None = None
     if name is not None:
         trimmed = name.strip()
         if not trimmed:
@@ -367,6 +405,10 @@ def update_user_profile(
     if location is not None:
         fields.append("location = ?" if not uses_postgres() else "location = %s")
         params.append(location.strip())
+    if email is not None:
+        normalized_email = optional_contact_email(email)
+        fields.append("email = ?" if not uses_postgres() else "email = %s")
+        params.append(normalized_email)
     if username is None and not fields:
         raise HTTPException(status_code=400, detail="Nothing to update")
     now = _now_iso()
@@ -378,12 +420,20 @@ def update_user_profile(
         if uses_postgres():
             q = q.replace("?", "%s")
             with _pg_connect() as conn:
+                if normalized_email and login_identity_in_use(
+                    conn, "", normalized_email, exclude_user_id=user_id
+                ):
+                    raise HTTPException(status_code=400, detail="This email is already in use")
                 if username is not None:
                     set_user_login_username(conn, user_id, username)
                 conn.execute(q, tuple(params))
                 conn.commit()
         else:
             with _sqlite_connect() as conn:
+                if normalized_email and login_identity_in_use(
+                    conn, "", normalized_email, exclude_user_id=user_id
+                ):
+                    raise HTTPException(status_code=400, detail="This email is already in use")
                 if username is not None:
                     set_user_login_username(conn, user_id, username)
                 conn.execute(q, tuple(params))

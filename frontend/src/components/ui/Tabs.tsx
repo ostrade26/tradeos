@@ -1,11 +1,13 @@
 import { cn } from '../../lib/utils'
 import type { KeyboardEvent, ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 interface Tab {
   id: string
   label: string
   count?: number
+  icon?: LucideIcon
 }
 
 interface TabsProps {
@@ -54,6 +56,9 @@ export function Tabs({ tabs, active, onChange, className, buttonClassName, panel
           )}
         >
           <span className="relative inline-flex items-center gap-2">
+            {tab.icon ? (
+              <tab.icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            ) : null}
             {tab.label}
             {tab.count !== undefined && (
               <span className={cn(

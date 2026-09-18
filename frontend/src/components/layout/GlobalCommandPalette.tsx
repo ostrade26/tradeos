@@ -38,10 +38,10 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         { id: 'payments', label: 'Payments', group: 'Commerce', action: () => navigate('/platform-admin/payments') },
         { id: 'releases', label: 'Releases', group: 'Product', action: () => navigate('/platform-admin/releases') },
         {
-          id: 'feature-catalog',
-          label: 'Add-ons catalog',
+          id: 'add-ons',
+          label: 'Features & Access',
           group: 'Product',
-          action: () => navigate('/platform-admin/feature-catalog'),
+          action: () => navigate('/platform-admin/add-ons'),
         },
         { id: 'inbox', label: 'Inbox', group: 'Product', action: () => navigate('/platform-admin/notifications') },
         { id: 'audit', label: 'Audit log', group: 'Product', action: () => navigate('/platform-admin/audit') },

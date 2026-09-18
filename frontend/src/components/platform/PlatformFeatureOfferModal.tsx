@@ -85,7 +85,7 @@ export function PlatformFeatureOfferModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={offer ? 'Edit add-on offer' : 'Create add-on offer'}
+      title={offer ? 'Edit feature offer' : 'Create feature offer'}
       subtitle="Listed offers appear in organisation Settings → Add-ons."
       footer={
         <>

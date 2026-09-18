@@ -24,7 +24,6 @@ from .billing_repository import (
     list_platform_seats,
     create_org_user_with_seat,
     create_organisation_with_primary_admin,
-    delete_organisation,
     delete_platform_user,
     organisation_detail,
     seat_summary,
@@ -647,6 +646,9 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="Nothing to update")
+    if data.get("status") == "disabled":
+        data["status"] = "inactive"
+    old_status = None
     for key, val in data.items():
         updates.append(f"{key} = ?" if not uses_postgres() else f"{key} = %s")
         values.append(val.strip() if isinstance(val, str) else val)
@@ -660,13 +662,23 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
             old = conn.execute("SELECT * FROM organisations WHERE id = %s", (org_id,)).fetchone()
             if not old:
                 raise HTTPException(status_code=404, detail="Organisation not found")
+            old_status = str(dict(old).get("status") or "")
             conn.execute(sql, tuple(values))
             conn.commit()
             detail = organisation_detail(conn, org_id)
+            action = "organisation.updated"
+            if "status" in data and data["status"] != old_status:
+                action = (
+                    "organisation.deactivated"
+                    if data["status"] == "inactive"
+                    else "organisation.activated"
+                    if data["status"] == "active"
+                    else action
+                )
             append_audit_log(
                 organisation_id=org_id,
                 actor_user_id=session.user.id,
-                action="organisation.updated",
+                action=action,
                 entity_type="organisation",
                 entity_id=str(org_id),
                 old_value=dict(old),
@@ -677,13 +689,23 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         old = conn.execute("SELECT * FROM organisations WHERE id = ?", (org_id,)).fetchone()
         if not old:
             raise HTTPException(status_code=404, detail="Organisation not found")
+        old_status = str(dict(old).get("status") or "")
         conn.execute(sql, tuple(values))
         conn.commit()
         detail = organisation_detail(conn, org_id)
+        action = "organisation.updated"
+        if "status" in data and data["status"] != old_status:
+            action = (
+                "organisation.deactivated"
+                if data["status"] == "inactive"
+                else "organisation.activated"
+                if data["status"] == "active"
+                else action
+            )
         append_audit_log(
             organisation_id=org_id,
             actor_user_id=session.user.id,
-            action="organisation.updated",
+            action=action,
             entity_type="organisation",
             entity_id=str(org_id),
             old_value=dict(old),
@@ -692,20 +714,13 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         return detail
 
 
-@router.delete("/organisations/{org_id}", summary="Delete organisation")
+@router.delete("/organisations/{org_id}", summary="Delete organisation (disabled)")
 def remove_organisation(org_id: int, request: Request) -> dict[str, Any]:
-    session = _session(request)
-    auth.require_platform(session)
-    auth.require_permission(session, "organisations.delete")
-    if uses_postgres():
-        with _pg_connect() as conn:
-            deleted = delete_organisation(conn, org_id, actor_user_id=session.user.id)
-            conn.commit()
-            return {"ok": True, "organisation": deleted}
-    with _sqlite_connect() as conn:
-        deleted = delete_organisation(conn, org_id, actor_user_id=session.user.id)
-        conn.commit()
-        return {"ok": True, "organisation": deleted}
+    _session(request)
+    raise HTTPException(
+        status_code=403,
+        detail="Organisations cannot be deleted. Deactivate the organisation instead to retain audit history.",
+    )
 
 
 @router.post("/organisations/{org_id}/seats", summary="Add purchased seats")

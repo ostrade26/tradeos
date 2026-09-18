@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { Building2, CreditCard, RefreshCw, Wallet, Bell, Sparkles } from 'lucide-react'
+import { Building2, CreditCard, RefreshCw, Wallet, Bell } from 'lucide-react'
+import { platformReleaseIcon as ReleaseNavIcon } from '../lib/platformProductIcons'
 import { PageHeader } from '../components/ui/CommandPalette'
-import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
+import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { DataTable, TableSkeleton } from '../components/ui/DataTable'
 import { useToast } from '../hooks/useToast'
@@ -21,7 +22,6 @@ import {
   type NotificationKind,
   type PlatformDashboard,
   type PlatformOrganisation,
-  type FeatureInterest,
   type PlatformRelease,
   type PlatformUser,
   type SeatRequest,
@@ -35,6 +35,7 @@ import {
   licenceColumns,
   mapAuditLogs,
   organisationColumns,
+  organisationIsActive,
   paymentColumns,
   platformSeatColumns,
   releaseColumns,
@@ -43,7 +44,6 @@ import {
   subscriptionPlanColumns,
 } from '../components/platform/platformAdminRegisterColumns'
 import { PlatformOrganisationDetailDrawer } from '../components/platform/PlatformOrganisationDetailDrawer'
-import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import {
   PlatformCreateOrganisationModal,
   type OrganisationFormState,
@@ -63,17 +63,16 @@ import { PlatformPlanModal, type PlanFormPayload } from '../components/platform/
 import { PlatformRecordPaymentModal } from '../components/platform/PlatformRecordPaymentModal'
 import { PlatformCommercialMetrics } from '../components/platform/PlatformCommercialMetrics'
 import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { platformBroadcastLabels } from '../lib/inboxLabels'
 import { PlatformReleaseModal, type ReleaseFormPayload } from '../components/platform/PlatformReleaseModal'
 import { PlatformPublishReleaseModal } from '../components/platform/PlatformPublishReleaseModal'
-import {
-  PlatformFeatureInterestModal,
-  type FeatureInterestRow,
-} from '../components/platform/PlatformFeatureInterestModal'
 import { PlatformWhatsNewModal } from '../components/platform/PlatformWhatsNewModal'
-import { PlatformFeatureCatalogPanel } from '../components/platform/PlatformFeatureCatalogPanel'
+import {
+  PlatformAddOnsAdminPanel,
+  type PlatformAddOnsAdminPanelHandle,
+} from '../components/platform/PlatformAddOnsAdminPanel'
 import { useAuth } from '../hooks/useAuth'
-import { INBOX_REFRESH_EVENT } from '../hooks/useMeInbox'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
 const PLATFORM_SECTIONS = [
@@ -84,8 +83,7 @@ const PLATFORM_SECTIONS = [
   'amcs',
   'payments',
   'seat-requests',
-  'feature-interests',
-  'feature-catalog',
+  'add-ons',
   'audit',
   'releases',
 ] as const
@@ -134,15 +132,10 @@ const SECTION_META: Record<
     subtitle: '',
     breadcrumb: 'Seat requests',
   },
-  'feature-interests': {
-    title: 'Feature access',
+  'add-ons': {
+    title: 'Features & Access',
     subtitle: '',
-    breadcrumb: 'Feature access',
-  },
-  'feature-catalog': {
-    title: 'Add-ons catalog',
-    subtitle: '',
-    breadcrumb: 'Add-ons catalog',
+    breadcrumb: 'Features & Access',
   },
   audit: {
     title: 'Audit',
@@ -156,6 +149,17 @@ const SECTION_META: Record<
   },
 }
 
+function PlatformAdminLegacyAddOnsRedirect({
+  legacy,
+}: {
+  legacy: 'feature-interests' | 'feature-catalog'
+}) {
+  const [searchParams] = useSearchParams()
+  const next = new URLSearchParams(searchParams)
+  next.set('tab', legacy === 'feature-interests' ? 'access' : 'catalog')
+  return <Navigate to={`/platform-admin/add-ons?${next.toString()}`} replace />
+}
+
 export function PlatformAdminPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
   if (sectionParam === 'users') {
@@ -163,6 +167,9 @@ export function PlatformAdminPage() {
   }
   if (sectionParam === 'requests') {
     return <Navigate to="/platform-admin/notifications" replace />
+  }
+  if (sectionParam === 'feature-interests' || sectionParam === 'feature-catalog') {
+    return <PlatformAdminLegacyAddOnsRedirect legacy={sectionParam} />
   }
   if (!isPlatformSection(sectionParam)) {
     return <Navigate to="/platform-admin/organisations" replace />
@@ -228,10 +235,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [releaseSort, setReleaseSort] = useState(() => loadRegisterSort('platform-releases', 'version'))
   const [auditSort, setAuditSort] = useState(() => loadRegisterSort('platform-audit', 'created_at'))
   const [seatRequests, setSeatRequests] = useState<SeatRequest[]>([])
-  const [featureInterests, setFeatureInterests] = useState<FeatureInterest[]>([])
-  const [featureInterestLoading, setFeatureInterestLoading] = useState(false)
-  const [reviewingFeatureInterest, setReviewingFeatureInterest] = useState<FeatureInterestRow | null>(null)
-  const [featureInterestBusy, setFeatureInterestBusy] = useState(false)
+  const [addOnsOpenAccess, setAddOnsOpenAccess] = useState(0)
+  const [addOnsRefreshing, setAddOnsRefreshing] = useState(false)
+  const addOnsPanelRef = useRef<PlatformAddOnsAdminPanelHandle>(null)
   const [seatRequestLoading, setSeatRequestLoading] = useState(false)
   const [seatRequestSort, setSeatRequestSort] = useState(() => loadRegisterSort('platform-seat-requests', 'created_at'))
   const [busySeatRequestId, setBusySeatRequestId] = useState<number | null>(null)
@@ -241,8 +247,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   } | null>(null)
   const [seatDecisionSubmitting, setSeatDecisionSubmitting] = useState(false)
 
-  const [deleteOrgTarget, setDeleteOrgTarget] = useState<PlatformOrganisation | null>(null)
-  const [deletingOrg, setDeletingOrg] = useState(false)
+  const [orgListTab, setOrgListTab] = useState<'active' | 'deactivated'>('active')
+  const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false)
+  const [togglingOrgStatus, setTogglingOrgStatus] = useState(false)
   const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
   const isLargeScreen = useLargeScreen()
   const effectiveDocked = panelDocked && isLargeScreen
@@ -317,7 +324,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }, [load])
 
   const releaseIdFromInbox = searchParams.get('releaseId')
-  const interestIdFromInbox = searchParams.get('interestId')
   useEffect(() => {
     if (!releaseIdFromInbox || releases.length === 0) return
     const id = Number(releaseIdFromInbox)
@@ -358,39 +364,29 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     if (section === 'seat-requests') void loadSeatRequests()
   }, [section, loadSeatRequests])
 
-  const loadFeatureInterests = useCallback(async () => {
-    setFeatureInterestLoading(true)
-    try {
-      const res = await platformApi.listFeatureInterests()
-      setFeatureInterests(res.interests)
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load feature requests')
-    } finally {
-      setFeatureInterestLoading(false)
-    }
-  }, [toast])
-
-  useEffect(() => {
-    if (section === 'feature-interests') void loadFeatureInterests()
-  }, [section, loadFeatureInterests])
-
-  useEffect(() => {
-    if (!interestIdFromInbox || featureInterests.length === 0) return
-    const id = Number(interestIdFromInbox)
-    if (!Number.isFinite(id)) return
-    const row = featureInterests.find(i => i.id === id)
-    if (row) setReviewingFeatureInterest(row as FeatureInterestRow)
-  }, [interestIdFromInbox, featureInterests])
-
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
   const planColumns = useMemo(() => subscriptionPlanColumns(), [])
   const payColumns = useMemo(() => paymentColumns(), [])
   const auditColumns = useMemo(() => auditLogColumns(), [])
 
+  const activeOrganisationCount = useMemo(
+    () => organisations.filter(organisationIsActive).length,
+    [organisations],
+  )
+  const deactivatedOrganisationCount = organisations.length - activeOrganisationCount
+
+  const filteredOrganisations = useMemo(
+    () =>
+      organisations.filter(org =>
+        orgListTab === 'active' ? organisationIsActive(org) : !organisationIsActive(org),
+      ),
+    [organisations, orgListTab],
+  )
+
   const sortedOrganisations = useMemo(
-    () => sortPlatformRows(organisations, orgSort, orgColumns),
-    [organisations, orgSort, orgColumns],
+    () => sortPlatformRows(filteredOrganisations, orgSort, orgColumns),
+    [filteredOrganisations, orgSort, orgColumns],
   )
   const sortedLicensedSeats = useMemo(
     () => sortPlatformRows(licensedSeats, seatSort, seatColumns),
@@ -928,25 +924,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     if (section === 'audit') void loadAudit()
   }, [section, loadAudit])
 
-  const confirmDeleteOrg = async () => {
-    if (!deleteOrgTarget) return
-    setDeletingOrg(true)
-    try {
-      await platformApi.deleteOrganisation(deleteOrgTarget.id)
-      toast.success(`Organisation “${deleteOrgTarget.name}” deleted`)
-      if (selectedOrgId === deleteOrgTarget.id) {
-        closeOrgDetail()
-      }
-      setDeleteOrgTarget(null)
-      await load()
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not delete organisation')
-      throw err
-    } finally {
-      setDeletingOrg(false)
-    }
-  }
-
   const submitEditOrg = async (patch: {
     name: string
     legal_name: string
@@ -965,12 +942,36 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       const updated = await platformApi.updateOrganisation(orgDetail.organisation.id, patch)
       setOrgDetail(updated)
       setEditOrgOpen(false)
-      toast.success('Organisation updated')
+      toast.success(
+        patch.status === 'inactive'
+          ? 'Organisation deactivated'
+          : patch.status === 'active'
+            ? 'Organisation activated'
+            : 'Organisation updated',
+      )
+      setOrgListTab(organisationIsActive(updated.organisation) ? 'active' : 'deactivated')
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update organisation')
     } finally {
       setSavingOrg(false)
+    }
+  }
+
+  const setOrganisationActiveStatus = async (status: 'active' | 'inactive') => {
+    if (!orgDetail) return
+    setTogglingOrgStatus(true)
+    try {
+      const updated = await platformApi.updateOrganisation(orgDetail.organisation.id, { status })
+      setOrgDetail(updated)
+      setDeactivateConfirmOpen(false)
+      toast.success(status === 'inactive' ? 'Organisation deactivated' : 'Organisation reactivated')
+      setOrgListTab(status === 'active' ? 'active' : 'deactivated')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not update organisation status')
+    } finally {
+      setTogglingOrgStatus(false)
     }
   }
 
@@ -1011,8 +1012,16 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
       </Button>
-    ) : section === 'feature-interests' ? (
-      <Button variant="outline" size="sm" loading={featureInterestLoading} onClick={() => void loadFeatureInterests()}>
+    ) : section === 'add-ons' ? (
+      <Button
+        variant="outline"
+        size="sm"
+        loading={addOnsRefreshing}
+        onClick={() => {
+          setAddOnsRefreshing(true)
+          void addOnsPanelRef.current?.refresh().finally(() => setAddOnsRefreshing(false))
+        }}
+      >
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
       </Button>
@@ -1024,7 +1033,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           setReleaseModalOpen(true)
         }}
       >
-        <Sparkles className="h-4 w-4" aria-hidden />
+        <ReleaseNavIcon className="h-4 w-4" aria-hidden />
         New release
       </Button>
     ) : section === 'audit' ? (
@@ -1040,7 +1049,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         title={meta.title}
         subtitle={
           section === 'organisations'
-            ? `${organisations.length} organisation${organisations.length === 1 ? '' : 's'}`
+            ? orgListTab === 'active'
+              ? `${activeOrganisationCount} active organisation${activeOrganisationCount === 1 ? '' : 's'}`
+              : `${deactivatedOrganisationCount} deactivated organisation${deactivatedOrganisationCount === 1 ? '' : 's'}`
             : section === 'seats'
               ? `${licensedSeats.length} in use`
               : section === 'plans'
@@ -1053,10 +1064,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                       ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
                       : section === 'seat-requests'
                         ? `${seatRequests.length} request${seatRequests.length === 1 ? '' : 's'}`
-                        : section === 'feature-interests'
-                          ? `${featureInterests.filter(i => i.status === 'interested').length} open`
-                          : section === 'feature-catalog'
-                            ? 'Production & marketplace'
+                        : section === 'add-ons'
+                          ? addOnsOpenAccess > 0
+                            ? `${addOnsOpenAccess} open access request${addOnsOpenAccess === 1 ? '' : 's'}`
+                            : 'Catalog & organisation requests'
                           : section === 'releases'
                           ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
                           : section === 'audit'
@@ -1079,6 +1090,23 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <PlatformCommercialMetrics metrics={dashboard} />
       ) : null}
 
+      {section === 'organisations' ? (
+        <Tabs
+          active={orgListTab}
+          onChange={id => setOrgListTab(id === 'deactivated' ? 'deactivated' : 'active')}
+          className="gap-6"
+          buttonClassName="pt-2.5 px-0"
+          tabs={[
+            { id: 'active', label: 'Active orgs', count: activeOrganisationCount },
+            {
+              id: 'deactivated',
+              label: 'Deactivated',
+              count: deactivatedOrganisationCount,
+            },
+          ]}
+        />
+      ) : null}
+
       {section === 'organisations' &&
         (loading && organisations.length === 0 ? (
           <TableSkeleton rows={10} cols={8} />
@@ -1095,16 +1123,23 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             activeRowId={orgDetailOpen && selectedOrgId != null ? String(selectedOrgId) : undefined}
             defaultPageSize={25}
             emptyState={
-              <EmptyState
-                title="No organisations yet"
-                description="Add one with a plan and a primary admin."
-                action={
-                  <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
-                    <Building2 className="h-4 w-4" aria-hidden />
-                    Add organisation
-                  </Button>
-                }
-              />
+              orgListTab === 'deactivated' ? (
+                <EmptyState
+                  title="No deactivated organisations"
+                  description="Deactivate an organisation from Edit to move it here. Data is kept for audit."
+                />
+              ) : (
+                <EmptyState
+                  title="No active organisations"
+                  description="Add one with a plan and a primary admin."
+                  action={
+                    <Button size="sm" onClick={() => setCreateOrgOpen(true)}>
+                      <Building2 className="h-4 w-4" aria-hidden />
+                      Add organisation
+                    </Button>
+                  }
+                />
+              )
             }
             mobileRender={org => (
               <div className="px-4 py-3 space-y-1">
@@ -1244,64 +1279,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           />
         ))}
 
-      {section === 'feature-catalog' ? <PlatformFeatureCatalogPanel /> : null}
-
-      {section === 'feature-interests' &&
-        (featureInterestLoading && featureInterests.length === 0 ? (
-          <TableSkeleton rows={8} cols={5} />
-        ) : (
-          <DataTable
-            data={featureInterests}
-            columns={[
-              {
-                key: 'org',
-                header: 'Organisation',
-                render: r => r.organisation_name ?? `#${r.organisation_id}`,
-              },
-              {
-                key: 'feature',
-                header: 'Feature',
-                render: r => (
-                  <div>
-                    <p className="font-medium text-heading">{r.feature_title}</p>
-                    <p className="text-xs text-muted font-mono">{r.feature_key}</p>
-                  </div>
-                ),
-              },
-              {
-                key: 'status',
-                header: 'Status',
-                render: r => r.status.replace(/_/g, ' '),
-              },
-              {
-                key: 'created',
-                header: 'Requested',
-                render: r => formatDateTime(r.created_at),
-              },
-              {
-                key: 'actions',
-                header: '',
-                actionsWide: 'compact',
-                render: r => (
-                  <div className="flex justify-center">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={r.status === 'interested' ? 'primary' : 'outline'}
-                      className="whitespace-nowrap"
-                      onClick={() => setReviewingFeatureInterest(r as FeatureInterestRow)}
-                    >
-                      {r.status === 'interested' ? 'Review' : 'Change'}
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-            getRowId={r => String(r.id)}
-            defaultPageSize={25}
-            emptyState={<EmptyState title="No feature access requests" description="Org users request access from feature launch notices." />}
-          />
-        ))}
+      {section === 'add-ons' ? (
+        <PlatformAddOnsAdminPanel ref={addOnsPanelRef} onOpenAccessCountChange={setAddOnsOpenAccess} />
+      ) : null}
 
       {section === 'seat-requests' &&
         (seatRequestLoading && seatRequests.length === 0 ? (
@@ -1473,7 +1453,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onAddSeat={openAddSeatModal}
         addingSeat={addingSeat}
         onEdit={() => setEditOrgOpen(true)}
-        onDelete={() => orgDetail && setDeleteOrgTarget(orgDetail.organisation)}
+        onDeactivate={() => setDeactivateConfirmOpen(true)}
+        onReactivate={() => void setOrganisationActiveStatus('active')}
         onResetPrimaryAdminSignIn={openResetPrimaryAdminSignIn}
         onNotify={() => void openNotify('org')}
       />
@@ -1523,51 +1504,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
       <PlatformWhatsNewModal open={whatsNewOpen} onClose={dismissWhatsNew} />
 
-      <PlatformFeatureInterestModal
-        open={reviewingFeatureInterest != null}
-        interest={reviewingFeatureInterest}
-        loading={featureInterestBusy}
-        onClose={() => !featureInterestBusy && setReviewingFeatureInterest(null)}
-        onApprove={async note => {
-          if (!reviewingFeatureInterest) return
-          const wasRejected = reviewingFeatureInterest.status === 'rejected'
-          setFeatureInterestBusy(true)
-          try {
-            await platformApi.approveFeatureInterest(reviewingFeatureInterest.id, note)
-            toast.success(
-              wasRejected ? 'Access restored for organisation' : 'Feature enabled for organisation',
-            )
-            setReviewingFeatureInterest(null)
-            await loadFeatureInterests()
-            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
-          } catch (err) {
-            toast.error(err instanceof ApiError ? err.message : 'Could not approve')
-          } finally {
-            setFeatureInterestBusy(false)
-          }
-        }}
-        onReject={async note => {
-          if (!reviewingFeatureInterest) return
-          const wasApproved = reviewingFeatureInterest.status === 'approved'
-          setFeatureInterestBusy(true)
-          try {
-            await platformApi.rejectFeatureInterest(reviewingFeatureInterest.id, note)
-            toast.success(
-              wasApproved
-                ? 'Access revoked — organisation notified'
-                : 'Request declined — organisation notified',
-            )
-            setReviewingFeatureInterest(null)
-            await loadFeatureInterests()
-            window.dispatchEvent(new Event(INBOX_REFRESH_EVENT))
-          } catch (err) {
-            toast.error(err instanceof ApiError ? err.message : 'Could not decline')
-          } finally {
-            setFeatureInterestBusy(false)
-          }
-        }}
-      />
-
       <PlatformSeatRequestDecisionModal
         open={seatDecision != null}
         mode={seatDecision?.mode ?? 'approve'}
@@ -1578,18 +1514,18 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       />
 
       <ConfirmDialog
-        open={deleteOrgTarget != null}
-        onClose={() => !deletingOrg && setDeleteOrgTarget(null)}
-        onConfirm={confirmDeleteOrg}
-        title="Delete organisation?"
-        confirmLabel="Delete organisation"
+        open={deactivateConfirmOpen}
+        onClose={() => !togglingOrgStatus && setDeactivateConfirmOpen(false)}
+        onConfirm={() => setOrganisationActiveStatus('inactive')}
+        title="Deactivate organisation?"
+        confirmLabel="Deactivate"
+        slideLabel="Slide to deactivate"
         variant="danger"
-        confirmLoading={deletingOrg}
+        confirmLoading={togglingOrgStatus}
       >
         <p className="text-sm text-muted leading-relaxed">
-          This permanently removes{' '}
-          <span className="font-medium text-heading">{deleteOrgTarget?.name}</span>, its subscription, seats, trade
-          data, and licensed seats. This cannot be undone.
+          <span className="font-medium text-heading">{orgDetail?.organisation.name}</span> will move to
+          Deactivated. Users from this organisation will not be able to sign in. All data is kept for audit.
         </p>
       </ConfirmDialog>
     </div>
