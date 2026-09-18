@@ -82,26 +82,24 @@ export function PlatformEditOrganisationModal({
       footerClassName="w-full items-center justify-between gap-3"
       footer={
         <>
-          {!isSandbox ? (
-            <div className="flex min-w-0 items-start gap-2">
-              <Checkbox
-                id="edit-org-is-test"
-                compact
-                checked={form.is_test}
-                onChange={e => setForm(f => ({ ...f, is_test: e.target.checked }))}
-                aria-label="Test account"
-                className="mt-0.5"
-              />
-              <label htmlFor="edit-org-is-test" className="min-w-0 cursor-pointer">
-                <p className="text-sm text-heading">Test account</p>
-                <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                  For QA only — listed under Test and safe to delete later.
-                </p>
-              </label>
-            </div>
-          ) : (
-            <span />
-          )}
+          <div className="flex min-w-0 items-start gap-2">
+            <Checkbox
+              id="edit-org-is-test"
+              compact
+              checked={form.is_test}
+              onChange={e => setForm(f => ({ ...f, is_test: e.target.checked }))}
+              aria-label="Test account"
+              className="mt-0.5"
+            />
+            <label htmlFor="edit-org-is-test" className="min-w-0 cursor-pointer">
+              <p className="text-sm text-heading">Test account</p>
+              <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                {isSandbox
+                  ? 'For QA only — listed under Test. The system sandbox cannot be deleted.'
+                  : 'For QA only — listed under Test and safe to delete later.'}
+              </p>
+            </label>
+          </div>
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" onClick={onClose} disabled={loading}>
               Cancel
