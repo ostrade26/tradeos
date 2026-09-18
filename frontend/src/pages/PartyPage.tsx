@@ -87,7 +87,7 @@ export function PartyPage() {
     <EmptyState title={title} description={description} />
   )
 
-  const partyKind = producer ? 'Producer' : retailer ? 'Retailer' : broker ? 'Broker' : 'Party'
+  const partyKind = producer ? 'Producer' : retailer ? 'Buyer' : broker ? 'Broker' : 'Party'
 
   return (
     <div className="animate-fade-in">

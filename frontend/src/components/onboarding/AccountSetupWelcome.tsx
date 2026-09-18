@@ -1,16 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Building2,
   Check,
-  FileText,
-  LayoutDashboard,
   Loader2,
   Moon,
-  Rows3,
-  Send,
   Sun,
-  Truck,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -20,21 +15,20 @@ import { roleLabel } from '../../lib/auth'
 import { accountTypeLabel } from '../../lib/platformLabels'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useTheme } from '../../hooks/useTheme'
-import { useTableDensity } from '../../hooks/useTableDensity'
+import { useAuth } from '../../hooks/useAuth'
 import { ACCENT_PRESETS } from '../../lib/accentColor'
 import { authApi } from '../../api/tradeApi'
-import type { TableDensity } from '../../lib/tableDensity'
+import { sessionFromApi } from '../../lib/authSession'
+import { flushPersistPreferences } from '../../hooks/usePersistUserPreferences'
 
 const PROVISION_MIN_MS = 5000
 
 type Phase = 'steps' | 'provisioning'
-type StepId = 'profile' | 'appearance' | 'workspace' | 'review'
-type PrimaryFocus = 'purchase' | 'sales' | 'operations' | 'dashboard'
+type StepId = 'profile' | 'appearance' | 'review'
 
 const STEPS: { id: StepId; label: string; description: string }[] = [
   { id: 'profile', label: 'Your profile', description: 'How you appear in the workspace' },
   { id: 'appearance', label: 'Look & feel', description: 'Theme and brand colour' },
-  { id: 'workspace', label: 'Your workspace', description: 'Density and daily focus' },
   { id: 'review', label: 'Review', description: 'Confirm and finish' },
 ]
 
@@ -108,8 +102,8 @@ function SetupStepper({
 }
 
 export function AccountSetupWelcome({ open, session, onComplete }: Props) {
-  const { theme, setTheme, accentId, setAccentId, accentPreset } = useTheme()
-  const { density, setDensity } = useTableDensity()
+  const { applySession } = useAuth()
+  const { theme, setTheme, accentId, setAccentId, accentPreset, customHex } = useTheme()
 
   const orgName = session.organisationName?.trim() || 'Your organisation'
   const account = accountTypeLabel(session.accountType)
@@ -119,49 +113,8 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
   const [phase, setPhase] = useState<Phase>('steps')
   const [displayName, setDisplayName] = useState(session.name?.trim() || '')
   const [phone, setPhone] = useState(session.phone?.trim() || '')
-  const [primaryFocus, setPrimaryFocus] = useState<PrimaryFocus>('dashboard')
   const [provisionPct, setProvisionPct] = useState(0)
   const [provisionLabel, setProvisionLabel] = useState('Saving your profile…')
-
-  const focusOptions = useMemo(() => {
-    const opts: {
-      id: PrimaryFocus
-      title: string
-      description: string
-      icon: typeof FileText
-    }[] = []
-    if (session.permissions.includes('purchase.view') || session.permissions.includes('purchase.create')) {
-      opts.push({
-        id: 'purchase',
-        title: 'Buying & lifts',
-        description: 'POs, supplier lifts, and inbound inventory',
-        icon: FileText,
-      })
-    }
-    if (session.permissions.includes('sales.view') || session.permissions.includes('sales.create')) {
-      opts.push({
-        id: 'sales',
-        title: 'Selling & fulfilment',
-        description: 'SOs, allocations, and customer delivery',
-        icon: Send,
-      })
-    }
-    if (session.permissions.includes('lifts.view') || session.permissions.includes('lifts.create')) {
-      opts.push({
-        id: 'operations',
-        title: 'Operations desk',
-        description: 'Lifts, logistics, and day-of execution',
-        icon: Truck,
-      })
-    }
-    opts.push({
-      id: 'dashboard',
-      title: 'Executive overview',
-      description: 'Dashboard, inbox, and cross-desk visibility',
-      icon: LayoutDashboard,
-    })
-    return opts
-  }, [session.permissions])
 
   useEffect(() => {
     if (!open) {
@@ -187,27 +140,34 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
     }
 
     bump('Saving your profile…', 12)
+    await flushPersistPreferences()
     try {
-      await authApi.updateProfile({
+      const profileMe = await authApi.updateProfile({
         name: displayName.trim(),
         phone: phone.trim() || undefined,
       })
+      if (session.token) {
+        applySession(sessionFromApi(profileMe, session.token))
+      }
     } catch {
-      /* continue setup */
-    }
-    bump('Applying theme & workspace…', 45)
-    try {
-      await authApi.updatePreferences({
-        theme,
-        accentId,
-        tableDensity: density,
-        setupPrimaryFocus: primaryFocus,
-      })
-    } catch {
-      /* continue */
+      /* still apply appearance prefs */
     }
 
-    bump('Preparing registers & permissions…', 78)
+    bump('Applying theme…', 45)
+    try {
+      const prefsMe = await authApi.updatePreferences({
+        theme,
+        accentId,
+        customHex,
+      })
+      if (session.token) {
+        applySession(sessionFromApi(prefsMe, session.token))
+      }
+    } catch {
+      /* local prefs remain; completion still marks welcome done */
+    }
+
+    bump('Preparing your account…', 78)
     while (performance.now() - start < PROVISION_MIN_MS) {
       await new Promise(r => setTimeout(r, 120))
     }
@@ -216,11 +176,12 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
     onComplete()
   }, [
     accentId,
-    density,
+    applySession,
+    customHex,
     displayName,
     onComplete,
     phone,
-    primaryFocus,
+    session.token,
     theme,
   ])
 
@@ -245,8 +206,6 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
     setStepIndex(i => i + 1)
   }
 
-  const focusLabel = focusOptions.find(o => o.id === primaryFocus)?.title ?? 'Dashboard'
-
   return createPortal(
     <div
       className="fixed inset-0 z-[5000] flex flex-col bg-body"
@@ -268,7 +227,7 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
           <SetupStepper stepIndex={stepIndex} orgName={orgName} phase={phase} />
         </aside>
 
-        <div className="flex flex-1 min-h-0 lg:w-1/2 items-center justify-center overflow-y-auto px-6 py-8 sm:px-10">
+        <div className="flex flex-1 min-h-0 lg:w-1/2 items-center justify-center overflow-y-auto bg-white px-6 py-8 sm:px-10 dark:bg-gray-950">
           <div className="w-full max-w-lg">
             {phase === 'steps' ? (
               <div className="w-full">
@@ -378,78 +337,18 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
                   </>
                 ) : null}
 
-                {stepId === 'workspace' ? (
-                  <>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-accent">Step 3</p>
-                    <h1 className="text-2xl font-semibold text-heading mt-2 tracking-tight">Tune your workspace</h1>
-                    <p className="text-sm text-muted mt-2 leading-relaxed">
-                      Set table density and what you want the desk optimised for first.
-                    </p>
-                    <div className="mt-8 space-y-6">
-                      <div>
-                        <p className="text-sm font-medium text-heading mb-3 flex items-center gap-2">
-                          <Rows3 className="h-4 w-4 text-muted" aria-hidden />
-                          Register density
-                        </p>
-                        <div className="flex rounded-lg border border-gray-200 p-1 dark:border-gray-700 w-fit">
-                          {(['compact', 'relaxed'] as const satisfies TableDensity[]).map(option => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setDensity(option)}
-                              className={cn(
-                                'px-4 py-2 text-sm font-medium rounded-md capitalize cursor-pointer transition-colors',
-                                density === option ? 'bg-accent text-white' : 'text-muted hover:text-heading',
-                              )}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-heading mb-3">Primary focus</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {focusOptions.map(opt => (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => setPrimaryFocus(opt.id)}
-                              className={cn(
-                                'flex gap-3 rounded-lg border p-4 text-left cursor-pointer transition-all attex-focus',
-                                primaryFocus === opt.id
-                                  ? 'border-accent bg-accent/5 ring-1 ring-accent/25'
-                                  : 'border-gray-200 hover:border-gray-300 dark:border-gray-700',
-                              )}
-                            >
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                                <opt.icon className="h-4 w-4" aria-hidden />
-                              </div>
-                              <div>
-                                <p className="text-sm font-semibold text-heading">{opt.title}</p>
-                                <p className="text-xs text-muted mt-0.5 leading-snug">{opt.description}</p>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
                 {stepId === 'review' ? (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-accent">Step 4</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-accent">Step 3</p>
                     <h1 className="text-2xl font-semibold text-heading mt-2 tracking-tight">Review & finish</h1>
                     <p className="text-sm text-muted mt-2 leading-relaxed">
-                      We will save these settings and prepare your workspace.
+                      We will save these settings and prepare your account.
                     </p>
                     <dl className="mt-8 divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
                       {[
                         { label: 'Profile', value: `${displayName.trim()}${phone.trim() ? ` · ${phone.trim()}` : ''}` },
                         { label: 'Organisation', value: `${orgName} · ${role}` },
                         { label: 'Appearance', value: `${theme === 'dark' ? 'Dark' : 'Light'} theme · ${accentPreset.label}` },
-                        { label: 'Workspace', value: `${density} tables · ${focusLabel}` },
                       ].map(row => (
                         <div key={row.label} className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                           <dt className="text-xs font-medium uppercase tracking-wide text-muted">{row.label}</dt>

@@ -194,6 +194,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null)
   const [savingPlan, setSavingPlan] = useState(false)
+  const [deletePlanConfirmOpen, setDeletePlanConfirmOpen] = useState(false)
+  const [deletingPlan, setDeletingPlan] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [savingPayment, setSavingPayment] = useState(false)
   const [notifyOpen, setNotifyOpen] = useState(false)
@@ -208,6 +210,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [publishingRelease, setPublishingRelease] = useState(false)
   const [orgUsers, setOrgUsers] = useState<PlatformUser[]>([])
   const [busyLicenceId, setBusyLicenceId] = useState<number | null>(null)
+  const [suspendLicenceConfirm, setSuspendLicenceConfirm] = useState<OrganisationLicence | null>(null)
   const [busyAmcId, setBusyAmcId] = useState<number | null>(null)
 
   const [createOrgOpen, setCreateOrgOpen] = useState(false)
@@ -600,7 +603,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       licenceColumns({
         busyId: busyLicenceId,
         onActivate: row => void updateLicenceStatus(row, 'active'),
-        onSuspend: row => void updateLicenceStatus(row, 'suspended'),
+        onSuspend: row => setSuspendLicenceConfirm(row),
       }),
     [busyLicenceId, updateLicenceStatus],
   )
@@ -636,6 +639,27 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save plan')
     } finally {
       setSavingPlan(false)
+    }
+  }
+
+  const deleteInactivePlan = async () => {
+    if (!editingPlan || deletingPlan) return
+    setDeletingPlan(true)
+    try {
+      const result = await platformApi.deletePlan(editingPlan.id)
+      const moved =
+        result.moved_count > 0 && result.moved_to
+          ? ` Moved ${result.moved_count} organisation${result.moved_count === 1 ? '' : 's'} to ${result.moved_to.name}.`
+          : ''
+      toast.success(`Plan “${editingPlan.name}” deleted.${moved}`)
+      setDeletePlanConfirmOpen(false)
+      setPlanModalOpen(false)
+      setEditingPlan(null)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete plan')
+    } finally {
+      setDeletingPlan(false)
     }
   }
 
@@ -1203,7 +1227,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
               <div className="px-4 py-3 space-y-1">
                 <p className="font-medium text-heading">{org.name}</p>
                 <p className="text-xs text-muted">
-                  {org.org_code ?? 'No code'} · {org.seats ? `${org.seats.active_assigned_seats}/${org.seats.total_entitled_seats} seats` : 'No seats'}
+                  {org.plan_name?.trim() || 'No plan'} · {org.org_code ?? 'No code'} ·{' '}
+                  {org.seats
+                    ? `${org.seats.active_assigned_seats}/${org.seats.total_entitled_seats} seats`
+                    : 'No seats'}
                 </p>
               </div>
             )}
@@ -1470,16 +1497,18 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
       <PlatformPlanModal
         open={planModalOpen}
-        onClose={() => !savingPlan && setPlanModalOpen(false)}
+        onClose={() => !savingPlan && !deletingPlan && setPlanModalOpen(false)}
         plan={editingPlan}
         loading={savingPlan}
+        deleting={deletingPlan}
         onSubmit={form => void submitPlan(form)}
+        onDelete={() => setDeletePlanConfirmOpen(true)}
       />
 
       <PlatformRecordPaymentModal
         open={paymentModalOpen}
         onClose={() => !savingPayment && setPaymentModalOpen(false)}
-        organisations={organisations}
+        organisations={organisations.filter(org => !organisationIsTest(org))}
         defaultOrganisationId={selectedOrgId}
         loading={savingPayment}
         onSubmit={payload => void submitPayment(payload)}
@@ -1573,6 +1602,35 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       />
 
       <ConfirmDialog
+        open={suspendLicenceConfirm != null}
+        onClose={() => !busyLicenceId && setSuspendLicenceConfirm(null)}
+        onConfirm={async () => {
+          if (!suspendLicenceConfirm) return
+          await updateLicenceStatus(suspendLicenceConfirm, 'suspended')
+          setSuspendLicenceConfirm(null)
+        }}
+        title="Suspend licence?"
+        confirmLabel="Suspend"
+        slideLabel="Slide to suspend"
+        variant="danger"
+        confirmLoading={busyLicenceId === suspendLicenceConfirm?.id}
+      >
+        <p className="text-sm text-muted leading-relaxed">
+          Users at{' '}
+          <span className="font-medium text-heading">
+            {suspendLicenceConfirm?.organisation_name ?? 'this organisation'}
+          </span>
+          {suspendLicenceConfirm?.licence_number ? (
+            <>
+              {' '}
+              (<span className="font-mono text-xs">{suspendLicenceConfirm.licence_number}</span>)
+            </>
+          ) : null}{' '}
+          will not be able to sign in until the licence is activated again. Data and seats are kept.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
         open={deactivateConfirmOpen}
         onClose={() => !togglingOrgStatus && setDeactivateConfirmOpen(false)}
         onConfirm={() => setOrganisationActiveStatus('inactive')}
@@ -1603,6 +1661,30 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           <span className="font-medium text-heading">{orgDetail?.organisation.name}</span> and all of its
           users, seats, trade data, and notices. This cannot be undone. Real customer organisations cannot
           be deleted this way.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deletePlanConfirmOpen}
+        onClose={() => !deletingPlan && setDeletePlanConfirmOpen(false)}
+        onConfirm={() => void deleteInactivePlan()}
+        title="Delete plan?"
+        confirmLabel="Delete plan"
+        slideLabel="Slide to delete"
+        variant="danger"
+        confirmLoading={deletingPlan}
+      >
+        <p className="text-sm text-muted leading-relaxed">
+          Permanently remove{' '}
+          <span className="font-medium text-heading">{editingPlan?.name}</span>
+          {editingPlan?.slug ? (
+            <>
+              {' '}
+              (<span className="font-mono text-xs">{editingPlan.slug}</span>)
+            </>
+          ) : null}{' '}
+          from Plans &amp; Pricing. Organisations still on this plan are moved to another active plan
+          automatically.
         </p>
       </ConfirmDialog>
     </div>

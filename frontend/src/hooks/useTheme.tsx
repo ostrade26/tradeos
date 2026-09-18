@@ -11,7 +11,7 @@ import {
   CUSTOM_ACCENT_ID,
   normalizeHex,
 } from '../lib/accentColor'
-import { readScopedPref, writeScopedPref } from '../lib/userPreferences'
+import { preferenceUserKey, readScopedPref, writeScopedPref } from '../lib/userPreferences'
 import { schedulePersistPreferences } from './usePersistUserPreferences'
 import { useAuth } from './useAuth'
 
@@ -38,7 +38,7 @@ function readTheme(userKey: string | null): Theme {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const userKey = session?.username ?? null
+  const userKey = preferenceUserKey()
 
   const [theme, setThemeState] = useState<Theme>(() => readTheme(userKey))
   const [accentId, setAccentIdState] = useState(() => getStoredAccentId(userKey))
@@ -48,7 +48,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(readTheme(userKey))
     setAccentIdState(getStoredAccentId(userKey))
     setCustomHexState(getStoredCustomHex(userKey))
-  }, [userKey])
+  }, [userKey, session?.preferences?.theme, session?.preferences?.accentId, session?.preferences?.customHex])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')

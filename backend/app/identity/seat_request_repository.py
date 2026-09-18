@@ -74,7 +74,7 @@ def list_seat_requests_platform(
                 SELECT sr.*, o.name AS organisation_name
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE sr.status = %s
+                WHERE sr.status = %s AND COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT %s
                 """,
@@ -86,6 +86,7 @@ def list_seat_requests_platform(
                 SELECT sr.*, o.name AS organisation_name
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
+                WHERE COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT %s
                 """,
@@ -98,7 +99,7 @@ def list_seat_requests_platform(
                 SELECT sr.*, o.name AS organisation_name
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE sr.status = ?
+                WHERE sr.status = ? AND COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT ?
                 """,
@@ -110,6 +111,7 @@ def list_seat_requests_platform(
                 SELECT sr.*, o.name AS organisation_name
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
+                WHERE COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT ?
                 """,

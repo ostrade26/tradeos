@@ -68,6 +68,44 @@ def _organisation_is_active_for_access(row: Any) -> bool:
     return status == "active"
 
 
+def _licence_block_detail(conn, organisation_id: int) -> str | None:
+    """Return a 403 detail when the org's current licence blocks product access."""
+    if uses_postgres():
+        row = conn.execute(
+            """
+            SELECT status FROM organisation_licenses
+            WHERE organisation_id = %s
+            ORDER BY id DESC LIMIT 1
+            """,
+            (organisation_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT status FROM organisation_licenses
+            WHERE organisation_id = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (organisation_id,),
+        ).fetchone()
+    if not row:
+        return None
+    status = str(row_get(row, "status") or "").strip().lower()
+    if status == "suspended":
+        return "This organisation's licence has been suspended. Contact Tradeal support."
+    if status == "cancelled":
+        return "This organisation's licence has been cancelled. Contact Tradeal support."
+    return None
+
+
+def _licence_allows_access(conn, row: Any) -> bool:
+    r = _mapping(row)
+    org_id = r.get("organisation_id")
+    if org_id is None:
+        return True
+    return _licence_block_detail(conn, int(org_id)) is None
+
+
 def _reject_inactive_organisation(row: Any, *, for_login: bool) -> None:
     if _organisation_is_active_for_access(row):
         return
@@ -77,6 +115,17 @@ def _reject_inactive_organisation(row: Any, *, for_login: bool) -> None:
             detail="This organisation has been deactivated. Contact Tradeal support.",
         )
     raise HTTPException(status_code=403, detail="Organisation is deactivated")
+
+
+def _reject_blocked_licence(conn, row: Any) -> None:
+    r = _mapping(row)
+    org_id = r.get("organisation_id")
+    if org_id is None:
+        return
+    detail = _licence_block_detail(conn, int(org_id))
+    if not detail:
+        return
+    raise HTTPException(status_code=403, detail=detail)
 
 
 def _permissions_for_role(role_id: int, conn) -> frozenset[str]:
@@ -157,6 +206,8 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
                 return None
             if not _organisation_is_active_for_access(row):
                 return None
+            if not _licence_allows_access(conn, row):
+                return None
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             if not user_has_org_seat_access(conn, user.id, user.role_slug):
@@ -170,6 +221,8 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
         if row["status"] != "active":
             return None
         if not _organisation_is_active_for_access(row):
+            return None
+        if not _licence_allows_access(conn, row):
             return None
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
@@ -199,6 +252,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
                 return None
             if not _organisation_is_active_for_access(row):
                 return None
+            if not _licence_allows_access(conn, row):
+                return None
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             if not user_has_org_seat_access(conn, user.id, user.role_slug):
@@ -210,6 +265,8 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
         if not row or row["status"] != "active":
             return None
         if not _organisation_is_active_for_access(row):
+            return None
+        if not _licence_allows_access(conn, row):
             return None
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
@@ -243,6 +300,7 @@ def authenticate(username: str, password: str) -> AuthUser:
             if not verify_password(password, row["password_hash"]):
                 raise HTTPException(status_code=401, detail="Invalid username or password")
             _reject_inactive_organisation(row, for_login=True)
+            _reject_blocked_licence(conn, row)
             perms = _permissions_for_role(int(row["role_id"]), conn)
             user = _row_to_user(row, perms)
             _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -255,6 +313,7 @@ def authenticate(username: str, password: str) -> AuthUser:
         if not verify_password(password, row["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid username or password")
         _reject_inactive_organisation(row, for_login=True)
+        _reject_blocked_licence(conn, row)
         perms = _permissions_for_role(int(row["role_id"]), conn)
         user = _row_to_user(row, perms)
         _validate_org_membership(user.id, user.role_slug, conn, strict=True)
@@ -464,7 +523,6 @@ def merge_user_preferences(user_id: int, patch: dict[str, Any]) -> AuthUser:
         "lastSeenPlatformWhatsNew",
         "completedOrgProductTour",
         "completedOrgAccountWelcome",
-        "setupPrimaryFocus",
     }
     clean = {k: v for k, v in patch.items() if k in allowed and v is not None}
     if not clean:

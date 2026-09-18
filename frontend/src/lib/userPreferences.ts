@@ -15,6 +15,16 @@ export function scopedStorageKey(baseKey: string, userKey: string | null = prefe
 export function readScopedPref(baseKey: string, userKey: string | null = preferenceUserKey()): string | null {
   const scoped = storageGet(scopedStorageKey(baseKey, userKey))
   if (scoped != null) return scoped
+  // Migrate prefs previously scoped by username into id-based keys.
+  const session = loadAuthSession()
+  const username = session?.username?.trim()
+  if (userKey?.startsWith('id:') && username) {
+    const legacyUser = storageGet(scopedStorageKey(baseKey, username))
+    if (legacyUser != null) {
+      storageSet(scopedStorageKey(baseKey, userKey), legacyUser)
+      return legacyUser
+    }
+  }
   if (userKey) {
     const legacy = storageGet(baseKey)
     if (legacy != null) {

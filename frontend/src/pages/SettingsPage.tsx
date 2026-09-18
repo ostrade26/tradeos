@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, Outlet, useOutletContext, useParams } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
+import { Link, Navigate, Outlet, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronRight, UserPlus } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
-import { Breadcrumb } from '../components/ui/Tabs'
+import { Breadcrumb, TabPanel, Tabs } from '../components/ui/Tabs'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { Button } from '../components/ui/Button'
 import { useAuth, usePermissions } from '../hooks/useAuth'
 import { useProductTour } from '../contexts/ProductTourContext'
 import { ApiError } from '../api/client'
@@ -36,7 +37,8 @@ import {
   SettingsSectionContent,
   type SettingsSectionHandlers,
 } from '../components/settings/SettingsSectionContent'
-import { SettingsTeamSection } from '../components/settings/SettingsTeamPanel'
+import { SettingsTeamPanel } from '../components/settings/SettingsTeamPanel'
+import { SettingsSubscriptionPanelContent } from '../components/settings/SettingsSubscriptionSidePanel'
 
 function useSettingsBilling(canViewSubscription: boolean) {
   const [billing, setBilling] = useState<OrganisationDetailResponse | null>(null)
@@ -333,8 +335,7 @@ function useSettingsOutlet(): SettingsOutletContext {
 
 function visibleSections(showPlanSection: boolean, showTeamSection: boolean) {
   return SETTINGS_SECTIONS.filter(s => {
-    if (s.planSection && !showPlanSection) return false
-    if (s.teamSection && !showTeamSection) return false
+    if (s.planTeamSection) return showPlanSection || showTeamSection
     return true
   })
 }
@@ -375,27 +376,46 @@ export function SettingsHubPage() {
 
 export function SettingsSectionPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { sectionHandlers, showPlanSection, showTeamSection } = useSettingsOutlet()
+  const [teamCreateOpen, setTeamCreateOpen] = useState(false)
 
   if (!sectionParam || !isSettingsSectionId(sectionParam)) {
     return <Navigate to={appPath('/settings')} replace />
   }
 
-  const section = sectionParam as SettingsSectionId
-  if (section === 'plan' && !showPlanSection) {
-    return <Navigate to={appPath('/settings')} replace />
+  // Legacy /settings/team → combined Plan & team page (Team tab)
+  if (sectionParam === 'team') {
+    return <Navigate to={`${settingsPath('plan')}?tab=team`} replace />
   }
-  if (section === 'team' && !showTeamSection) {
+
+  const section = sectionParam as SettingsSectionId
+  if (section === 'plan' && !showPlanSection && !showTeamSection) {
     return <Navigate to={appPath('/settings')} replace />
   }
 
   const meta = SETTINGS_SECTIONS.find(s => s.id === section)
   const sectionMaxWidth =
-    section === 'team'
-      ? 'w-full max-w-none'
-      : section === 'plan'
-        ? 'max-w-3xl'
-        : 'max-w-2xl'
+    section === 'plan' ? 'w-full max-w-none' : 'max-w-2xl'
+
+  const requestedTab = searchParams.get('tab')
+  const planTeamTab: 'plan' | 'team' =
+    showPlanSection && showTeamSection
+      ? requestedTab === 'team'
+        ? 'team'
+        : 'plan'
+      : showTeamSection
+        ? 'team'
+        : 'plan'
+
+  const setPlanTeamTab = (id: string) => {
+    const next = id === 'team' ? 'team' : 'plan'
+    setSearchParams(
+      next === 'plan' ? {} : { tab: 'team' },
+      { replace: true },
+    )
+    if (next !== 'team') setTeamCreateOpen(false)
+  }
 
   const breadcrumb = (
     <Breadcrumb
@@ -407,19 +427,69 @@ export function SettingsSectionPage() {
     />
   )
 
-  if (section === 'team') {
+  if (section === 'plan') {
+    const showTabs = showPlanSection && showTeamSection
+    const showAddUser =
+      planTeamTab === 'team' && showTeamSection && sectionHandlers.canManageTeam
     return (
       <div className={cn('animate-fade-in', sectionMaxWidth)}>
-        <SettingsTeamSection
-          title={meta?.label ?? 'Team'}
+        <PageHeader
+          title={meta?.label ?? 'Plan & team'}
           subtitle={meta?.description}
           breadcrumb={breadcrumb}
-          canManage={sectionHandlers.canManageTeam}
-          billing={sectionHandlers.billing}
-          billingLoading={sectionHandlers.billingLoading}
-          canRequestSeats={sectionHandlers.canRequestSeats}
-          onMembersChanged={sectionHandlers.onMembersChanged}
         />
+
+        {showTabs ? (
+          <Tabs
+            active={planTeamTab}
+            onChange={setPlanTeamTab}
+            className="gap-6"
+            buttonClassName="pt-2.5 px-0"
+            panelIdPrefix="settings-plan-team"
+            tabs={[
+              { id: 'plan', label: 'Plan' },
+              { id: 'team', label: 'Team' },
+            ]}
+          />
+        ) : null}
+
+        {showAddUser ? (
+          <div className="mt-4 flex justify-end">
+            <Button size="sm" onClick={() => setTeamCreateOpen(true)}>
+              <UserPlus className="h-4 w-4" aria-hidden />
+              Add user
+            </Button>
+          </div>
+        ) : null}
+
+        <div className={cn(showTabs || showAddUser ? 'mt-4' : undefined)}>
+          {showPlanSection ? (
+            <TabPanel id="plan" active={planTeamTab === 'plan'} panelIdPrefix="settings-plan-team">
+              <div className="max-w-3xl">
+                <SettingsSubscriptionPanelContent
+                  billing={sectionHandlers.billing}
+                  loading={sectionHandlers.billingLoading}
+                  canRequestSeats={sectionHandlers.canRequestSeats}
+                  onSeatsChanged={sectionHandlers.onSeatsChanged}
+                />
+              </div>
+            </TabPanel>
+          ) : null}
+
+          {showTeamSection ? (
+            <TabPanel id="team" active={planTeamTab === 'team'} panelIdPrefix="settings-plan-team">
+              <SettingsTeamPanel
+                canManage={sectionHandlers.canManageTeam}
+                billing={sectionHandlers.billing}
+                billingLoading={sectionHandlers.billingLoading}
+                canRequestSeats={sectionHandlers.canRequestSeats}
+                onMembersChanged={sectionHandlers.onMembersChanged}
+                createOpen={teamCreateOpen}
+                onCreateOpenChange={setTeamCreateOpen}
+              />
+            </TabPanel>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -428,7 +498,7 @@ export function SettingsSectionPage() {
     <div className={cn('animate-fade-in', sectionMaxWidth)}>
       <PageHeader
         title={meta?.label ?? 'Settings'}
-        subtitle={section === 'plan' ? undefined : meta?.description}
+        subtitle={meta?.description}
         breadcrumb={breadcrumb}
       />
       <SettingsSectionContent section={section} h={sectionHandlers} />

@@ -574,7 +574,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
 
   const canDeleteRetailer = useCallback((id: string) => {
     const retailer = data.retailers.find(r => r.id === id)
-    if (!retailer) return { ok: false, reason: 'Retailer not found' }
+    if (!retailer) return { ok: false, reason: 'Buyer not found' }
     if (data.tradeOrders.some(o => o.side === 'sale' && o.partyName === retailer.name)) {
       return { ok: false, reason: 'Linked to one or more sales orders' }
     }

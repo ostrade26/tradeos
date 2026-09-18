@@ -320,6 +320,7 @@ def list_licenses(conn) -> list[dict[str, Any]]:
         SELECT l.*, o.name AS organisation_name, o.org_code
         FROM organisation_licenses l
         JOIN organisations o ON o.id = l.organisation_id
+        WHERE COALESCE(o.is_test, 0) = 0
         ORDER BY l.id DESC
     """
     rows = conn.execute(q).fetchall()
@@ -339,6 +340,7 @@ def list_amcs(conn) -> list[dict[str, Any]]:
         FROM organisation_amcs a
         JOIN organisations o ON o.id = a.organisation_id
         JOIN organisation_licenses l ON l.id = a.licence_id
+        WHERE COALESCE(o.is_test, 0) = 0
         ORDER BY a.end_date ASC
     """
     rows = conn.execute(q).fetchall()
@@ -356,6 +358,7 @@ def list_payments(conn) -> list[dict[str, Any]]:
         FROM organisation_payments p
         JOIN organisations o ON o.id = p.organisation_id
         LEFT JOIN organisation_licenses l ON l.id = p.licence_id
+        WHERE COALESCE(o.is_test, 0) = 0
         ORDER BY p.payment_date DESC, p.id DESC
     """
     return [dict(_mapping(r)) for r in conn.execute(q).fetchall()]
@@ -665,12 +668,24 @@ def update_payment(conn, payment_id: int, patch: dict[str, Any], actor_user_id: 
 
 def dashboard_metrics(conn) -> dict[str, Any]:
     refresh_amc_statuses(conn)
-    orgs = conn.execute("SELECT COUNT(*) AS n FROM organisations").fetchone()
+    orgs = conn.execute(
+        "SELECT COUNT(*) AS n FROM organisations WHERE COALESCE(is_test, 0) = 0"
+    ).fetchone()
     active_lic = conn.execute(
-        "SELECT COUNT(*) AS n FROM organisation_licenses WHERE status = 'active'"
+        """
+        SELECT COUNT(*) AS n
+        FROM organisation_licenses l
+        JOIN organisations o ON o.id = l.organisation_id
+        WHERE l.status = 'active' AND COALESCE(o.is_test, 0) = 0
+        """
     ).fetchone()
     amcs_full = conn.execute(
-        "SELECT end_date, grace_until, status FROM organisation_amcs"
+        """
+        SELECT a.end_date, a.grace_until, a.status
+        FROM organisation_amcs a
+        JOIN organisations o ON o.id = a.organisation_id
+        WHERE COALESCE(o.is_test, 0) = 0
+        """
     ).fetchall()
     amc_counts = {"active": 0, "due_soon": 0, "grace_period": 0, "expired": 0, "cancelled": 0}
     for row in amcs_full:
@@ -678,7 +693,9 @@ def dashboard_metrics(conn) -> dict[str, Any]:
         st = compute_amc_status(r["end_date"], r.get("grace_until"), r.get("status") or "")
         amc_counts[st] = amc_counts.get(st, 0) + 1
 
-    orgs_rows = conn.execute("SELECT id FROM organisations").fetchall()
+    orgs_rows = conn.execute(
+        "SELECT id FROM organisations WHERE COALESCE(is_test, 0) = 0"
+    ).fetchall()
     purchased = 0
     assigned = 0
     available = 0
@@ -690,7 +707,12 @@ def dashboard_metrics(conn) -> dict[str, Any]:
         available += int(s.get("available_seats") or 0)
 
     pays = conn.execute(
-        "SELECT payment_type, amount_cents, status FROM organisation_payments"
+        """
+        SELECT p.payment_type, p.amount_cents, p.status
+        FROM organisation_payments p
+        JOIN organisations o ON o.id = p.organisation_id
+        WHERE COALESCE(o.is_test, 0) = 0
+        """
     ).fetchall()
     licence_rev = 0
     amc_rev = 0

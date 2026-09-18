@@ -90,8 +90,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
   const showFeaturesNav = hasPermission('organisation.subscription.view') && !isPlatformAdmin
   const { pendingCount: openSeatRequests, openProductRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
-    if (s.planSection && !showPlanInSettings) return false
-    if (s.teamSection && !showTeamInSettings) return false
+    if (s.planTeamSection) return showPlanInSettings || showTeamInSettings
     return true
   })
   const platformNav = platformNavBase.filter(item => !('featuresNav' in item && item.featuresNav) || showFeaturesNav)

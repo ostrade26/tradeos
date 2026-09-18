@@ -195,13 +195,17 @@ export function PlatformPlanModal({
   onClose,
   plan,
   loading,
+  deleting = false,
   onSubmit,
+  onDelete,
 }: {
   open: boolean
   onClose: () => void
   plan: SubscriptionPlan | null
   loading: boolean
+  deleting?: boolean
   onSubmit: (payload: PlanFormPayload) => void
+  onDelete?: () => void
 }) {
   const [form, setForm] = useState<PlanFormPayload>(emptyForm())
   const [licenceRupees, setLicenceRupees] = useState('')
@@ -220,6 +224,8 @@ export function PlatformPlanModal({
   }, [open, plan])
 
   const slugLocked = Boolean(plan)
+  const canDelete = Boolean(plan && plan.status === 'inactive' && onDelete)
+  const busy = loading || deleting
 
   return (
     <Modal
@@ -229,34 +235,49 @@ export function PlatformPlanModal({
       subtitle="Prices apply to new licences. Existing licences keep recorded amounts."
       size="xl"
       bodyClassName="split-pane !p-0 min-h-0 flex-1 overflow-hidden"
+      footerClassName="w-full items-center justify-between gap-3"
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            loading={loading}
-            onClick={() =>
-              onSubmit({
-                ...form,
-                slug: form.slug.trim().toLowerCase(),
-                name: form.name.trim(),
-                licence_price_cents: centsFromRupees(licenceRupees),
-                amc_price_cents: centsFromRupees(amcRupees),
-                additional_seat_licence_cents: centsFromRupees(seatLicenceRupees),
-                additional_seat_amc_cents: centsFromRupees(seatAmcRupees),
-                additional_seat_annual_price_cents: centsFromRupees(seatAmcRupees),
-                included_seats: Math.max(
-                  1,
-                  (form.included_admin_seats ?? 0) + (form.included_operator_seats ?? 0),
-                ),
-              })
-            }
-            disabled={!form.slug.trim() || !form.name.trim()}
-          >
-            Save plan
-          </Button>
-        </div>
+        <>
+          {canDelete ? (
+            <Button
+              variant="outline"
+              className="text-danger border-danger/30 hover:bg-danger/5"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              Delete plan
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              loading={loading}
+              onClick={() =>
+                onSubmit({
+                  ...form,
+                  slug: form.slug.trim().toLowerCase(),
+                  name: form.name.trim(),
+                  licence_price_cents: centsFromRupees(licenceRupees),
+                  amc_price_cents: centsFromRupees(amcRupees),
+                  additional_seat_licence_cents: centsFromRupees(seatLicenceRupees),
+                  additional_seat_amc_cents: centsFromRupees(seatAmcRupees),
+                  additional_seat_annual_price_cents: centsFromRupees(seatAmcRupees),
+                  included_seats: Math.max(
+                    1,
+                    (form.included_admin_seats ?? 0) + (form.included_operator_seats ?? 0),
+                  ),
+                })
+              }
+              disabled={busy || !form.slug.trim() || !form.name.trim()}
+            >
+              Save plan
+            </Button>
+          </div>
+        </>
       }
     >
       <div className="grid min-h-0 h-[min(36rem,calc(90dvh-12rem))] lg:grid-cols-[minmax(0,1.15fr)_minmax(17rem,0.85fr)]">

@@ -1578,7 +1578,7 @@ class TradeService:
         if not name:
             raise ValueError("Name is required")
         if any(r.get("name", "").lower() == name.lower() for r in data.get("retailers") or []):
-            raise ValueError("A retailer with this name already exists")
+            raise ValueError("A buyer with this name already exists")
         products = parse_products(input_data.get("products"))
         retailer = {
             "id": uid(),
@@ -1600,7 +1600,7 @@ class TradeService:
         data = self._read()
         retailer = next((r for r in data.get("retailers") or [] if r.get("id") == retailer_id), None)
         if not retailer:
-            raise ValueError("Retailer not found")
+            raise ValueError("Buyer not found")
         name = (input_data.get("name") or "").strip()
         if not name:
             raise ValueError("Name is required")
@@ -1608,7 +1608,7 @@ class TradeService:
             r.get("id") != retailer_id and r.get("name", "").lower() == name.lower()
             for r in data.get("retailers") or []
         ):
-            raise ValueError("A retailer with this name already exists")
+            raise ValueError("A buyer with this name already exists")
         products = parse_products(input_data.get("products"))
         old_name = retailer["name"]
         updated = {**retailer, "name": name, "location": (input_data.get("location") or "").strip(), "products": products}
@@ -1630,7 +1630,7 @@ class TradeService:
         data = self._read()
         retailer = next((r for r in data.get("retailers") or [] if r.get("id") == retailer_id), None)
         if not retailer:
-            return {"ok": False, "reason": "Retailer not found"}
+            return {"ok": False, "reason": "Buyer not found"}
         if any(o.get("side") == "sale" and o.get("partyName") == retailer["name"] for o in data.get("tradeOrders") or []):
             return {"ok": False, "reason": "Linked to one or more sales orders"}
         return {"ok": True}
@@ -1638,7 +1638,7 @@ class TradeService:
     def delete_retailer(self, retailer_id: str) -> tuple[None, dict]:
         check = self.can_delete_retailer(retailer_id)
         if not check.get("ok"):
-            raise ValueError(check.get("reason") or "Cannot delete retailer")
+            raise ValueError(check.get("reason") or "Cannot delete buyer")
         data = self._read()
         next_data = {
             **data,

@@ -26,7 +26,7 @@ DEFAULT_PLANS: list[dict[str, Any]] = [
     {
         "slug": "professional",
         "name": "Professional",
-        "description": "Full Tradeal for growing wholesalers and retailers.",
+        "description": "Full Tradeal for growing wholesalers.",
         "monthly_price_cents": 0,
         "annual_price_cents": 0,
         "included_seats": 1,

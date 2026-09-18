@@ -118,6 +118,17 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
       ),
     },
     {
+      key: 'plan_name',
+      header: 'Plan',
+      sortable: true,
+      sortValue: r => r.plan_name ?? '',
+      render: r => (
+        <span className="text-heading max-w-[10rem] truncate block">
+          {r.plan_name?.trim() || '—'}
+        </span>
+      ),
+    },
+    {
       key: 'location',
       header: 'Location',
       sortable: true,

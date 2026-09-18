@@ -184,10 +184,11 @@ def _users_in_org(conn, organisation_id: int, *, admins_only: bool) -> list[int]
 def _active_licence_org_ids(conn) -> list[int]:
     rows = conn.execute(
         """
-        SELECT DISTINCT organisation_id
-        FROM organisation_licenses
-        WHERE status = 'active'
-        ORDER BY organisation_id
+        SELECT DISTINCT l.organisation_id
+        FROM organisation_licenses l
+        JOIN organisations o ON o.id = l.organisation_id
+        WHERE l.status = 'active' AND COALESCE(o.is_test, 0) = 0
+        ORDER BY l.organisation_id
         """
     ).fetchall()
     return [int(row_dict(r)["organisation_id"]) for r in rows]

@@ -368,20 +368,130 @@ def upsert_plan(body: PlanBody, request: Request) -> dict[str, Any]:
         return {"plan": dict(row)}
 
 
+@router.delete("/plans/{plan_id}", summary="Delete an inactive subscription plan")
+def delete_plan(plan_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscription_plans.manage")
+
+    def _delete(conn) -> dict[str, Any]:
+        ph = "%s" if uses_postgres() else "?"
+        row = conn.execute(
+            f"SELECT * FROM subscription_plans WHERE id = {ph}",
+            (plan_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        plan = dict(row)
+        if str(plan.get("status") or "") != "inactive":
+            raise HTTPException(
+                status_code=403,
+                detail="Only inactive plans can be deleted. Set status to Inactive first.",
+            )
+        sub_count_row = conn.execute(
+            f"SELECT COUNT(*) AS c FROM subscriptions WHERE plan_id = {ph}",
+            (plan_id,),
+        ).fetchone()
+        assigned = int(dict(sub_count_row)["c"] if sub_count_row else 0)
+        moved_to: dict[str, Any] | None = None
+        if assigned > 0:
+            fallback = conn.execute(
+                f"""
+                SELECT id, name, slug FROM subscription_plans
+                WHERE status = 'active' AND id <> {ph}
+                ORDER BY id
+                LIMIT 1
+                """,
+                (plan_id,),
+            ).fetchone()
+            if not fallback:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "This plan is still assigned to organisations and there is no other "
+                        "active plan to move them to. Activate or create another plan first."
+                    ),
+                )
+            moved_to = dict(fallback)
+            now = _now()
+            conn.execute(
+                f"""
+                UPDATE subscriptions
+                SET plan_id = {ph}, updated_at = {ph}
+                WHERE plan_id = {ph}
+                """,
+                (int(moved_to["id"]), now, plan_id),
+            )
+        # Historical licences keep plan_name; clear FK so the row can be removed.
+        conn.execute(
+            f"UPDATE organisation_licenses SET plan_id = NULL WHERE plan_id = {ph}",
+            (plan_id,),
+        )
+        conn.execute(f"DELETE FROM subscription_plans WHERE id = {ph}", (plan_id,))
+        append_audit_log(
+            organisation_id=None,
+            actor_user_id=session.user.id,
+            action="subscription_plan.deleted",
+            entity_type="subscription_plan",
+            entity_id=str(plan_id),
+            old_value=plan,
+            new_value={"moved_subscriptions_to": moved_to, "moved_count": assigned} if moved_to else None,
+        )
+        return {**plan, "_moved_to": moved_to, "_moved_count": assigned}
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            plan = _delete(conn)
+            conn.commit()
+            moved_to = plan.pop("_moved_to", None)
+            moved_count = plan.pop("_moved_count", 0)
+            return {"deleted": plan, "moved_to": moved_to, "moved_count": moved_count}
+    with _sqlite_connect() as conn:
+        plan = _delete(conn)
+        conn.commit()
+        moved_to = plan.pop("_moved_to", None)
+        moved_count = plan.pop("_moved_count", 0)
+        return {"deleted": plan, "moved_to": moved_to, "moved_count": moved_count}
+
+
 @router.get("/organisations", summary="List organisations")
 def list_organisations(request: Request) -> dict[str, Any]:
     auth.require_platform(_session(request))
     auth.require_permission(_session(request), "organisations.view")
     fields = _org_list_fields()
+    q = f"""
+        SELECT {fields},
+          COALESCE(
+            (
+              SELECT p.name
+              FROM subscriptions s
+              JOIN subscription_plans p ON p.id = s.plan_id
+              WHERE s.organisation_id = organisations.id
+                AND s.status IN ('trial', 'active', 'past_due')
+              ORDER BY s.id DESC
+              LIMIT 1
+            ),
+            (
+              SELECT l.plan_name
+              FROM organisation_licenses l
+              WHERE l.organisation_id = organisations.id
+              ORDER BY l.id DESC
+              LIMIT 1
+            ),
+            ''
+          ) AS plan_name
+        FROM organisations
+        ORDER BY name
+    """
     if uses_postgres():
         with _pg_connect() as conn:
-            rows = conn.execute(f"SELECT {fields} FROM organisations ORDER BY name").fetchall()
+            rows = conn.execute(q).fetchall()
             orgs = [dict(r) for r in rows]
             for org in orgs:
                 org["seats"] = seat_summary(conn, int(org["id"]))
             return {"organisations": orgs}
     with _sqlite_connect() as conn:
-        rows = conn.execute(f"SELECT {fields} FROM organisations ORDER BY name").fetchall()
+        rows = conn.execute(q).fetchall()
         orgs = [dict(r) for r in rows]
         for org in orgs:
             org["seats"] = seat_summary(conn, int(org["id"]))

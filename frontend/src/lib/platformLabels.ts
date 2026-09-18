@@ -2,7 +2,7 @@ import type { AccountType, OrgRoleSlug } from '../api/platformApi'
 
 export function accountTypeLabel(type: AccountType): string {
   if (type === 'broker') return 'Broker'
-  return 'Wholesaler / Retailer'
+  return 'Wholesaler'
 }
 
 export function orgRoleLabel(slug: string): string {

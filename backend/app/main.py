@@ -26,7 +26,7 @@ OPENAPI_TAGS = [
     {"name": "orders", "description": "Purchase and sales order CRUD."},
     {"name": "contracts", "description": "Contract confirmations."},
     {"name": "lifts", "description": "Lift scheduling, updates, and delivery."},
-    {"name": "directory", "description": "Brokers, producers, and retailers."},
+    {"name": "directory", "description": "Brokers, producers, and buyers."},
     {"name": "catalog", "description": "Items and delivery spots."},
     {"name": "companies", "description": "Company linking from contract PDFs."},
     {"name": "leads", "description": "Marketing demo requests from the Tradeal website."},
@@ -142,7 +142,6 @@ class PreferencesPatchBody(BaseModel):
     lastSeenPlatformWhatsNew: str | None = None
     completedOrgProductTour: bool | None = None
     completedOrgAccountWelcome: bool | None = None
-    setupPrimaryFocus: str | None = None
 
 
 class ChangePasswordBody(BaseModel):
@@ -599,7 +598,7 @@ def can_delete_producer(producer_id: str, request: Request) -> dict:
     return _trade_service(request).can_delete_producer(producer_id)
 
 
-@app.post("/api/v1/retailers", tags=["directory"], summary="Create retailer")
+@app.post("/api/v1/retailers", tags=["directory"], summary="Create buyer")
 def create_retailer(body: DictBody, request: Request) -> dict:
     auth.require_permission(_session(request), "organisation.edit")
 
@@ -610,7 +609,7 @@ def create_retailer(body: DictBody, request: Request) -> dict:
     return _handle(run)
 
 
-@app.patch("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Update retailer")
+@app.patch("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Update buyer")
 def update_retailer(retailer_id: str, body: DictBody, request: Request) -> dict:
     auth.require_permission(_session(request), "organisation.edit")
 
@@ -621,7 +620,7 @@ def update_retailer(retailer_id: str, body: DictBody, request: Request) -> dict:
     return _handle(run)
 
 
-@app.delete("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Delete retailer")
+@app.delete("/api/v1/retailers/{retailer_id}", tags=["directory"], summary="Delete buyer")
 def delete_retailer(retailer_id: str, request: Request) -> dict:
     auth.require_permission(_session(request), "organisation.edit")
 
@@ -632,7 +631,7 @@ def delete_retailer(retailer_id: str, request: Request) -> dict:
     return _handle(run)
 
 
-@app.get("/api/v1/retailers/{retailer_id}/can-delete", tags=["directory"], summary="Check if retailer can be deleted")
+@app.get("/api/v1/retailers/{retailer_id}/can-delete", tags=["directory"], summary="Check if buyer can be deleted")
 def can_delete_retailer(retailer_id: str, request: Request) -> dict:
     _session(request)
     return _trade_service(request).can_delete_retailer(retailer_id)

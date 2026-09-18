@@ -614,6 +614,7 @@ def list_platform_seats(conn) -> list[dict[str, Any]]:
         FROM organisation_seats s
         JOIN organisations o ON o.id = s.organisation_id
         WHERE s.status = 'active'
+          AND COALESCE(o.is_test, 0) = 0
           AND EXISTS (
             SELECT 1 FROM organisation_members m
             WHERE m.seat_id = s.id AND m.status = 'active'

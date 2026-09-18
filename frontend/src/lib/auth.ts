@@ -16,7 +16,6 @@ export interface UserPreferences {
   lastSeenPlatformWhatsNew?: string
   completedOrgProductTour?: boolean
   completedOrgAccountWelcome?: boolean
-  setupPrimaryFocus?: 'purchase' | 'sales' | 'operations' | 'dashboard'
 }
 
 export interface AuthSession {

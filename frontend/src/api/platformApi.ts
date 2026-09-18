@@ -34,6 +34,8 @@ export interface PlatformOrganisation {
   sandbox_tools?: number
   /** Temporary QA/demo customer — listed under Test and deletable. */
   is_test?: number | boolean
+  /** Current subscription / licence plan name for register display. */
+  plan_name?: string | null
   created_at: string
   updated_at: string
   seats?: SeatSummary
@@ -439,6 +441,15 @@ export const platformApi = {
     apiFetch<{ plan: SubscriptionPlan }>('/platform/plans', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  deletePlan: (planId: number) =>
+    apiFetch<{
+      deleted: SubscriptionPlan
+      moved_to: { id: number; name: string; slug: string } | null
+      moved_count: number
+    }>(`/platform/plans/${planId}`, {
+      method: 'DELETE',
     }),
 
   listOrganisations: () =>

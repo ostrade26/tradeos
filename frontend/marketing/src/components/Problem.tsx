@@ -43,7 +43,7 @@ export function Problem() {
             Most desks still run on chats and Excel.
           </h2>
           <p className="mt-4 max-w-2xl text-white/70 leading-relaxed">
-            Tradeal is built for the way edible oil actually moves: producers, brokers, retailers,
+            Tradeal is built for the way edible oil actually moves: producers, brokers, wholesalers,
             spots like Kolhapur and Navi Mumbai, and lifts that close only when the tanker is weighed.
           </p>
         </Reveal>

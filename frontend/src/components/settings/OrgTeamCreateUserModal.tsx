@@ -115,7 +115,7 @@ function AttachedSeatWarningStrip({
                 onClick={onClose}
                 className="inline-block text-sm font-medium text-accent hover:underline"
               >
-                Go to Plan &amp; seats
+                Go to Plan &amp; team
               </Link>
             ) : (
               <p className="text-xs text-amber-800/80 dark:text-amber-200/80">

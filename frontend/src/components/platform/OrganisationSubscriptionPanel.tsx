@@ -66,12 +66,16 @@ export function OrganisationSubscriptionPanel({
       {showOrgProfile && (
         <>
           <DetailGroup title="Organisation" icon={Building2}>
-            <p className="text-sm font-semibold text-heading leading-snug">
-              {hasText(org.legal_name) && org.legal_name !== org.name ? org.legal_name : org.name}
-            </p>
-            <p className="text-xs text-muted mt-1">{accountTypeLabel(org.account_type)}</p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-semibold text-heading leading-snug min-w-0 truncate">
+                {hasText(org.legal_name) && org.legal_name !== org.name ? org.legal_name : org.name}
+              </p>
+              <p className="text-sm text-muted text-right shrink-0">
+                {accountTypeLabel(org.account_type)}
+              </p>
+            </div>
             {addressLine ? (
-              <p className="text-sm text-heading mt-3 leading-snug">{addressLine}</p>
+              <p className="text-xs text-muted mt-1 leading-snug">{addressLine}</p>
             ) : null}
             {hasText(org.country) && org.country !== 'India' ? (
               <p className="text-xs text-muted mt-1">{org.country}</p>

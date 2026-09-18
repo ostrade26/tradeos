@@ -5,6 +5,7 @@ import {
   tableDensityClasses,
   type TableDensity,
 } from '../lib/tableDensity'
+import { preferenceUserKey } from '../lib/userPreferences'
 import { schedulePersistPreferences } from './usePersistUserPreferences'
 import { useAuth } from './useAuth'
 
@@ -18,12 +19,12 @@ const TableDensityContext = createContext<TableDensityContextValue | null>(null)
 
 export function TableDensityProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const userKey = session?.username ?? null
+  const userKey = preferenceUserKey()
   const [density, setDensityState] = useState<TableDensity>(() => loadTableDensity(userKey))
 
   useEffect(() => {
     setDensityState(loadTableDensity(userKey))
-  }, [userKey])
+  }, [userKey, session?.preferences?.tableDensity])
 
   const setDensity = (next: TableDensity) => {
     setDensityState(next)

@@ -259,7 +259,7 @@ export function SettingsSectionContent({
               <SettingRow
                 icon={UserRoundCheck}
                 title="Account setup"
-                description="Replay profile, theme, and focus preferences"
+                description="Replay profile and appearance preferences"
                 action={
                   <Button
                     variant="outline"
