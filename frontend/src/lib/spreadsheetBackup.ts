@@ -17,12 +17,13 @@ import { BACKUP_VERSION, parseTradeBackup, type TradeBackup } from './tradeBacku
 import { downloadFile } from './export'
 import {
   allocationTotal,
-  formatLiftPoRefs,
-  formatLiftSoRefs,
   getLiftAllocations,
   liftTouchesRef,
+  uniqueLiftRefs,
 } from './liftAllocations'
-import { getLiftTankers } from './liftTankers'
+import { formatTankerNo } from './liftTankers'
+import { STOCK_LIFT_LABEL } from './stockLift'
+import { refCore } from './tradeRefs'
 import {
   parseJsonCell,
   parseSalesOrderRow,
@@ -33,7 +34,8 @@ import {
 } from './spreadsheetImport'
 import { isGroupedPoRawRows, tryParseGroupedPoRawRows } from './groupedPoImport'
 import { buildSeedData } from '../data/seedData'
-import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts } from './inferImportLinks'
+import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts, normalizeLiftOrderRefs } from './inferImportLinks'
+import { ensureDirectoryFromOrders } from './ensureDirectoryFromOrders'
 
 const PO_EXPORT_HEADERS = [
   'Purchase Ref#',
@@ -96,6 +98,7 @@ const LIFT_EXPORT_HEADERS = [
   'Tanker No.,',
   'PO Ref#',
   'SO Ref#',
+  'Sales Invoice',
   'Remarks',
   '_json',
 ] as const
@@ -228,6 +231,8 @@ function liftExportRow(lift: Lift, orders: TradeOrder[]) {
   const so = orders.find(o => o.ref === lift.soRef && o.side === 'sale')
   const allocations = getLiftAllocations(lift)
   const tankerNos = getLiftTankers(lift).map(t => t.tankerNo.trim()).filter(Boolean)
+  const poRefs = uniqueLiftRefs(lift, 'poRef')
+  const soRefs = uniqueLiftRefs(lift, 'soRef')
 
   return {
     'Lift Ref#': lift.liftRef,
@@ -242,8 +247,10 @@ function liftExportRow(lift: Lift, orders: TradeOrder[]) {
     'SO Qty': lift.plannedQtyMt ?? allocationTotal(allocations),
     'Lifted Qty': lift.liftedQty,
     'Tanker No.,': tankerNos.join(', '),
-    'PO Ref#': formatLiftPoRefs(lift),
-    'SO Ref#': formatLiftSoRefs(lift),
+    // Raw cores so re-import matches order.ref (not "PO6" / "SO3")
+    'PO Ref#': poRefs.join(', '),
+    'SO Ref#': lift.stockLift || soRefs.length === 0 ? STOCK_LIFT_LABEL : soRefs.join(', '),
+    'Sales Invoice': lift.salesInvoiceNo ?? '',
     Remarks: lift.remarks ?? '',
     _json: JSON.stringify(lift),
   }
@@ -460,6 +467,51 @@ function emptyTradeData(): TradeData {
   }
 }
 
+function tankerMatchKey(poRef: string, tankerNo: string): string {
+  const tanker = formatTankerNo(tankerNo).replace(/[-\s]/g, '').toUpperCase()
+  return `${refCore(poRef)}|${tanker}`
+}
+
+/** Merge seller invoice / tanker details from PO register lines onto Lift Register rows. */
+function enrichLiftsFromPoInvoiceLifts(lifts: Lift[], poInvoiceLifts: Lift[]): Lift[] {
+  if (lifts.length === 0 || poInvoiceLifts.length === 0) return lifts
+
+  const byPoTanker = new Map<string, Lift>()
+  for (const lift of poInvoiceLifts) {
+    const tanker = lift.tankerNo || lift.tankers?.[0]?.tankerNo || ''
+    if (!lift.poRef || !tanker) continue
+    byPoTanker.set(tankerMatchKey(lift.poRef, tanker), lift)
+  }
+
+  return lifts.map(lift => {
+    const tanker = lift.tankerNo || lift.tankers?.[0]?.tankerNo || ''
+    if (!lift.poRef || !tanker) return lift
+    const fromPo = byPoTanker.get(tankerMatchKey(lift.poRef, tanker))
+    if (!fromPo) return lift
+
+    const salesInvoiceNo = lift.salesInvoiceNo || fromPo.salesInvoiceNo
+    let remarks = lift.remarks
+    if (
+      fromPo.salesInvoiceNo
+      && salesInvoiceNo
+      && fromPo.salesInvoiceNo !== salesInvoiceNo
+      && !remarks
+    ) {
+      remarks = `Seller invoice: ${fromPo.salesInvoiceNo}`
+    }
+
+    return {
+      ...lift,
+      salesInvoiceNo: salesInvoiceNo || undefined,
+      remarks: remarks || undefined,
+      tankerNo: lift.tankerNo || fromPo.tankerNo,
+      tankers: lift.tankers?.length ? lift.tankers : fromPo.tankers,
+      deliveredAt: lift.deliveredAt || fromPo.deliveredAt,
+      status: lift.status === 'pending' && fromPo.status === 'delivered' ? 'delivered' : lift.status,
+    }
+  })
+}
+
 function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]>): TradeData {
   const data = emptyTradeData()
 
@@ -468,17 +520,20 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
   const isStandardTemplate = standardPoRows.length > 0 && sheetHasStandardPoHeaders(standardPoRows)
 
   let embeddedLifts = false
+  let poInvoiceLifts: Lift[] = []
   let groupedPo = parseGroupedPoFromSheets(sheetRows)
   const parsedPoFromTemplate = isStandardTemplate || groupedPo != null
 
   if (isStandardTemplate) {
     const template = parseTemplatePurchaseOrders(standardPoRows)
     data.tradeOrders = template.orders
+    poInvoiceLifts = template.lifts
     data.lifts = template.lifts
     embeddedLifts = true
     groupedPo = null
   } else if (groupedPo) {
     data.tradeOrders = groupedPo.orders
+    poInvoiceLifts = groupedPo.lifts
     data.lifts = groupedPo.lifts
     embeddedLifts = true
   } else {
@@ -504,7 +559,7 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
     if (key === 'lifts') {
       const parsed = readLiftsFromSheetRows(rows)
       if (parsed.length > 0) {
-        data.lifts = parsed
+        data.lifts = enrichLiftsFromPoInvoiceLifts(parsed, poInvoiceLifts)
       } else if (!embeddedLifts) {
         data.lifts = parsed
       }
@@ -546,9 +601,9 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
   }
 
   data.tradeOrders = ensureOrdersReferencedByLifts(data.tradeOrders, data.lifts)
+  data.lifts = normalizeLiftOrderRefs(data.tradeOrders, data.lifts)
   data.tradeOrders = inferSoPoRefsFromLifts(data.tradeOrders, data.lifts)
-
-  return data
+  return ensureDirectoryFromOrders(data)
 }
 
 async function loadXlsx() {

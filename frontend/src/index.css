@@ -59,6 +59,27 @@
   --color-heading: #eef2f7;
 }
 
+/* Detect Chrome autofill + keep filled fields on our surface (not yellow/grey). */
+@keyframes onAutoFillStart {
+  from {
+    opacity: 0.99;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  animation-name: onAutoFillStart;
+  -webkit-text-fill-color: var(--color-heading);
+  caret-color: var(--color-heading);
+  box-shadow: 0 0 0 1000px var(--color-card) inset;
+  transition: background-color 99999s ease-out;
+}
+
 * {
   box-sizing: border-box;
 }

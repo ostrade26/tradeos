@@ -1,5 +1,5 @@
 import { cn, noAutofill } from '../../lib/utils'
-import { forwardRef, useId, useState, type FocusEvent, type InputHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useId, useState, type FocusEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { FieldError, inputErrorClassName } from './FieldError'
 
@@ -13,7 +13,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 const TEXTISH = new Set(['text', 'search', 'email', 'tel', 'url', 'password', undefined])
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, icon, trailing, id: idProp, autoComplete, readOnly, onFocus, type, ...props }, ref) => {
+  ({ className, label, error, icon, trailing, id: idProp, autoComplete, readOnly, onFocus, onInput, type, ...props }, ref) => {
     const autoId = useId()
     const id = idProp ?? autoId
     const isTextish = TEXTISH.has(type)
@@ -29,6 +29,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const handleFocus = (e: FocusEvent<HTMLInputElement>) => {
       unlockForKeyboard(e.currentTarget)
       onFocus?.(e)
+    }
+
+    const handleInput = (e: FormEvent<HTMLInputElement>) => {
+      // System / password-manager autofill can fill while still readOnly — unlock so it does not stay grey.
+      unlockForKeyboard(e.currentTarget)
+      onInput?.(e)
     }
 
     return (
@@ -51,6 +57,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'placeholder:text-muted transition-colors duration-150',
               'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
               'dark:border-gray-600 dark:bg-card dark:text-heading',
+              // Temporary autofill lock uses readOnly — keep the same surface as an editable field.
+              'read-only:bg-white dark:read-only:bg-card read-only:text-heading',
               icon && 'pl-9',
               trailing && 'pr-[4.75rem]',
               error && inputErrorClassName,
@@ -62,6 +70,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             autoComplete={autoComplete ?? 'off'}
             onPointerDown={e => unlockForKeyboard(e.currentTarget)}
             onFocus={handleFocus}
+            onInput={handleInput}
+            onAnimationStart={e => {
+              // Chrome fires this when applying :-webkit-autofill.
+              if (e.animationName === 'onAutoFillStart') {
+                unlockForKeyboard(e.currentTarget)
+              }
+            }}
           />
           {trailing && (
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-auto">

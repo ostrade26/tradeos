@@ -11,6 +11,7 @@ import { randomUUID } from './randomId'
 import { STOCK_LIFT_LABEL } from './stockLift'
 import { importRateFromSpreadsheet } from './orderRate'
 import { parseIndianAmount } from './indianAmount'
+import { refCore } from './tradeRefs'
 import { normalizeDateToIso } from './utils'
 
 export function parseJsonCell(value: unknown): unknown {
@@ -92,11 +93,44 @@ export function parseBrokerage(value: string): { brokeragePct: number; brokerage
 }
 
 function firstRef(value: string): string {
-  return value.split(',')[0]?.trim() ?? ''
+  return refCore(value.split(',')[0]?.trim() ?? '')
 }
 
 function splitList(value: string): string[] {
   return value.split(',').map(part => part.trim()).filter(Boolean)
+}
+
+/** True when a remarks/invoice cell looks like a document number (not free text). */
+export function looksLikeInvoiceNo(value: string): boolean {
+  const text = value.trim()
+  if (!text || text.length > 64) return false
+  if (/^(fix\s*duty|advance|ready|period)$/i.test(text)) return false
+  // e.g. WMY02434, PALMOIL/2627/001, 2026-2027/0149, 2026-27/04
+  if (/^[A-Za-z]{2,}\d+/i.test(text)) return true
+  if (/[A-Za-z].*\//.test(text) || /\d{4}[-/]\d{2,4}\/\d+/i.test(text)) return true
+  if (/^\d{4}-\d{2}\/\d+/i.test(text)) return true
+  return false
+}
+
+function tankerValueFromRow(row: Record<string, unknown>): string {
+  return str(
+    row,
+    'Tanker No.,',
+    'Tanker No.',
+    'Tanker',
+    'Lorry No.,',
+    'Lorry No.',
+    'Lorry',
+    'Vehicle No.,',
+    'Vehicle No.',
+  )
+}
+
+function salesInvoiceFromRow(row: Record<string, unknown>): string {
+  const explicit = str(row, 'Sales Invoice', 'Sales Invoice No.', 'Invoice No.,', 'Invoice No.', 'Invoice')
+  if (explicit) return explicit
+  const remarks = str(row, 'Remarks')
+  return looksLikeInvoiceNo(remarks) ? remarks : ''
 }
 
 function deriveOrderStatus(orderQty: number, liftedQty: number, committedLiftQty?: number): OrderStatus {
@@ -124,7 +158,7 @@ function parseDeliveryTypeFromImport(row: Record<string, unknown>): DeliveryType
 }
 
 function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): TradeOrder {
-  const ref = str(row, 'Purchase Ref#', 'Ref#', 'PO Ref#', 'PO Ref', 'PO')
+  const ref = firstRef(str(row, 'Purchase Ref#', 'Ref#', 'PO Ref#', 'PO Ref', 'PO')) || str(row, 'Purchase Ref#', 'Ref#', 'PO Ref#', 'PO Ref', 'PO')
   const deliveryFrom = parseDateCell(row, 'Delivery From', 'Delivery Start') || parseDateCell(row, 'Purchase Date', 'Date')
   const deliveryTo = parseDateCell(row, 'Delivery To', 'Delivery End') || deliveryFrom
   const { brokeragePct, brokeragePerTon } = parseBrokerage(str(row, 'Brokerage'))
@@ -172,19 +206,20 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
 }
 
 function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): TradeOrder {
-  const ref = str(row, 'Sale Ref#', 'Ref#', 'SO Ref#', 'SO Ref', 'SO')
+  const ref = firstRef(str(row, 'Sale Ref#', 'Ref#', 'SO Ref#', 'SO Ref', 'SO')) || str(row, 'Sale Ref#', 'Ref#', 'SO Ref#', 'SO Ref', 'SO')
   const deliveryFrom = parseDateCell(row, 'Delivery From', 'Delivery Start') || parseDateCell(row, 'Sale Date', 'Date')
   const deliveryTo = parseDateCell(row, 'Delivery To', 'Delivery End') || deliveryFrom
   const { brokeragePct, brokeragePerTon } = parseBrokerage(str(row, 'Brokerage'))
   const orderQty = parseNumber(row.Qty ?? row['Order Qty']) ?? base?.orderQty ?? 0
   const liftedQty = base?.liftedQty ?? 0
   const buyerName = str(row, 'Buyer', 'Party') || base?.buyerName || base?.partyName || ''
+  const linkedPo = str(row, 'PO Ref#', 'PO Ref', 'PO', 'Against PO', 'Linked PO', 'Purchase Order Ref')
 
   return {
     id: base?.id ?? newOrderId(),
     ref,
     side: 'sale',
-    poRef: base?.poRef ?? (str(row, 'PO Ref#', 'PO Ref', 'PO', 'Against PO', 'Linked PO', 'Purchase Order Ref') || undefined),
+    poRef: base?.poRef ?? (linkedPo ? firstRef(linkedPo) || undefined : undefined),
     date: parseDateCell(row, 'Sale Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     partyName: buyerName,
     itemName: str(row, 'Item', 'Item Name') || base?.itemName || '',
@@ -276,20 +311,26 @@ function buildTankersFromImport(tankerValue: string, liftedQty: number): LiftTan
 function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
   const liftRef = parseNumber(row['Lift Ref#'] ?? row['Lift #']) ?? base?.liftRef
   const liftedQty = parseNumber(row['Lifted Qty'] ?? row.Qty) ?? base?.liftedQty ?? 0
-  const plannedQty = parseNumber(row['SO Qty']) ?? base?.plannedQtyMt ?? liftedQty
+  const plannedQty = parseNumber(row['SO Qty'] ?? row['Sale Qty']) ?? base?.plannedQtyMt ?? liftedQty
   const poRef = firstRef(str(row, 'PO Ref#', 'PO Ref')) || base?.poRef || ''
   const soRaw = str(row, 'SO Ref#', 'SO Ref')
   const stockLift = !soRaw || soRaw.includes(STOCK_LIFT_LABEL)
   const soRef = stockLift ? '' : firstRef(soRaw)
-  const tankerValue = str(row, 'Tanker No.,', 'Tanker No.', 'Tanker')
+  const tankerValue = tankerValueFromRow(row)
   const tankers = buildTankersFromImport(tankerValue, liftedQty)
   const legacyStatus = str(row, 'Status').toLowerCase()
   const deliveredAt = parseDateCell(row, 'Delivered') || base?.deliveredAt
+  const salesInvoiceNo = salesInvoiceFromRow(row) || base?.salesInvoiceNo || ''
+  const remarksRaw = str(row, 'Remarks')
+  const remarks =
+    remarksRaw && looksLikeInvoiceNo(remarksRaw) && salesInvoiceNo === remarksRaw
+      ? (base?.remarks ?? '')
+      : (remarksRaw || base?.remarks || '')
   const status = legacyStatus === 'delivered' || legacyStatus === 'pending'
     ? legacyStatus as Lift['status']
-    : (deliveredAt || (liftedQty > 0 && str(row, 'Sales Invoice')))
+    : (deliveredAt || (liftedQty > 0 && salesInvoiceNo) || liftedQty > 0)
       ? 'delivered'
-      : (liftedQty > 0 ? 'delivered' : 'pending')
+      : 'pending'
 
   return {
     id: base?.id ?? newOrderId(),
@@ -299,7 +340,7 @@ function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
     allocations: base?.allocations,
     date: parseDateCell(row, 'Lift Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     status,
-    deliveredAt: status === 'delivered' ? (deliveredAt || base?.deliveredAt) : base?.deliveredAt,
+    deliveredAt: status === 'delivered' ? (deliveredAt || base?.deliveredAt || (liftedQty > 0 ? parseDateCell(row, 'Lift Date', 'Date') : undefined)) : base?.deliveredAt,
     buyerName: str(row, 'Buyer') || base?.buyerName || '',
     sellerName: str(row, 'Seller') || base?.sellerName || '',
     itemName: str(row, 'Item') || base?.itemName || '',
@@ -312,12 +353,12 @@ function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
     plannedQtyMt: plannedQty,
     balanceQtyMt: base?.balanceQtyMt,
     balanceAppliedQtyMt: base?.balanceAppliedQtyMt,
-    tankerNo: tankers[0]?.tankerNo ?? formatTankerNo(str(row, 'Tanker No.,', 'Tanker No.', 'Tanker')) ?? base?.tankerNo ?? '',
+    tankerNo: tankers[0]?.tankerNo ?? formatTankerNo(tankerValue) ?? base?.tankerNo ?? '',
     tankers: tankers.length > 0 ? tankers : base?.tankers ?? [],
-    salesInvoiceNo: str(row, 'Sales Invoice') || base?.salesInvoiceNo,
+    salesInvoiceNo: salesInvoiceNo || undefined,
     isSelfLift: base?.isSelfLift ?? true,
     stockLift: stockLift || base?.stockLift,
-    remarks: str(row, 'Remarks') || base?.remarks,
+    remarks: remarks || undefined,
   }
 }
 
@@ -401,14 +442,12 @@ function hasInvoiceContinuation(row: Record<string, unknown>): boolean {
   if (hasPoRef(row)) return false
   return Boolean(
     str(row, 'Invoice No.,', 'Invoice No.', 'Invoice')
-    || str(row, 'Tanker No.,', 'Tanker No.', 'Tanker')
+    || tankerValueFromRow(row)
     || parseNumber(row['Actual Qty']) != null,
   )
 }
 
-function nextLiftRefFromRow(row: Record<string, unknown>, fallback: number): number {
-  const invoiceAmount = parseNumber(row['Invoice Amount'])
-  if (invoiceAmount != null && invoiceAmount >= 1000) return Math.round(invoiceAmount)
+function nextLiftRefFromRow(_row: Record<string, unknown>, fallback: number): number {
   return fallback
 }
 
@@ -418,7 +457,7 @@ function buildLiftFromPoInvoiceRow(
   liftRef: number,
 ): Lift | null {
   const invoiceNo = str(row, 'Invoice No.,', 'Invoice No.', 'Invoice')
-  const tankerRaw = str(row, 'Tanker No.,', 'Tanker No.', 'Tanker')
+  const tankerRaw = tankerValueFromRow(row)
   const liftedQty = parseNumber(row['Actual Qty'] ?? row['Lifted Qty']) ?? 0
   const date = parseDateCell(row, 'Invoice Date', 'Lift Date') || po.date
   if (!invoiceNo && !tankerRaw && liftedQty <= 0) return null
