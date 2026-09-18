@@ -145,15 +145,22 @@ function deliveryOthers(order: TradeOrder): string {
   return order.deliveryType === 'ready' ? 'Ready' : ''
 }
 
-function deliveryPeriodLabel(order: Pick<TradeOrder, 'deliveryType'>): string {
-  return order.deliveryType === 'ready' ? 'Ready' : 'Period'
+function deliveryPeriodLabel(order: Pick<TradeOrder, 'deliveryType' | 'deliveryPeriodStart' | 'deliveryPeriodEnd'>): string {
+  if (order.deliveryType === 'ready') return 'Ready'
+  const start = isoDate(order.deliveryPeriodStart)
+  const end = isoDate(order.deliveryPeriodEnd)
+  if (start || end) return [start, end].filter(Boolean).join(' – ')
+  return 'Period'
 }
 
-function liftDeliveryPeriodLabel(lift: Pick<Lift, 'deliveryPeriod'>): string {
+function liftDeliveryPeriodLabel(lift: Pick<Lift, 'deliveryPeriod' | 'deliveryPeriodStart' | 'deliveryPeriodEnd'>): string {
   const p = lift.deliveryPeriod.trim().toLowerCase()
   if (p === 'ready') return 'Ready'
-  if (p === 'period') return 'Period'
-  return lift.deliveryPeriod.trim() || 'Period'
+  const start = isoDate(lift.deliveryPeriodStart)
+  const end = isoDate(lift.deliveryPeriodEnd)
+  if (start || end) return [start, end].filter(Boolean).join(' – ')
+  if (p && p !== 'period') return lift.deliveryPeriod.trim()
+  return 'Period'
 }
 
 function poDeliveryFields(order: TradeOrder, lifts: Lift[]) {

@@ -359,8 +359,8 @@ export function getLiftsDelivered(lifts: Lift[]): Lift[] {
   return lifts.filter(l => l.status === 'delivered')
 }
 
-export function formatDeliveryPeriodLabel(order: Pick<TradeOrder, 'deliveryType'>): string {
-  return order.deliveryType === 'ready' ? 'Ready' : 'Period'
+export function formatDeliveryPeriodLabel(order: Pick<TradeOrder, 'deliveryType' | 'deliveryPeriodStart' | 'deliveryPeriodEnd'>): string {
+  return formatDeliveryPeriod(order)
 }
 
 export function formatDeliveryPeriod(order: Pick<TradeOrder, 'deliveryType' | 'deliveryPeriodStart' | 'deliveryPeriodEnd'>): string {

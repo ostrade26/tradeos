@@ -135,17 +135,12 @@ export function VerifiedPeriod({
   end?: string
   deliveryType?: 'period' | 'ready'
   verified?: boolean
-  /** label = Ready/Period (register columns); range = date span (detail views). */
+  /** Register + detail: Ready stays Ready; period shows the date range. */
   display?: 'label' | 'range'
 }) {
   const className = 'tabular-nums text-gray-700 dark:text-gray-300'
   const periodLower = period?.trim().toLowerCase()
   const isReady = deliveryType === 'ready' || periodLower === 'ready'
-
-  if (display === 'label') {
-    if (isReady) return <span className={className}>Ready</span>
-    return <span className={className}>Period</span>
-  }
 
   if (isReady) {
     return <span className={className}>Ready</span>
@@ -162,7 +157,7 @@ export function VerifiedPeriod({
     )
   }
 
-  if (period) {
+  if (period && periodLower !== 'period') {
     return <span className={className}>{period}</span>
   }
 
