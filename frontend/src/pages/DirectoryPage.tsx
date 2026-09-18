@@ -250,21 +250,23 @@ export function DirectoryPage() {
   const partyActionsColumn = {
     key: 'actions',
     header: '',
-    className: 'w-24 text-right',
+    className: 'text-center',
+    actionsWide: 'compact' as const,
     render: (r: PartyEntry) => (
-      <div className="flex items-center justify-end gap-0.5">
+      <div className="flex items-center justify-center gap-1">
         <button
           type="button"
           title={`Edit ${r.name}`}
           aria-label={`Edit ${r.name}`}
           onClick={e => { e.stopPropagation(); openEditParty(r) }}
-          className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
         >
           <Pencil className="h-4 w-4" />
         </button>
         <DeleteActionButton
           label={r.name}
           check={canDelete(r.id, r.kind)}
+          className="inline-flex min-h-9 min-w-9 items-center justify-center"
           onDelete={() => {
             setDeleteError('')
             setDeleteTarget({ id: r.id, name: r.name, kind: r.kind })
@@ -278,21 +280,23 @@ export function DirectoryPage() {
   const actionsColumn = {
     key: 'actions',
     header: '',
-    className: 'w-24 text-right',
+    className: 'text-center',
+    actionsWide: 'compact' as const,
     render: (r: Broker) => (
-      <div className="flex items-center justify-end gap-0.5">
+      <div className="flex items-center justify-center gap-1">
         <button
           type="button"
           title={`Edit ${r.name}`}
           aria-label={`Edit ${r.name}`}
           onClick={e => { e.stopPropagation(); openEditBroker(r) }}
-          className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
         >
           <Pencil className="h-4 w-4" />
         </button>
         <DeleteActionButton
           label={r.name}
           check={canDelete(r.id)}
+          className="inline-flex min-h-9 min-w-9 items-center justify-center"
           onDelete={() => {
             setDeleteError('')
             setDeleteTarget({ id: r.id, name: r.name })
