@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { NotificationsDropdown } from './NotificationsDropdown'
 import { UserMenu } from './UserMenu'
 import { cn } from '../../lib/utils'
+import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
 import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface HeaderProps {
@@ -52,16 +53,18 @@ export function Header({
       </button>
 
       <div className="flex items-center gap-0 sm:gap-1.5 shrink-0 ml-auto">
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(navIconButtonClass, 'shrink-0')}
-          onClick={() => onOpenAssistant()}
-          aria-label="Ask AI"
-          title="Ask AI (⌘J)"
-        >
-          <Bot className="h-5 w-5" />
-        </Button>
+        {ASSISTANT_ENABLED ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(navIconButtonClass, 'shrink-0')}
+            onClick={() => onOpenAssistant()}
+            aria-label="Ask AI"
+            title="Ask AI (⌘J)"
+          >
+            <Bot className="h-5 w-5" />
+          </Button>
+        ) : null}
         <NotificationsDropdown />
         <div className="hidden md:contents">
           <Button variant="ghost" size="icon" className={navIconButtonClass} aria-label="Settings" to={settingsPath}>

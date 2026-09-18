@@ -48,8 +48,8 @@ export function Tabs({ tabs, active, onChange, className, buttonClassName, panel
           onKeyDown={e => onKeyDown(e, index)}
           onClick={() => onChange(tab.id)}
           className={cn(
-            'relative pb-2.5 text-sm font-medium transition-colors cursor-pointer shrink-0 attex-focus',
-            buttonClassName ?? 'px-4 pt-2.5',
+            'relative py-3 text-sm font-medium transition-colors cursor-pointer shrink-0 attex-focus',
+            buttonClassName ?? 'px-4',
             active === tab.id
               ? 'text-heading'
               : 'text-muted hover:text-gray-700 dark:hover:text-gray-300',
@@ -68,10 +68,10 @@ export function Tabs({ tabs, active, onChange, className, buttonClassName, panel
                 {tab.count}
               </span>
             )}
-            {active === tab.id && (
-              <span className="absolute left-0 right-0 -bottom-2.5 h-0.5 bg-accent rounded-full" />
-            )}
           </span>
+          {active === tab.id && (
+            <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-accent rounded-full" />
+          )}
         </button>
       ))}
     </div>

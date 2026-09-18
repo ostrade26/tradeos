@@ -101,7 +101,7 @@ export function NotificationsDropdown() {
               ? labels.bellEmpty
               : badgeCount === 0
                 ? 'No unread messages from Tradeal.'
-                : 'Open inbox for register work.'}
+                : 'Open inbox for conversations.'}
           </p>
         </div>
         ) : (

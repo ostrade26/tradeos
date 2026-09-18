@@ -1,4 +1,4 @@
-"""Unified in-app inbox — notices plus platform work items."""
+"""Unified in-app inbox — account conversations and platform work (no trade register items)."""
 
 from __future__ import annotations
 
@@ -176,16 +176,6 @@ def _sort_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(items, key=key, reverse=True)
 
 
-def _trade_items(organisation_id: int) -> list[dict[str, Any]]:
-    from ..db import get_state
-    from ..trade.action_inbox import build_trade_inbox_items
-    from ..trade.loader import apply_lift_totals, load_and_normalize
-
-    # Reconcile order lifted/committed qty from lift rows (incl. newly delivered).
-    state = apply_lift_totals(load_and_normalize(get_state(organisation_id)))
-    return build_trade_inbox_items(state)
-
-
 NOTICE_INBOX_LIMIT = 30
 
 
@@ -198,14 +188,14 @@ def list_inbox_for_session(
     filter_kind: FilterKind = "all",
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    # organisation_id reserved for future account-to-account conversation threads
+    _ = organisation_id
     items: list[dict[str, Any]] = []
     items.extend(_notice_items(conn, user_id, limit=min(limit, NOTICE_INBOX_LIMIT)))
     if role_slug == "platform_admin":
         items.extend(_seat_items(conn, limit))
         items.extend(_product_items(conn, limit))
         items.extend(_feature_interest_items(conn, limit))
-    elif organisation_id is not None:
-        items.extend(_trade_items(organisation_id))
     items = _sort_items(items)[:limit]
     if filter_kind == "open":
         items = [i for i in items if i.get("status") == "open"]
@@ -221,6 +211,7 @@ def inbox_work_open_count(
     role_slug: str,
     organisation_id: int | None,
 ) -> int:
+    _ = organisation_id
     if role_slug == "platform_admin":
         from .feature_interests_repository import count_open_interests_platform
 
@@ -231,8 +222,6 @@ def inbox_work_open_count(
             + sum(1 for p in products if _product_open(str(p.get("status") or "")))
             + count_open_interests_platform(conn)
         )
-    if organisation_id is not None:
-        return len(_trade_items(organisation_id))
     return 0
 
 

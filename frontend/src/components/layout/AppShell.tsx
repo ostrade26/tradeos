@@ -20,6 +20,7 @@ import { ApiServiceIssueWatch } from './ApiServiceIssueWatch'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
 import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 import { ProductTourProvider } from '../../contexts/ProductTourContext'
 
@@ -181,7 +182,7 @@ export function AppShell() {
         e.preventDefault()
         setCommandOpen(true)
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+      if (ASSISTANT_ENABLED && (e.metaKey || e.ctrlKey) && e.key === 'j') {
         e.preventDefault()
         setAssistantOpen(true)
       }
@@ -233,10 +234,12 @@ export function AppShell() {
           onClose={() => setCommandOpen(false)}
           onOpenAssistant={() => { setCommandOpen(false); setAssistantOpen(true) }}
         />
-        <AssistantPanel
-          open={assistantOpen}
-          onClose={() => setAssistantOpen(false)}
-        />
+        {ASSISTANT_ENABLED ? (
+          <AssistantPanel
+            open={assistantOpen}
+            onClose={() => setAssistantOpen(false)}
+          />
+        ) : null}
         <FloatingCreateCta />
         {session && !isPlatformAdmin ? (
           <AccountSetupWelcome

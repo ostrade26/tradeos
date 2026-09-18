@@ -86,22 +86,6 @@ export function noticeToInboxItem(item: UserNotification): UnifiedInboxItem {
   }
 }
 
-export function tradeActionToInboxItem(action: InboxAction): UnifiedInboxItem {
-  return {
-    id: action.id,
-    kind: action.kind,
-    category: 'work',
-    status: 'open',
-    unread: false,
-    title: action.title,
-    subtitle: action.subtitle,
-    from: 'Tradeal',
-    dateIso: '',
-    href: action.href,
-    actionable: true,
-  }
-}
-
 export function sortInboxItems(items: UnifiedInboxItem[]): UnifiedInboxItem[] {
   return [...items].sort(byNewest)
 }

@@ -14,6 +14,8 @@ export const notificationKindIcon: Record<string, LucideIcon> = {
   release_notes: platformReleaseIcon,
   product_request: MessageSquare,
   deploy_review: ClipboardCheck,
+  feature_interest: platformAccessIcon,
+  sent_request: MessageSquare,
 }
 
 export function notificationKindLabel(kind: string): string {
@@ -76,6 +78,10 @@ export function isProductUpdateNotice(item: UserNotification): boolean {
 export function notificationIcon(kind: string, payload?: UserNotification['payload']): LucideIcon {
   if (payload?.cta === 'review_interest') return platformAccessIcon
   return notificationKindIcon[kind] ?? AlertCircle
+}
+
+export function inboxKindIcon(kind: string, payload?: UserNotification['payload']): LucideIcon {
+  return notificationIcon(kind, payload)
 }
 
 /** Gmail-style inbox date: time today, day+month this year, else with year. */

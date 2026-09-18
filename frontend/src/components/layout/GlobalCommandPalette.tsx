@@ -6,6 +6,7 @@ import { useTradeStore } from '../../store/TradeStore'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { useLocation } from 'react-router-dom'
 import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
+import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
 
 interface GlobalCommandPaletteProps {
   open: boolean
@@ -49,7 +50,9 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         { id: 'settings', label: 'Settings', group: 'Account', action: () => navigate('/platform-admin/settings') },
       ]
       return [
-        { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
+        ...(ASSISTANT_ENABLED
+          ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
+          : []),
         ...nav,
       ]
     }
@@ -77,7 +80,9 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       ...(hasPermission('contracts.create')
         ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate(appPath('/contracts/new')) }]
         : []),
-      { id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant },
+      ...(ASSISTANT_ENABLED
+        ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
+        : []),
       { id: 'send-tradeal', label: 'Send to Tradeal', group: 'Actions', action: () => navigate(appPath('/notifications?compose=1')) },
     ]
 

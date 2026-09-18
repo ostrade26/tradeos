@@ -13,7 +13,7 @@ export const orgNoticesLabels = {
   pageTitle: 'Inbox',
   sidebarNav: 'Inbox',
   bellTitle: 'From Tradeal',
-  bellEmpty: 'Tradeal messages and register work show up here.',
+  bellEmpty: 'Messages from Tradeal and other accounts show up here.',
   bellViewAll: 'Open inbox →',
   commandPalette: 'Inbox',
 } as const
