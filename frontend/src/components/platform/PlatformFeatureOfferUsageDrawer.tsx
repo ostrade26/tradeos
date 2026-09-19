@@ -107,7 +107,6 @@ export function PlatformFeatureOfferUsageDrawer({
           <FeatureOfferCatalogCard
             className="h-full w-full"
             interactive={false}
-            elevated
             featureKey={detail.feature_key}
             title={detail.title}
             description={detail.description}

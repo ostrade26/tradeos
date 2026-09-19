@@ -25,10 +25,33 @@ def _normalize_card_tone(raw: str | None) -> str:
     return tone if tone in CARD_TONES else ""
 
 
+def _default_card_tone(feature_key: str, title: str = "") -> str:
+    """Match frontend addOnIllustrationForOffer / KEY_RULES so empty tones stay consistent."""
+    probe = f"{feature_key} {title}".lower()
+    if any(token in probe for token in ("brand", "appearance", "colour", "color", "theme", "custom-branding")):
+        return "spark"
+    if any(token in probe for token in ("chat", "bot", "assistant", "ai", "copilot", "gpt")):
+        return "ai"
+    if any(token in probe for token in ("report", "analytic", "dashboard", "insight", "chart")):
+        return "analytics"
+    if any(token in probe for token in ("integrat", "api", "webhook", "sync", "connect", "whatsapp", "message", "sms")):
+        return "connect"
+    if any(token in probe for token in ("lift", "inventory", "stock", "warehouse", "truck", "logistic", "scheduler")):
+        return "ops"
+    if any(token in probe for token in ("notif", "alert", "inbox", "bell")):
+        return "analytics"
+    if any(token in probe for token in ("security", "compliance", "audit", "shield")):
+        return "spark"
+    return "neutral"
+
+
 def _offer_row(row: Any) -> dict[str, Any]:
     data = dict(row_dict(row))
     data["id"] = int(data["id"])
-    data["card_tone"] = _normalize_card_tone(str(data.get("card_tone") or ""))
+    tone = _normalize_card_tone(str(data.get("card_tone") or ""))
+    if not tone:
+        tone = _default_card_tone(str(data.get("feature_key") or ""), str(data.get("title") or ""))
+    data["card_tone"] = tone
     return data
 
 
@@ -192,7 +215,7 @@ def upsert_offer(
     pricing = (pricing_type or "free").strip().lower()
     if pricing not in PRICING_TYPES:
         raise HTTPException(status_code=400, detail="Invalid pricing type")
-    tone = _normalize_card_tone(card_tone)
+    tone = _normalize_card_tone(card_tone) or _default_card_tone(key, title)
     now = _now()
     if offer_id:
         current = get_offer(conn, offer_id)
@@ -433,16 +456,17 @@ def ensure_draft_offers_from_deploy_items(
             touched.append(offer)
             continue
 
+        default_tone = _default_card_tone(key, title)
         if uses_postgres():
             row = conn.execute(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, created_at, updated_at)
-                VALUES (%s, %s, %s, 'paid', 0, 'INR', 'draft', 100, %s, %s)
+                 catalog_status, sort_order, card_tone, created_at, updated_at)
+                VALUES (%s, %s, %s, 'paid', 0, 'INR', 'draft', 100, %s, %s, %s)
                 RETURNING *
                 """,
-                (key, title, detail, now, now),
+                (key, title, detail, default_tone, now, now),
             ).fetchone()
             offer = _offer_row(row)
         else:
@@ -450,10 +474,10 @@ def ensure_draft_offers_from_deploy_items(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, 'paid', 0, 'INR', 'draft', 100, ?, ?)
+                 catalog_status, sort_order, card_tone, created_at, updated_at)
+                VALUES (?, ?, ?, 'paid', 0, 'INR', 'draft', 100, ?, ?, ?)
                 """,
-                (key, title, detail, now, now),
+                (key, title, detail, default_tone, now, now),
             )
             offer = get_offer(conn, int(cur.lastrowid))
         append_audit_log(

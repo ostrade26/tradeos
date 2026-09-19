@@ -305,7 +305,7 @@ export function addOnCategoryLabel(kind: AddOnIllustrationKind): string {
   return map[kind]
 }
 
-/** Accent swatches shown when creating/editing a feature card. */
+/** Accent swatches / shuffle colours for feature cards. */
 export const ADDON_CARD_TONE_OPTIONS: Array<{
   id: AddOnIllustrationKind
   label: string
@@ -316,6 +316,7 @@ export const ADDON_CARD_TONE_OPTIONS: Array<{
   { id: 'ops', label: 'Green', swatch: 'bg-emerald-500' },
   { id: 'connect', label: 'Orange', swatch: 'bg-orange-500' },
   { id: 'analytics', label: 'Pink', swatch: 'bg-pink-500' },
+  { id: 'spark', label: 'Cyan', swatch: 'bg-cyan-500' },
 ]
 
 export function pricingChipLabel(pricingType: string, priceCents: number): string {

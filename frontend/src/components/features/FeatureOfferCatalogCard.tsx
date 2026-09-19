@@ -50,7 +50,7 @@ export function FeatureOfferCatalogCard({
   cardTone?: string | null
   className?: string
 }) {
-  const surfaceKind = tone ?? resolveAddOnCardTone(featureKey, title, cardTone)
+  const surfaceKind = resolveAddOnCardTone(featureKey, title, cardTone ?? tone)
   const Icon = iconForAddOnTone(surfaceKind)
   const category = addOnCategoryLabel(surfaceKind)
   const surface = addOnCardSurface(surfaceKind)

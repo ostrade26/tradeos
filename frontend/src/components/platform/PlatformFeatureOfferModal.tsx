@@ -120,7 +120,7 @@ export function PlatformFeatureOfferModal({
 
   const submit = () => {
     const price_cents = form.pricing_type === 'paid' ? centsFromRupees(priceRupees) : 0
-    void onSave({ ...form, price_cents, card_tone: cardTone })
+    void onSave({ ...form, price_cents, card_tone: cardTone || 'neutral' })
   }
 
   return (
@@ -207,8 +207,7 @@ export function PlatformFeatureOfferModal({
               <FeatureOfferCatalogCard
                 className="h-full w-full"
                 interactive={false}
-                elevated
-                tone={cardTone}
+                cardTone={cardTone}
                 featureKey={previewKey}
                 title={previewTitle}
                 description={form.description}
@@ -222,7 +221,13 @@ export function PlatformFeatureOfferModal({
             </div>
             <button
               type="button"
-              onClick={() => setCardTone(current => nextCardTone(current))}
+              onClick={() => {
+                setCardTone(current => {
+                  const next = nextCardTone(current)
+                  setForm(f => ({ ...f, card_tone: next }))
+                  return next
+                })
+              }}
               aria-label="Shuffle card colour"
               title="Shuffle colour"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-muted shadow-sm transition-colors hover:border-accent/40 hover:text-accent cursor-pointer attex-focus dark:border-gray-600 dark:bg-card dark:hover:bg-zinc-800"
