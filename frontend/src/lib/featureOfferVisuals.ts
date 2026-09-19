@@ -171,6 +171,10 @@ export function visualThemeForFeatureKey(featureKey: string, title = ''): AddOnV
 export type AddOnCardSurface = {
   /** Soft wash from top-right, like marketplace mockups */
   wash: string
+  /** Stronger corner colour bloom */
+  bloom: string
+  /** Soft mesh highlight over the bloom */
+  mesh: string
   iconBox: string
   categoryPill: string
   ring: string
@@ -179,42 +183,54 @@ export type AddOnCardSurface = {
 
 const CARD_SURFACES: Record<AddOnIllustrationKind, AddOnCardSurface> = {
   neutral: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.05)_0%,rgba(148,163,184,0.015)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.18)_0%,rgba(148,163,184,0.06)_40%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-slate-400/28 via-slate-300/12 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(148,163,184,0.14)_0%,transparent_48%)]',
     iconBox: 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
     categoryPill: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200',
     ring: 'ring-slate-200/95 dark:ring-slate-500/30',
     ringHover: 'hover:ring-slate-300 dark:hover:ring-slate-400/40',
   },
   ai: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(147,197,253,0.07)_0%,rgba(147,197,253,0.02)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(56,189,248,0.2)_0%,rgba(147,197,253,0.08)_42%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-sky-400/30 via-blue-400/14 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(56,189,248,0.16)_0%,transparent_48%)]',
     iconBox: 'bg-sky-300/25 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
     categoryPill: 'bg-sky-50 text-sky-800 dark:bg-sky-900/35 dark:text-sky-200',
     ring: 'ring-sky-200/90 dark:ring-sky-500/25',
     ringHover: 'hover:ring-sky-300 dark:hover:ring-sky-400/40',
   },
   analytics: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(244,114,182,0.06)_0%,rgba(244,114,182,0.015)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(244,114,182,0.18)_0%,rgba(244,114,182,0.07)_42%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-pink-400/30 via-fuchsia-400/12 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(244,114,182,0.15)_0%,transparent_48%)]',
     iconBox: 'bg-pink-300/25 text-pink-800 dark:bg-pink-500/15 dark:text-pink-200',
     categoryPill: 'bg-pink-50 text-pink-800 dark:bg-pink-900/35 dark:text-pink-200',
     ring: 'ring-pink-200/90 dark:ring-pink-500/25',
     ringHover: 'hover:ring-pink-300 dark:hover:ring-pink-400/40',
   },
   connect: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(253,186,116,0.07)_0%,rgba(253,186,116,0.02)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(251,146,60,0.2)_0%,rgba(253,186,116,0.08)_42%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-orange-400/30 via-amber-400/12 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(251,146,60,0.16)_0%,transparent_48%)]',
     iconBox: 'bg-orange-300/25 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200',
     categoryPill: 'bg-orange-50 text-orange-800 dark:bg-orange-900/35 dark:text-orange-200',
     ring: 'ring-orange-200/95 dark:ring-orange-500/25',
     ringHover: 'hover:ring-orange-300 dark:hover:ring-orange-400/40',
   },
   ops: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(134,239,172,0.06)_0%,rgba(134,239,172,0.015)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(52,211,153,0.18)_0%,rgba(134,239,172,0.07)_42%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-emerald-400/30 via-teal-400/12 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(52,211,153,0.15)_0%,transparent_48%)]',
     iconBox: 'bg-emerald-300/25 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
     categoryPill: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-200',
     ring: 'ring-emerald-200/90 dark:ring-emerald-500/25',
     ringHover: 'hover:ring-emerald-300 dark:hover:ring-emerald-400/40',
   },
   spark: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(103,232,249,0.06)_0%,rgba(103,232,249,0.015)_42%,transparent_68%)]',
+    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(34,211,238,0.18)_0%,rgba(103,232,249,0.07)_42%,transparent_70%)]',
+    bloom: 'bg-gradient-to-br from-cyan-400/30 via-sky-400/12 to-transparent',
+    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(34,211,238,0.15)_0%,transparent_48%)]',
     iconBox: 'bg-cyan-300/25 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200',
     categoryPill: 'bg-cyan-50 text-cyan-900 dark:bg-cyan-900/35 dark:text-cyan-200',
     ring: 'ring-cyan-200/90 dark:ring-cyan-500/25',

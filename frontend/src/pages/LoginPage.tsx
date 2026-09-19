@@ -16,6 +16,7 @@ import { consumeLoginNotice, LOGIN_NOTICE_COPY } from '../lib/loginNotice'
 import { APP_HOME } from '../lib/appShellMode'
 import { ApiError } from '../api/client'
 import type { AuthSession } from '../lib/auth'
+import { tradealCopyright } from '../lib/copyright'
 
 function homeAfterLogin(session: AuthSession | null): string {
   return session?.isPlatformAdmin ? '/platform-admin/organisations' : APP_HOME
@@ -130,10 +131,11 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-3">
           <Link to="/" className="text-sm font-medium text-accent hover:text-accent-hover cursor-pointer">
             Back to Tradeal
           </Link>
+          <p className="text-xs text-muted">{tradealCopyright()}</p>
         </div>
       </div>
 

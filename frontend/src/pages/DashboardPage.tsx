@@ -39,7 +39,10 @@ export function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-heading tracking-tight">Today</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xl font-semibold text-heading tracking-tight">Today</h1>
+            <TradeGlossaryTip />
+          </div>
           <p className="text-sm text-muted mt-0.5">
             {todayLabel}
             {' · '}
@@ -50,8 +53,6 @@ export function DashboardPage() {
         </div>
         <DashboardQuickActions />
       </div>
-
-      <TradeGlossaryTip />
 
       <div className="grid grid-cols-1 min-[520px]:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatCard

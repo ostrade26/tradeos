@@ -22,6 +22,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
 import { useUnifiedInbox } from '../../hooks/useUnifiedInbox'
 import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
+import { tradealCopyright } from '../../lib/copyright'
 
 /** Register routes — navigate with a clean URL (no `ref` from the previous register). */
 function registerNavTo(path: string) {
@@ -384,6 +385,17 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
             </>
           )}
         </nav>
+
+        {showLabels && (
+          <p
+            className={cn(
+              'shrink-0 px-4 py-3 text-[10px] leading-snug',
+              themed ? 'text-white/40' : 'text-muted/70',
+            )}
+          >
+            {tradealCopyright()}
+          </p>
+        )}
       </aside>
     </>
   )

@@ -74,14 +74,23 @@ export function FeatureOfferCatalogCard({
       )}
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        {/* Colour bloom + mesh first so they stay visible under light fades */}
+        <div
+          className={cn(
+            'absolute -right-10 -top-14 h-44 w-44 rounded-full blur-2xl opacity-70 dark:opacity-55',
+            surface.bloom,
+          )}
+        />
+        <div className={cn('absolute inset-0', surface.wash)} />
+        <div className={cn('absolute inset-0', surface.mesh)} />
         <div className={cn('absolute inset-0 dark:hidden', ADDON_CARD_PATTERN_MASK)} style={pattern.style} />
         <div
           className={cn('absolute inset-0 hidden dark:block', ADDON_CARD_PATTERN_MASK)}
           style={pattern.styleDark}
         />
-        <div className={cn('absolute inset-0', surface.wash)} />
-        <div className="absolute inset-0 bg-gradient-to-bl from-white/55 via-white/25 to-transparent dark:from-card/25 dark:via-card/5" />
-        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-white/85 via-white/40 to-transparent dark:from-card/70 dark:via-card/25" />
+        {/* Soft readability fades — keep low so wash/pattern still show */}
+        <div className="absolute inset-0 bg-gradient-to-bl from-white/28 via-transparent to-transparent dark:from-card/20" />
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-white/65 via-white/20 to-transparent dark:from-card/60 dark:via-card/18" />
       </div>
 
       <div className="relative flex flex-1 flex-col min-h-0 p-6">

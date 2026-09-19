@@ -5,23 +5,23 @@ export type AddOnGeometricPatternKind = 'dots' | 'grid' | 'lines' | 'diagonal' |
 
 const PATTERN_CYCLE: AddOnGeometricPatternKind[] = ['dots', 'grid', 'lines', 'diagonal', 'cross']
 
-/** Tint matched to category wash — kept very light so pattern stays subtle. */
+/** Tint matched to category wash — soft but still readable. */
 const PATTERN_INK: Record<AddOnIllustrationKind, string> = {
-  neutral: 'rgba(100, 116, 139, 0.035)',
-  ai: 'rgba(56, 189, 248, 0.04)',
-  analytics: 'rgba(236, 72, 153, 0.035)',
-  connect: 'rgba(249, 115, 22, 0.035)',
-  ops: 'rgba(16, 185, 129, 0.035)',
-  spark: 'rgba(6, 182, 212, 0.035)',
+  neutral: 'rgba(100, 116, 139, 0.1)',
+  ai: 'rgba(14, 165, 233, 0.11)',
+  analytics: 'rgba(236, 72, 153, 0.1)',
+  connect: 'rgba(249, 115, 22, 0.11)',
+  ops: 'rgba(16, 185, 129, 0.11)',
+  spark: 'rgba(6, 182, 212, 0.11)',
 }
 
 const PATTERN_INK_DARK: Record<AddOnIllustrationKind, string> = {
-  neutral: 'rgba(148, 163, 184, 0.05)',
-  ai: 'rgba(125, 211, 252, 0.05)',
-  analytics: 'rgba(244, 114, 182, 0.05)',
-  connect: 'rgba(251, 146, 60, 0.05)',
-  ops: 'rgba(52, 211, 153, 0.05)',
-  spark: 'rgba(34, 211, 238, 0.05)',
+  neutral: 'rgba(148, 163, 184, 0.13)',
+  ai: 'rgba(125, 211, 252, 0.14)',
+  analytics: 'rgba(244, 114, 182, 0.13)',
+  connect: 'rgba(251, 146, 60, 0.14)',
+  ops: 'rgba(52, 211, 153, 0.14)',
+  spark: 'rgba(34, 211, 238, 0.14)',
 }
 
 function hashKey(key: string): number {
@@ -86,6 +86,6 @@ export function addOnCardGeometricPattern(
   }
 }
 
-/** Radial mask so pattern reads in the top-right with the color wash. */
+/** Radial mask so pattern reads in the top-right with the colour wash. */
 export const ADDON_CARD_PATTERN_MASK =
-  '[mask-image:radial-gradient(ellipse_100%_95%_at_82%_8%,#000_45%,transparent_78%)]'
+  '[mask-image:radial-gradient(ellipse_115%_100%_at_85%_0%,#000_55%,transparent_88%)]'
