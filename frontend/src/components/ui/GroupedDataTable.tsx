@@ -128,14 +128,14 @@ export function VerifiedPeriod({
   end,
   deliveryType,
   verified: _verified,
-  display = 'range',
+  display: _display = 'range',
 }: {
   period?: string
   start?: string
   end?: string
   deliveryType?: 'period' | 'ready'
   verified?: boolean
-  /** Register + detail: Ready stays Ready; period shows the date range. */
+  /** Kept for callers; Ready stays Ready and period always shows dates when available. */
   display?: 'label' | 'range'
 }) {
   const className = 'tabular-nums text-gray-700 dark:text-gray-300'

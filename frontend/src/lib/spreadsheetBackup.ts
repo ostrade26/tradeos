@@ -21,7 +21,7 @@ import {
   liftTouchesRef,
   uniqueLiftRefs,
 } from './liftAllocations'
-import { formatTankerNo } from './liftTankers'
+import { formatTankerNo, getLiftTankers } from './liftTankers'
 import { STOCK_LIFT_LABEL } from './stockLift'
 import { refCore } from './tradeRefs'
 import {

@@ -1,5 +1,5 @@
 import { cn, noAutofill } from '../../lib/utils'
-import { forwardRef, useId, useState, type FocusEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useId, useState, type FocusEvent, type InputHTMLAttributes, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { FieldError, inputErrorClassName } from './FieldError'
 
@@ -31,7 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       onFocus?.(e)
     }
 
-    const handleInput = (e: FormEvent<HTMLInputElement>) => {
+    const handleInput: NonNullable<InputHTMLAttributes<HTMLInputElement>['onInput']> = e => {
       // System / password-manager autofill can fill while still readOnly — unlock so it does not stay grey.
       unlockForKeyboard(e.currentTarget)
       onInput?.(e)

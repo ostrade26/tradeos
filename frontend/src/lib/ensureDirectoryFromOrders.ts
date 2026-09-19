@@ -1,8 +1,8 @@
+import type { TradeData } from '../api/tradeApi'
 import type {
   Broker,
   Producer,
   Retailer,
-  TradeData,
   TradeOrder,
 } from '../data/mockData'
 import { randomUUID } from './randomId'
@@ -37,8 +37,8 @@ export function ensureDirectoryFromOrders(data: TradeData): TradeData {
   const brokers = [...(data.brokers ?? [])]
   const producers = [...(data.producers ?? [])]
   const retailers = [...(data.retailers ?? [])]
-  const items = new Set((data.items ?? []).map(i => i.trim()).filter(Boolean))
-  const spots = new Set((data.spots ?? []).map(s => s.trim()).filter(Boolean))
+  const items = new Set((data.items ?? []).map((i: string) => i.trim()).filter(Boolean))
+  const spots = new Set((data.spots ?? []).map((s: string) => s.trim()).filter(Boolean))
 
   const brokerByName = new Map(brokers.map(b => [nameKey(b.name), b]))
   const producerByName = new Map(producers.map(p => [nameKey(p.name), p]))
