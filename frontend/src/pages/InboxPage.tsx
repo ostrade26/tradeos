@@ -220,7 +220,7 @@ export function InboxPage() {
         breadcrumb={
           <Breadcrumb
             items={[
-              { label: platformConsole ? 'Platform Admin' : 'Tradeal', href: home },
+              { label: platformConsole ? 'Tradeal Admin' : 'Tradeal', href: home },
               { label: 'Inbox' },
             ]}
           />
@@ -285,6 +285,7 @@ export function InboxPage() {
           platformConsole={platformConsole}
           focusId={focusSelectId}
           onOpen={handleSelect}
+          onMarkRead={id => void markRead(id)}
           onRejectSeat={platformConsole ? handleRejectSeat : undefined}
           onDeleteItems={removeItems}
         />

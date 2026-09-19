@@ -51,7 +51,7 @@ PERMISSIONS: list[tuple[str, str]] = [
 ]
 
 ROLE_DEFS: list[tuple[str, str, str]] = [
-    ("platform_admin", "Platform Admin", "platform"),
+    ("platform_admin", "Tradeal Admin", "platform"),
     ("organisation_admin", "Organisation Admin", "organisation"),
     ("operator", "Organisation Operator", "organisation"),
     ("view_only", "Organisation Viewer", "organisation"),

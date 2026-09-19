@@ -12,6 +12,7 @@ import {
 } from '../../lib/notificationDisplay'
 import { cn } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
+import { deployReviewActionLabel, isDeployReviewItem } from '../../lib/deployReviewNav'
 import { isOpenSeatRequest, isSeatRequestDecisionItem } from '../../lib/platformSeatRequestInbox'
 import { SeatRequestInboxMessage } from './SeatRequestInboxMessage'
 
@@ -24,7 +25,7 @@ function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (isSeatRequestDecisionItem(item)) return 'Review request'
   if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
-    if (item.notice.kind === 'deploy_review') return 'Open Features'
+    if (isDeployReviewItem(item)) return deployReviewActionLabel(item)
     if (item.notice.payload?.cta === 'browse') return 'Open Features'
     if (item.notice.payload?.cta === 'review_interest') return 'Review request'
     if (isFeatureInterestNotice(item.notice)) return 'Express interest'

@@ -28,6 +28,7 @@ import {
 import { formatDateTime } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
 import { hasInboxWorkflowStatus } from '../../lib/unifiedInbox'
+import { deployReviewActionLabel, isDeployReviewItem } from '../../lib/deployReviewNav'
 import {
   isOpenSeatRequest,
   isSeatRequestDecisionItem,
@@ -63,7 +64,7 @@ function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (isSeatRequestDecisionItem(item)) return 'Review request'
   if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
-    if (item.notice.kind === 'deploy_review') return 'Open Features'
+    if (isDeployReviewItem(item)) return deployReviewActionLabel(item)
     if (item.notice.payload?.cta === 'browse') return 'Open Features'
     if (item.notice.payload?.cta === 'review_interest') return 'Review request'
     if (isFeatureInterestNotice(item.notice)) return 'Express interest'
@@ -332,6 +333,7 @@ export function InboxReceivedTable({
   platformConsole,
   focusId,
   onOpen,
+  onMarkRead,
   onRejectSeat,
   onDeleteItems,
 }: {
@@ -341,6 +343,7 @@ export function InboxReceivedTable({
   platformConsole: boolean
   focusId?: string | null
   onOpen: (item: UnifiedInboxItem) => void
+  onMarkRead?: (itemId: string) => void
   onRejectSeat?: (item: UnifiedInboxItem) => void
   onDeleteItems: (ids: string[]) => Promise<number>
 }) {
@@ -360,8 +363,11 @@ export function InboxReceivedTable({
 
   useEffect(() => {
     if (!focusId) return
-    if (rows.some(r => r.id === focusId)) setSelectedId(focusId)
-  }, [focusId, rows])
+    const row = rows.find(r => r.id === focusId)
+    if (!row) return
+    setSelectedId(focusId)
+    if (row.category === 'notice' && row.unread) onMarkRead?.(row.id)
+  }, [focusId, rows, onMarkRead])
 
   useEffect(() => {
     if (selectedId && !rows.some(r => r.id === selectedId)) {
@@ -390,7 +396,13 @@ export function InboxReceivedTable({
   )
 
   const onRowClick = (row: UnifiedInboxItem) => {
+    // Deploy Features / Releases: go straight to the destination (same as bell).
+    if (isDeployReviewItem(row)) {
+      onOpen(row)
+      return
+    }
     setSelectedId(row.id)
+    if (row.category === 'notice' && row.unread) onMarkRead?.(row.id)
   }
 
   const toggleChecked = useCallback((id: string) => {
@@ -480,7 +492,7 @@ export function InboxReceivedTable({
             <p className="min-w-0 truncate">
               <span
                 className={
-                  row.unread || row.actionable
+                  row.unread
                     ? 'font-semibold text-heading'
                     : 'font-medium text-heading'
                 }

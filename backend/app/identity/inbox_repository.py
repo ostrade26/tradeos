@@ -17,6 +17,7 @@ from .notifications_repository import (
     list_notifications_for_user,
     mark_all_read_for_user,
     mark_notification_read,
+    ack_deploy_review_notices,
 )
 from .product_request_repository import list_product_requests_for_user, list_product_requests_platform
 from .seat_request_repository import list_seat_requests_platform
@@ -109,6 +110,7 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
         if _is_review_interest_notice(n):
             continue
         # Deploy drafts: Features & Access (gated) or Releases (inform).
+        # Invariant: actionable tracks unread only — never leave actionable=True after read.
         if str(n.get("kind") or "") == "deploy_review":
             unread = bool(n.get("unread"))
             payload = n.get("payload") or {}
@@ -128,7 +130,7 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
                     subtitle=str(n.get("body") or "")[:160],
                     from_label="Tradeal",
                     date_iso=str(n.get("created_at") or ""),
-                    actionable=True,
+                    actionable=unread,
                     href=str(n.get("href") or default_href),
                     notice=n,
                 )
@@ -514,6 +516,11 @@ def mark_inbox_item_read(conn, item_id: str, user_id: int) -> dict[str, Any] | N
 
 def mark_all_inbox_notices_read(conn, user_id: int) -> int:
     return mark_all_read_for_user(conn, user_id)
+
+
+def ack_inbox_deploy_reviews(conn, user_id: int, cta: str) -> int:
+    """Clear unread deploy_review notices when Features / Releases is opened."""
+    return ack_deploy_review_notices(conn, user_id, cta)
 
 
 def delete_notification_for_user(conn, notification_id: int, user_id: int) -> bool:

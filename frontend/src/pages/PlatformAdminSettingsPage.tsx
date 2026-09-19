@@ -88,7 +88,7 @@ export function PlatformAdminSettingsHubPage() {
         breadcrumb={
           <Breadcrumb
             items={[
-              { label: 'Platform Admin', href: '/platform-admin/organisations' },
+              { label: 'Tradeal Admin', href: '/platform-admin/organisations' },
               { label: 'Settings' },
             ]}
           />
@@ -285,9 +285,6 @@ function AccountSection() {
           <div className="min-w-0">
             <p className="text-base font-semibold text-heading truncate">{form.name || session?.name || '—'}</p>
             <p className="text-sm text-muted">{roleLabel}</p>
-            {form.username ? (
-              <p className="text-xs text-muted mt-0.5 truncate">{form.username}</p>
-            ) : null}
           </div>
         </div>
 
@@ -303,9 +300,7 @@ function AccountSection() {
           <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
           <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
-          <div className="sm:col-span-2">
-            <Input label="Role" value={roleLabel} readOnly />
-          </div>
+          <Input label="Role" value={roleLabel} readOnly />
         </div>
 
         <div className="flex items-center gap-2 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
@@ -529,7 +524,7 @@ export function PlatformAdminSettingsSectionPage() {
         breadcrumb={
           <Breadcrumb
             items={[
-              { label: 'Platform Admin', href: '/platform-admin/organisations' },
+              { label: 'Tradeal Admin', href: '/platform-admin/organisations' },
               { label: 'Settings', href: platformSettingsPath() },
               { label: meta?.label ?? section },
             ]}

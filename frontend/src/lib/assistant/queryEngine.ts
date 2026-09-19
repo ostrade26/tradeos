@@ -314,6 +314,7 @@ function helpResult(): AssistantResult {
       '• *Lifts for Patanjali*',
       '• *Low inventory lots*',
       '• *Orders for Palm Oil*',
+      '• *Main menu* — show starter options again',
       '• *Summary / stats*',
       '• *Create a PO for DVC 50 MT soyabean oil*',
       '• *New sales order for Girija against PO-1*',

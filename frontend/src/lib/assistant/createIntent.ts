@@ -134,16 +134,15 @@ export function createCommandResult(draft: CreateDraft): AssistantResult {
 
   const detail = bits.length > 0
     ? `I filled in ${bits.join(', ')}. Review and save when it looks right.`
-    : 'Opening a blank form — add the details and save.'
+    : 'Tap below to open a blank form — add the details and save.'
 
   const cta = draft.kind === 'po' ? 'New PO' : draft.kind === 'so' ? 'New SO' : 'Record lift'
 
   return {
     message: [
-      `Opening a new **${label}**.`,
+      `Ready when you are — open a new **${label}**.`,
       detail,
     ].join('\n'),
     actions: [{ label: cta, path }],
-    navigateTo: path,
   }
 }

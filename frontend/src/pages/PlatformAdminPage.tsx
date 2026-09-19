@@ -28,6 +28,7 @@ import {
   type SubscriptionPlan,
 } from '../api/platformApi'
 import { loadRegisterSort, saveRegisterSort, toggleSort } from '../lib/registerSort'
+import { ackUnreadDeployReviews } from '../lib/ackDeployReviews'
 import { formatDateTime } from '../lib/utils'
 import {
   amcColumns,
@@ -394,6 +395,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     if (section === 'seat-requests') void loadSeatRequests()
   }, [section, loadSeatRequests])
+
+  useEffect(() => {
+    if (section !== 'releases') return
+    void ackUnreadDeployReviews('review_release')
+  }, [section])
 
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
@@ -1215,7 +1221,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         breadcrumb={
           <Breadcrumb
             items={[
-              { label: 'Platform Admin', href: '/platform-admin/organisations' },
+              { label: 'Tradeal Admin', href: '/platform-admin/organisations' },
               { label: meta.breadcrumb },
             ]}
           />

@@ -14,7 +14,7 @@ export function orgRoleLabel(slug: string): string {
     case 'view_only':
       return 'Organisation Viewer'
     case 'platform_admin':
-      return 'Platform Admin'
+      return 'Tradeal Admin'
     default:
       return slug
   }

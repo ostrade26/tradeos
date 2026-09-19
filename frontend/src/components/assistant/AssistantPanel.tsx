@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Bot, Send, Sparkles, ArrowRight, X } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Bot, Send, Sparkles, ArrowRight, X, LayoutGrid } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { cn, noAutofill } from '../../lib/utils'
-import { appPath } from '../../lib/appShellMode'
+import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
+import { useAuth } from '../../hooks/useAuth'
 import { useTradeStore } from '../../store/TradeStore'
 import { runAssistantQuery } from '../../lib/assistant/queryEngine'
 import {
+  loadPlatformAssistantSnapshot,
+  runPlatformAssistantQuery,
+} from '../../lib/assistant/platformQueryEngine'
+import {
   getAssistantMessages,
   getAssistantOpen,
+  isAssistantMainMenuCommand,
+  resetAssistantToMainMenu,
+  setAssistantContext,
   setAssistantMessages,
   setAssistantOpen,
   subscribeAssistant,
 } from '../../lib/assistant/session'
 import type { AssistantAction, ChatMessage } from '../../lib/assistant/types'
 
-const SUGGESTIONS = [
+const ORG_SUGGESTIONS = [
   "What is today's earning?",
   'Total sales in last 3 days',
   'How much do I need to pay DVC?',
@@ -23,6 +31,15 @@ const SUGGESTIONS = [
   'Summary / stats',
   'Create a PO for DVC 50 MT',
   'Record lift for PO-1',
+]
+
+const PLATFORM_SUGGESTIONS = [
+  'Platform summary',
+  'How many organisations?',
+  'Pending seat requests',
+  'Active licences',
+  'Open Features & Access',
+  'Go to Releases',
 ]
 
 const THINK_MS = 520
@@ -72,10 +89,18 @@ function useAssistantMessages() {
   return useSyncExternalStore(subscribeAssistant, getAssistantMessages, getAssistantMessages)
 }
 
+function resolveAssistantNavigatePath(path: string) {
+  if (path.startsWith('/platform-admin')) return path
+  return appPath(path)
+}
+
 /** Floating Tradeal AI launcher + chat card. Open state and history survive route changes. */
 export function AssistantPanel() {
   const store = useTradeStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const { isPlatformAdmin } = useAuth()
+  const platformMode = isPlatformAdmin && isPlatformAdminPath(location.pathname)
   const open = useAssistantOpen()
   const messages = useAssistantMessages()
   const [input, setInput] = useState('')
@@ -85,6 +110,10 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const thinkTimer = useRef(0)
+
+  useEffect(() => {
+    setAssistantContext(platformMode ? 'platform' : 'org')
+  }, [platformMode])
 
   useEffect(() => {
     if (!open) return
@@ -108,10 +137,23 @@ export function AssistantPanel() {
 
   useEffect(() => () => window.clearTimeout(thinkTimer.current), [])
 
+  const goToMainMenu = useCallback(() => {
+    window.clearTimeout(thinkTimer.current)
+    setThinking(false)
+    setInput('')
+    resetAssistantToMainMenu()
+    setTimeout(() => inputRef.current?.focus(), 40)
+  }, [])
+
   const submit = useCallback(
     (text: string) => {
       const trimmed = text.trim()
       if (!trimmed || thinking) return
+
+      if (isAssistantMainMenuCommand(trimmed)) {
+        goToMainMenu()
+        return
+      }
 
       const userMsg: ChatMessage = {
         id: uid(),
@@ -120,37 +162,55 @@ export function AssistantPanel() {
         timestamp: new Date().toISOString(),
       }
 
-      const result = runAssistantQuery(trimmed, store)
-      const assistantMsg: ChatMessage = {
-        id: uid(),
-        role: 'assistant',
-        content: result.message,
-        actions: result.actions,
-        timestamp: new Date().toISOString(),
-      }
-
       setAssistantMessages(prev => [...prev, userMsg])
       setInput('')
       setThinking(true)
 
-      window.clearTimeout(thinkTimer.current)
-      thinkTimer.current = window.setTimeout(() => {
-        setAssistantMessages(prev => [...prev, assistantMsg])
-        setThinking(false)
-        // Stay open — only navigate when the user clicks an action chip.
-      }, prefersReducedMotion() ? 0 : THINK_MS)
+      const finish = (content: string, actions?: AssistantAction[]) => {
+        const assistantMsg: ChatMessage = {
+          id: uid(),
+          role: 'assistant',
+          content,
+          actions,
+          timestamp: new Date().toISOString(),
+        }
+        window.clearTimeout(thinkTimer.current)
+        thinkTimer.current = window.setTimeout(() => {
+          setAssistantMessages(prev => [...prev, assistantMsg])
+          setThinking(false)
+        }, prefersReducedMotion() ? 0 : THINK_MS)
+      }
+
+      if (platformMode) {
+        void loadPlatformAssistantSnapshot()
+          .then(snapshot => {
+            const result = runPlatformAssistantQuery(trimmed, snapshot)
+            finish(result.message, result.actions)
+          })
+          .catch(() => {
+            finish(
+              'Could not load platform data right now. Try again, or open Organisations from the side nav.',
+              [{ label: 'Organisations', path: '/platform-admin/organisations' }],
+            )
+          })
+        return
+      }
+
+      const result = runAssistantQuery(trimmed, store)
+      finish(result.message, result.actions)
     },
-    [store, thinking],
+    [store, thinking, platformMode, goToMainMenu],
   )
 
   const handleAction = (action: AssistantAction) => {
     if (!action.path) return
-    // Keep the bot open across navigation; session store survives remounts.
     setAssistantOpen(true)
-    navigate(appPath(action.path))
+    navigate(resolveAssistantNavigatePath(action.path))
   }
 
+  const suggestions = platformMode ? PLATFORM_SUGGESTIONS : ORG_SUGGESTIONS
   const showSuggestions = messages.length <= 1 && !thinking
+  const showMainMenu = messages.length > 1 || thinking
 
   const fabClass =
     'fixed z-40 bottom-12 right-12 max-lg:bottom-32 pb-[env(safe-area-inset-bottom)]'
@@ -168,8 +228,8 @@ export function AssistantPanel() {
             'hover:brightness-110 hover:scale-[1.04] active:scale-95 cursor-pointer transition-transform',
             'attex-focus',
           )}
-          aria-label="Ask Tradeal AI"
-          title="Ask Tradeal AI (⌘J)"
+          aria-label={platformMode ? 'Ask Tradeal Admin AI' : 'Ask Tradeal AI'}
+          title={platformMode ? 'Ask Tradeal Admin AI (⌘J)' : 'Ask Tradeal AI (⌘J)'}
         >
           <Bot className="h-6 w-6" />
         </button>
@@ -223,7 +283,7 @@ export function AssistantPanel() {
             </div>
             <div className="min-w-0 flex-1">
               <h2 id="assistant-title" className="text-base font-semibold text-heading flex items-center gap-1.5">
-                Tradeal AI
+                {platformMode ? 'Tradeal Admin AI' : 'Tradeal AI'}
                 <Sparkles className={cn('h-3.5 w-3.5 text-accent', thinking && 'assistant-sparkle')} />
               </h2>
               <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
@@ -235,11 +295,22 @@ export function AssistantPanel() {
                 ) : (
                   <>
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
-                    Ready · orders, balances, create PO / SO / lift
+                    {platformMode ? 'Ready to help' : 'Ready · orders, balances, create PO / SO / lift'}
                   </>
                 )}
               </p>
             </div>
+            {showMainMenu ? (
+              <button
+                type="button"
+                onClick={goToMainMenu}
+                className="rounded-lg p-1.5 text-muted hover:text-heading hover:bg-white/70 dark:hover:bg-white/10 cursor-pointer transition-colors"
+                aria-label="Main menu"
+                title="Main menu"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setAssistantOpen(false)}
@@ -304,7 +375,7 @@ export function AssistantPanel() {
 
           {showSuggestions && (
             <div className="relative z-10 px-4 pb-2 flex flex-wrap gap-2 shrink-0">
-              {SUGGESTIONS.map((s, i) => (
+              {suggestions.map((s, i) => (
                 <button
                   key={s}
                   type="button"
@@ -318,51 +389,47 @@ export function AssistantPanel() {
             </div>
           )}
 
-          <form
-            autoComplete="off"
-            className="relative z-10 border-t border-white/50 dark:border-white/10 p-3 shrink-0 bg-white/35 dark:bg-black/20 backdrop-blur-md"
-            onSubmit={e => {
-              e.preventDefault()
-              submit(input)
-            }}
-          >
+          <div className="relative z-10 border-t border-white/50 dark:border-white/10 px-3 py-3 shrink-0 bg-white/50 dark:bg-black/25 backdrop-blur-md">
             <div
               className={cn(
-                'flex gap-2 items-end rounded-2xl border bg-white/80 p-1.5 shadow-sm transition-shadow dark:bg-black/30',
+                'flex items-end gap-2 rounded-2xl border bg-white/90 px-2.5 py-2 shadow-sm transition-shadow dark:bg-card/90',
                 composerFocused
                   ? 'border-accent/50 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]'
-                  : 'border-white/80 dark:border-white/10',
+                  : 'border-gray-200/90 dark:border-white/10',
               )}
             >
               <textarea
                 ref={inputRef}
-                rows={2}
+                rows={1}
                 value={input}
-                {...noAutofill}
-                disabled={thinking}
+                onChange={e => setInput(e.target.value)}
                 onFocus={() => setComposerFocused(true)}
                 onBlur={() => setComposerFocused(false)}
-                onChange={e => setInput(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     submit(input)
                   }
-                  if (e.key === 'Escape') setAssistantOpen(false)
                 }}
-                placeholder="Ask anything about your trades…"
-                className="flex-1 resize-none rounded-xl bg-transparent px-3 py-2 text-sm text-heading placeholder:text-muted focus:outline-none disabled:opacity-60"
+                placeholder={
+                  platformMode
+                    ? 'Ask about orgs, seats, licences…'
+                    : 'Ask about earnings, balances, orders…'
+                }
+                className="max-h-24 min-h-[2.25rem] flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-heading placeholder:text-muted focus:outline-none"
+                {...noAutofill}
               />
               <button
-                type="submit"
+                type="button"
                 disabled={!input.trim() || thinking}
+                onClick={() => submit(input)}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-[color-mix(in_srgb,var(--color-accent)_75%,#1e3a8a)] text-white disabled:opacity-40 hover:brightness-110 cursor-pointer transition-transform hover:scale-[1.04] active:scale-95"
                 aria-label="Send"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
-          </form>
+          </div>
         </div>
       ) : null}
     </>,

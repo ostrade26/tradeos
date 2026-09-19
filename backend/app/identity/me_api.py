@@ -120,6 +120,30 @@ def inbox_read_all(request: Request) -> dict[str, Any]:
         return {"ok": True, "updated": count}
 
 
+class AckDeployReviewsBody(BaseModel):
+    cta: Literal["review_features", "review_release"]
+
+
+@router.post(
+    "/inbox/ack-deploy-reviews",
+    summary="Mark unread deploy-review notices read for a destination CTA",
+)
+def inbox_ack_deploy_reviews(body: AckDeployReviewsBody, request: Request) -> dict[str, Any]:
+    """Called when Features & Access or Releases opens so inbox stays in sync."""
+    session = _session(request)
+    from .inbox_repository import ack_inbox_deploy_reviews
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            count = ack_inbox_deploy_reviews(conn, session.user.id, body.cta)
+            conn.commit()
+            return {"ok": True, "updated": count}
+    with _sqlite_connect() as conn:
+        count = ack_inbox_deploy_reviews(conn, session.user.id, body.cta)
+        conn.commit()
+        return {"ok": True, "updated": count}
+
+
 @router.post("/inbox/items/{item_id}/read", summary="Mark a notice item read")
 def inbox_item_read(
     request: Request,

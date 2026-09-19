@@ -11,6 +11,7 @@ import {
   PlatformFeatureAccessPanel,
   type PlatformFeatureAccessPanelHandle,
 } from './PlatformFeatureAccessPanel'
+import { ackUnreadDeployReviews } from '../../lib/ackDeployReviews'
 
 export type PlatformAddOnsTab = 'catalog' | 'access'
 
@@ -43,6 +44,10 @@ export const PlatformAddOnsAdminPanel = forwardRef<
   useEffect(() => {
     void syncOpenAccessCount()
   }, [syncOpenAccessCount])
+
+  useEffect(() => {
+    void ackUnreadDeployReviews('review_features')
+  }, [])
 
   useEffect(() => {
     if (searchParams.get('interestId') && tabParam !== 'access') {

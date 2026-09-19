@@ -7,7 +7,7 @@ export interface AssistantAction {
 export interface AssistantResult {
   message: string
   actions: AssistantAction[]
-  /** Primary destination — panel auto-navigates here when set */
+  /** Optional primary path — shown as an action; the panel does not auto-navigate. */
   navigateTo?: string
 }
 

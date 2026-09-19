@@ -1,0 +1,26 @@
+---
+description: Deploy-review inbox notices must clear when Features/Releases open
+globs: frontend/src/**/ackDeployReviews.ts,frontend/src/**/deployReviewNav.ts,frontend/src/**/PlatformAddOnsAdminPanel.tsx,frontend/src/pages/PlatformAdminPage.tsx,frontend/src/**/InboxReceivedTable.tsx,frontend/src/**/InboxDetailPane.tsx,frontend/src/**/useInboxItemActions.tsx,frontend/src/**/NotificationsDropdown.tsx,backend/app/identity/inbox_repository.py,backend/app/identity/notifications_repository.py,backend/app/identity/me_api.py
+alwaysApply: false
+---
+
+# Deploy-review inbox read state
+
+`kind: deploy_review` notices ("New feature(s) from deploy · …" / "Release draft from deploy · …") must not stay unread after the admin has seen the destination.
+
+## Invariants
+
+1. Opening **Features & Access** (`/platform-admin/add-ons`) calls `ackUnreadDeployReviews('review_features')` on mount.
+2. Opening **Releases** (`/platform-admin/releases`) calls `ackUnreadDeployReviews('review_release')` on mount.
+3. **Bell click** and **Inbox row click** for `deploy_review` navigate to Features or Releases (never Inbox) and mark that notice read. Use `deployReviewHref` / `isDeployReviewItem`.
+4. Selecting other unread notices in Inbox marks them read on preview.
+5. Backend list shape: `actionable` equals `unread` for deploy_review — never hardcode `actionable=True`.
+6. Prefer `POST /me/inbox/ack-deploy-reviews` over ad-hoc list+mark loops.
+7. Never run platform-admin hrefs through `appPath()` (that prefixes `/app`).
+
+## Do not
+
+- Treat `appliedUpdates` as related to these admin deploy notices.
+- Rely only on the inbox "Open Features" button to clear unread.
+- Route deploy-review bell clicks to `/platform-admin/notifications`.
+- Leave silent catch paths that re-show unread after a successful destination visit without an ack call.

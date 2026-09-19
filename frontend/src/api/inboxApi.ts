@@ -72,6 +72,13 @@ export const inboxApi = {
     return apiFetch<{ ok: boolean; updated: number }>('/me/inbox/read-all', { method: 'POST' })
   },
 
+  ackDeployReviews(cta: 'review_features' | 'review_release') {
+    return apiFetch<{ ok: boolean; updated: number }>('/me/inbox/ack-deploy-reviews', {
+      method: 'POST',
+      body: JSON.stringify({ cta }),
+    })
+  },
+
   deleteItem(itemId: string) {
     return apiFetch<{ ok: boolean; deleted: number }>(
       `/me/inbox/items/${encodeURIComponent(itemId)}`,

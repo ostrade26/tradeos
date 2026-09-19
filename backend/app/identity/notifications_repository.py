@@ -774,6 +774,59 @@ def mark_all_read_for_user(conn, user_id: int) -> int:
     return int(getattr(cur, "rowcount", 0) or 0)
 
 
+DEPLOY_REVIEW_CTAS = frozenset({"review_features", "review_release"})
+
+
+def ack_deploy_review_notices(conn, user_id: int, cta: str) -> int:
+    """Mark unread deploy_review notices for this CTA as read.
+
+    Destination pages (Features & Access / Releases) must call this so opening
+    the destination clears the inbox without requiring the inbox CTA.
+    """
+    key = (cta or "").strip()
+    if key not in DEPLOY_REVIEW_CTAS:
+        return 0
+    now = _now_iso()
+    href_like = "%/add-ons%" if key == "review_features" else "%/releases%"
+    if uses_postgres():
+        cur = conn.execute(
+            """
+            UPDATE user_notifications
+            SET read_at = %s
+            WHERE recipient_user_id = %s
+              AND kind = 'deploy_review'
+              AND (read_at IS NULL OR read_at = '')
+              AND (
+                payload_json::jsonb ->> 'cta' = %s
+                OR (
+                  (payload_json::jsonb ->> 'cta' IS NULL OR payload_json::jsonb ->> 'cta' = '')
+                  AND COALESCE(href, '') LIKE %s
+                )
+              )
+            """,
+            (now, user_id, key, href_like),
+        )
+    else:
+        cur = conn.execute(
+            """
+            UPDATE user_notifications
+            SET read_at = ?
+            WHERE recipient_user_id = ?
+              AND kind = 'deploy_review'
+              AND (read_at IS NULL OR read_at = '')
+              AND (
+                json_extract(payload_json, '$.cta') = ?
+                OR (
+                  (json_extract(payload_json, '$.cta') IS NULL OR json_extract(payload_json, '$.cta') = '')
+                  AND COALESCE(href, '') LIKE ?
+                )
+              )
+            """,
+            (now, user_id, key, href_like),
+        )
+    return int(getattr(cur, "rowcount", 0) or 0)
+
+
 def list_applied_feature_keys(conn, user_id: int, organisation_id: int | None = None) -> list[str]:
     keys: list[str] = []
     if uses_postgres():

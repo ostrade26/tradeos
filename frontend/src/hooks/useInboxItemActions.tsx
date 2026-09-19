@@ -21,6 +21,10 @@ import { sessionFromApi } from '../lib/authSession'
 import { saveAuthSession } from '../lib/auth'
 import { appPath } from '../lib/appShellMode'
 import {
+  deployReviewHref,
+  isDeployReviewItem,
+} from '../lib/deployReviewNav'
+import {
   isFeatureBrowseNotice,
   isFeatureDecisionNotice,
   isFeatureEnhancementNotice,
@@ -134,17 +138,15 @@ export function useInboxItemActions({
       if (row.category === 'notice' && row.unread) void markRead(row.id)
       return
     }
-    if (row.notice) {
-      if (row.notice.kind === 'deploy_review') {
-        const href = row.notice.href || (
-          row.notice.payload?.cta === 'review_release'
-            ? '/platform-admin/releases'
-            : '/platform-admin/add-ons'
-        )
+    if (isDeployReviewItem(row)) {
+      const href = deployReviewHref(row)
+      void (async () => {
+        if (row.category === 'notice' && row.unread) await markRead(row.id)
         navigate(href)
-        if (row.category === 'notice' && row.unread) void markRead(row.id)
-        return
-      }
+      })()
+      return
+    }
+    if (row.notice) {
       if (isFeatureBrowseNotice(row.notice)) {
         navigate(row.notice.href || appPath('/features'))
         if (row.category === 'notice' && row.unread) void markRead(row.id)
@@ -199,8 +201,12 @@ export function useInboxItemActions({
       return
     }
     if (row.href) {
-      const path = row.href.startsWith('/app/') ? row.href : appPath(row.href)
+      const path =
+        row.href.startsWith('/platform-admin') || row.href.startsWith('/app/')
+          ? row.href
+          : appPath(row.href)
       navigate(path)
+      if (row.category === 'notice' && row.unread) void markRead(row.id)
     }
   }, [markRead, navigate, openFeatureInterestReview, platformConsole, session?.token, toast])
 

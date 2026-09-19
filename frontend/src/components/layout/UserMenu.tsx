@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useUser } from '../../hooks/useUser'
 import { useLocation } from 'react-router-dom'
 import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
+import { orgRoleLabel } from '../../lib/platformLabels'
 
 export function UserMenu({ onBrandBar = false }: { onBrandBar?: boolean } = {}) {
   const [open, setOpen] = useState(false)
@@ -19,14 +20,15 @@ export function UserMenu({ onBrandBar = false }: { onBrandBar?: boolean } = {}) 
   const settingsPath = platformConsole ? '/platform-admin/settings' : appPath('/settings')
   const traderName = profile.name.trim() || profile.username || profile.email
   const shortRole =
-    roleSlug === 'organisation_admin'
-      ? 'Organisation Admin'
-      : roleSlug === 'operator'
-        ? 'Operator'
-        : roleSlug === 'view_only'
-          ? 'Viewer'
-          : roleLabel
-
+    roleSlug === 'platform_admin'
+      ? orgRoleLabel(roleSlug)
+      : roleSlug === 'organisation_admin'
+        ? 'Organisation Admin'
+        : roleSlug === 'operator'
+          ? 'Operator'
+          : roleSlug === 'view_only'
+            ? 'Viewer'
+            : roleLabel
   return (
     <DropdownPanel
       open={open}
