@@ -88,9 +88,13 @@ const WEEKDAY_OPTIONS = [
 function formatLastSent(settings: BackupReminderSettings | null): string {
   if (!settings?.last_sent_at) return 'Not sent yet'
   try {
-    return new Intl.DateTimeFormat('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
+    return new Intl.DateTimeFormat('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
       timeZone: settings.timezone || 'Asia/Kolkata',
     }).format(new Date(settings.last_sent_at))
   } catch {

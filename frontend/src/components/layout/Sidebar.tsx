@@ -19,6 +19,7 @@ import {
 } from '../../lib/platformSettingsSections'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
+import { useUnifiedInbox } from '../../hooks/useUnifiedInbox'
 import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
 
 /** Register routes — navigate with a clean URL (no `ref` from the previous register). */
@@ -94,7 +95,11 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
     (hasPermission('organisation.subscription.view') || hasPermission('organisation.seats.request'))
   const showTeamInSettings = canManageOrganisation
   const showFeaturesNav = hasPermission('organisation.subscription.view') && !isPlatformAdmin
-  const { pendingCount: openSeatRequests, openProductRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
+  const { pendingCount: openSeatRequests } = usePlatformSeatRequestInbox(isPlatformAdmin)
+  const { badgeCount: inboxBadgeCount } = useUnifiedInbox(
+    isPlatformAdmin ? 'platform' : 'org',
+    'received',
+  )
   const settingsNavItems = SETTINGS_SECTIONS.filter(s => {
     if (s.planTeamSection) return showPlanInSettings || showTeamInSettings
     return true
@@ -234,11 +239,11 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                     {group.items.map(item => {
                       const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
                       const inboxBadge =
-                        item.to === '/platform-admin/notifications' && (openSeatRequests + openProductRequests) > 0
+                        item.to === '/platform-admin/notifications' && inboxBadgeCount > 0
                       const badgeCount = seatBadge
                         ? openSeatRequests
                         : inboxBadge
-                          ? openSeatRequests + openProductRequests
+                          ? inboxBadgeCount
                           : 0
                       return (
                         <NavLink
@@ -306,7 +311,10 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                 <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Platform</p>
               )}
               <div className="space-y-0.5">
-                {platformNav.map(item => (
+                {platformNav.map(item => {
+                  const isInbox = item.to === appPath('/notifications')
+                  const badgeCount = isInbox && inboxBadgeCount > 0 ? inboxBadgeCount : 0
+                  return (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -314,10 +322,27 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                     className={navClass}
                     onClick={onMobileClose}
                   >
-                    <item.icon className="h-5 w-5 shrink-0" />
-                    {showLabels && item.label}
+                    <span className="relative shrink-0">
+                      <item.icon className="h-5 w-5" />
+                      {iconOnly && badgeCount > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                          {badgeCount > 9 ? '9+' : badgeCount}
+                        </span>
+                      )}
+                    </span>
+                    {showLabels && (
+                      <>
+                        <span className="truncate">{item.label}</span>
+                        {badgeCount > 0 && (
+                          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white tabular-nums">
+                            {badgeCount > 9 ? '9+' : badgeCount}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </NavLink>
-                ))}
+                  )
+                })}
               </div>
             </>
           )}

@@ -7,6 +7,8 @@ interface Tab {
   id: string
   label: string
   count?: number
+  /** When set, shown instead of the numeric count (e.g. "New 02"). */
+  countLabel?: string
   icon?: LucideIcon
 }
 
@@ -60,14 +62,25 @@ export function Tabs({ tabs, active, onChange, className, buttonClassName, panel
               <tab.icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
             ) : null}
             {tab.label}
-            {tab.count !== undefined && (
+            {tab.countLabel ? (
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums',
+                  active === tab.id
+                    ? 'bg-danger/10 text-danger'
+                    : 'bg-danger text-white',
+                )}
+              >
+                {tab.countLabel}
+              </span>
+            ) : tab.count !== undefined ? (
               <span className={cn(
                 'rounded-full px-1.5 py-0.5 text-xs',
                 active === tab.id ? 'bg-gray-100 dark:bg-gray-700/50' : 'bg-gray-50 dark:bg-card'
               )}>
                 {tab.count}
               </span>
-            )}
+            ) : null}
           </span>
           {active === tab.id && (
             <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-accent rounded-full" />

@@ -11,7 +11,8 @@ interface SegmentedControlProps<T extends string> {
   value: T
   onChange: (value: T) => void
   className?: string
-  size?: 'sm' | 'md'
+  /** `field` matches Input height (h-11 / sm:h-9) for filter bars. */
+  size?: 'sm' | 'md' | 'field'
   ariaLabel?: string
 }
 
@@ -27,6 +28,7 @@ export function SegmentedControl<T extends string>({
     <div
       className={cn(
         'inline-flex rounded-md border border-gray-200 dark:border-gray-600 p-0.5',
+        size === 'field' && 'h-11 sm:h-9',
         className,
       )}
       role="group"
@@ -43,7 +45,9 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.id)}
             className={cn(
               'inline-flex items-center justify-center gap-1.5 font-medium transition-colors cursor-pointer attex-focus',
-              size === 'sm' ? 'px-2.5 py-1 text-xs rounded' : 'px-3 py-1.5 text-sm rounded',
+              size === 'sm' && 'px-2.5 py-1 text-xs rounded',
+              size === 'md' && 'px-3 py-1.5 text-sm rounded',
+              size === 'field' && 'h-full px-3 text-sm rounded',
               selected
                 ? 'bg-accent text-white shadow-sm'
                 : 'text-gray-500 hover:text-heading dark:text-muted',

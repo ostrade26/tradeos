@@ -4,23 +4,46 @@ import { MessageSquare } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
-import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { SendToTradealModal } from '../components/feedback/SendToTradealModal'
-import { InboxDetailPane } from '../components/inbox/InboxDetailPane'
-import { InboxFeedList } from '../components/inbox/InboxFeedList'
+import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
+import { InboxFiltersBar, type InboxStatusFilter } from '../components/inbox/InboxFiltersBar'
+import { InboxReceivedTable } from '../components/inbox/InboxReceivedTable'
 import { InboxSentTable } from '../components/inbox/InboxSentTable'
 import { useInboxItemActions } from '../hooks/useInboxItemActions'
 import { useUnifiedInbox } from '../hooks/useUnifiedInbox'
+import { useDetailPanelSlot } from '../components/layout/DetailPanelSlot'
+import { useToast } from '../hooks/useToast'
 import type { InboxBox } from '../api/inboxApi'
+import { ApiError } from '../api/client'
+import {
+  platformApi,
+  type NotificationAudience,
+  type NotificationKind,
+  type NotificationRecipientScope,
+  type PlatformOrganisation,
+  type PlatformUser,
+} from '../api/platformApi'
 import { APP_HOME, isPlatformAdminPath } from '../lib/appShellMode'
 import { orgNoticesLabels, platformActionInboxLabels } from '../lib/inboxLabels'
-import { cn } from '../lib/utils'
+import { notificationKindLabel } from '../lib/notificationDisplay'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
 
-type InboxFilter = 'open' | 'all'
+function matchesSearch(row: UnifiedInboxItem, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const kind =
+    row.kind === 'feature_interest' ? 'feature interest' : notificationKindLabel(row.kind).toLowerCase()
+  return (
+    row.title.toLowerCase().includes(q) ||
+    row.subtitle.toLowerCase().includes(q) ||
+    row.from.toLowerCase().includes(q) ||
+    kind.includes(q)
+  )
+}
 
 export function InboxPage() {
   const location = useLocation()
+  const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const platformConsole = isPlatformAdminPath(location.pathname)
   const mode = platformConsole ? 'platform' : 'org'
@@ -29,17 +52,29 @@ export function InboxPage() {
 
   const boxParam = searchParams.get('box')
   const [box, setBox] = useState<InboxBox>(boxParam === 'sent' ? 'sent' : 'received')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<InboxStatusFilter>('all')
+  const [composeOpen, setComposeOpen] = useState(searchParams.get('compose') === '1')
+  const [focusSelectId, setFocusSelectId] = useState<string | null>(null)
+
+  const [organisations, setOrganisations] = useState<PlatformOrganisation[]>([])
+  const [orgUsers, setOrgUsers] = useState<PlatformUser[]>([])
+  const [savingNotice, setSavingNotice] = useState(false)
+
+  const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
 
   const {
     items,
     attentionCount,
+    badgeCount,
     refresh,
     markRead,
     markAllRead,
+    removeItems,
     refreshPlatform,
   } = useUnifiedInbox(mode, box)
 
-  const { handleSelect, modals } = useInboxItemActions({
+  const { handleSelect, openSeatDecision, modals } = useInboxItemActions({
     platformConsole,
     inboxItems: items,
     markRead,
@@ -47,37 +82,33 @@ export function InboxPage() {
     refreshPlatform,
   })
 
-  const [filter, setFilter] = useState<InboxFilter>('open')
-  const [sendOpen, setSendOpen] = useState(searchParams.get('compose') === '1')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [mobileShowDetail, setMobileShowDetail] = useState(false)
+  const handleRejectSeat = (row: UnifiedInboxItem) => {
+    if (row.seatRequest) openSeatDecision('reject', row.seatRequest)
+  }
 
   const openCount = useMemo(
-    () => items.filter(row => row.status === 'open').length,
+    () =>
+      items.filter(row =>
+        row.category === 'notice' ? row.unread : row.status === 'open',
+      ).length,
     [items],
   )
 
-  const visibleRows = useMemo(
-    () => (box === 'sent' ? items : filter === 'open' ? items.filter(row => row.status === 'open') : items),
-    [filter, items, box],
-  )
+  const receivedNewLabel = useMemo(() => {
+    if (badgeCount <= 0) return undefined
+    const n = Math.min(badgeCount, 99)
+    return `New ${String(n).padStart(2, '0')}`
+  }, [badgeCount])
 
-  useEffect(() => {
-    if (box === 'sent') return
-    if (visibleRows.length === 0) {
-      setSelectedId(null)
-      setMobileShowDetail(false)
-      return
-    }
-    if (!selectedId || !visibleRows.some(row => row.id === selectedId)) {
-      setSelectedId(visibleRows[0]!.id)
-    }
-  }, [visibleRows, selectedId, box])
-
-  const selected: UnifiedInboxItem | null = useMemo(
-    () => visibleRows.find(row => row.id === selectedId) ?? null,
-    [visibleRows, selectedId],
-  )
+  const visibleRows = useMemo(() => {
+    const byStatus =
+      box === 'sent' || statusFilter === 'all'
+        ? items
+        : items.filter(row =>
+            row.category === 'notice' ? row.unread : row.status === 'open',
+          )
+    return byStatus.filter(row => matchesSearch(row, search))
+  }, [box, items, search, statusFilter])
 
   const focusId = searchParams.get('focus')
   const handledFocusRef = useRef<string | null>(null)
@@ -87,9 +118,9 @@ export function InboxPage() {
     if (!row) return
     handledFocusRef.current = focusId
     setBox('received')
-    setFilter(row.status === 'open' ? 'open' : 'all')
-    setSelectedId(row.id)
-    setMobileShowDetail(true)
+    setStatusFilter(row.status === 'open' ? 'open' : 'all')
+    setSearch('')
+    setFocusSelectId(row.id)
     handleSelect(row)
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
@@ -98,8 +129,31 @@ export function InboxPage() {
     }, { replace: true })
   }, [focusId, items, handleSelect, setSearchParams])
 
+  useEffect(() => {
+    if (!platformConsole || !composeOpen) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [orgsRes, usersRes] = await Promise.all([
+          platformApi.listOrganisations(),
+          platformApi.listUsers(),
+        ])
+        if (cancelled) return
+        setOrganisations(orgsRes.organisations)
+        setOrgUsers(usersRes.users)
+      } catch {
+        if (cancelled) return
+        setOrganisations([])
+        setOrgUsers([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [platformConsole, composeOpen])
+
   const closeCompose = () => {
-    setSendOpen(false)
+    setComposeOpen(false)
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
       next.delete('compose')
@@ -107,16 +161,43 @@ export function InboxPage() {
     }, { replace: true })
   }
 
-  const onRowSelect = (row: UnifiedInboxItem) => {
-    setSelectedId(row.id)
-    setMobileShowDetail(true)
-    if (row.category === 'notice' && row.unread) void markRead(row.id)
+  const submitNotice = async (payload: {
+    audience: NotificationAudience
+    organisation_id: number | null
+    recipient_user_id: number | null
+    recipient_scope: NotificationRecipientScope
+    exclude_expired_amc: boolean
+    kind: NotificationKind
+    title: string
+    body: string
+    feature_key?: string
+    items?: string
+  }) => {
+    setSavingNotice(true)
+    try {
+      const res = await platformApi.sendNotification({
+        ...payload,
+        payload: payload.items ? { items: payload.items } : undefined,
+      })
+      const skipped = res.skipped_expired_amc
+        ? ` · ${res.skipped_expired_amc} skipped (expired AMC)`
+        : ''
+      toast.success(`Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${skipped}`)
+      closeCompose()
+      await refresh()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not send update')
+    } finally {
+      setSavingNotice(false)
+    }
   }
 
   const switchBox = (next: InboxBox) => {
+    // Never carry a Received detail panel into Sent (or vice versa).
+    setDetailPanelOpen(false)
     setBox(next)
-    setMobileShowDetail(false)
-    setSelectedId(null)
+    setSearch('')
+    setFocusSelectId(null)
     setSearchParams(prev => {
       const p = new URLSearchParams(prev)
       if (next === 'sent') p.set('box', 'sent')
@@ -131,14 +212,10 @@ export function InboxPage() {
         title="Inbox"
         subtitle={
           box === 'sent'
-            ? platformConsole
-              ? 'Updates and reminders you have sent'
-              : 'Requests you have sent to Tradeal'
+            ? 'Messages you have sent'
             : attentionCount > 0
               ? `${attentionCount} need attention`
-              : platformConsole
-                ? 'Work and notices addressed to you'
-                : 'Messages from Tradeal'
+              : 'Messages addressed to you'
         }
         breadcrumb={
           <Breadcrumb
@@ -151,13 +228,11 @@ export function InboxPage() {
         actionsAlign="end"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {!platformConsole ? (
-              <Button size="sm" onClick={() => setSendOpen(true)}>
-                <MessageSquare className="h-4 w-4" />
-                Send to Tradeal
-              </Button>
-            ) : null}
-            {mode === 'org' && box === 'received' && attentionCount > 0 ? (
+            <Button size="sm" onClick={() => setComposeOpen(true)}>
+              <MessageSquare className="h-4 w-4" />
+              {labels.composeCta}
+            </Button>
+            {box === 'received' && attentionCount > 0 ? (
               <Button variant="outline" size="sm" onClick={() => void markAllRead()}>
                 Mark all read
               </Button>
@@ -166,83 +241,68 @@ export function InboxPage() {
         }
       />
 
-      <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden flex flex-col min-h-[22rem]">
-        <div className="px-2 sm:px-3 shrink-0 border-b border-gray-100 dark:border-gray-800">
-          <Tabs
-            active={box}
-            onChange={id => switchBox(id as InboxBox)}
-            buttonClassName="px-4 py-3.5"
-            tabs={[
-              {
-                id: 'received',
-                label: labels.receivedTab,
-                count: box === 'received' ? openCount : undefined,
-              },
-              {
-                id: 'sent',
-                label: labels.sentTab,
-                count: box === 'sent' ? items.length : undefined,
-              },
-            ]}
-          />
-        </div>
+      <Tabs
+        className="mb-4"
+        active={box}
+        onChange={id => switchBox(id as InboxBox)}
+        tabs={[
+          {
+            id: 'received',
+            label: labels.receivedTab,
+            countLabel: receivedNewLabel,
+          },
+          {
+            id: 'sent',
+            label: labels.sentTab,
+            count: box === 'sent' ? items.length : undefined,
+          },
+        ]}
+      />
 
-        {box === 'sent' ? (
-          <div className="p-4 sm:p-5">
-            <InboxSentTable rows={visibleRows} emptyDescription={labels.sentEmpty} />
-          </div>
-        ) : (
-          <div className="grid flex-1 min-h-[22rem] h-[min(32rem,calc(100dvh-14rem))] lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
-            <div
-              className={cn(
-                'min-h-0 h-full flex flex-col lg:border-r lg:border-gray-100 dark:lg:border-gray-800',
-                mobileShowDetail && 'hidden lg:flex',
-              )}
-            >
-              <div className="shrink-0 flex items-center px-3 py-2.5 border-b border-gray-100 dark:border-gray-800">
-                <SegmentedControl
-                  size="sm"
-                  ariaLabel="Filter received items"
-                  value={filter}
-                  onChange={id => {
-                    setFilter(id)
-                    setMobileShowDetail(false)
-                  }}
-                  options={[
-                    { id: 'open', label: openCount > 0 ? `Open (${openCount})` : 'Open' },
-                    { id: 'all', label: 'All' },
-                  ]}
-                />
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <InboxFeedList
-                  rows={visibleRows}
-                  selectedId={selectedId}
-                  emptyTitle={filter === 'open' ? 'Nothing open' : 'Nothing received'}
-                  emptyDescription={labels.receivedEmpty}
-                  onSelect={onRowSelect}
-                />
-              </div>
-            </div>
+      <InboxFiltersBar
+        box={box}
+        search={search}
+        onSearchChange={setSearch}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        openCount={openCount}
+        openFilterLabel="Unread"
+      />
 
-            <div
-              className={cn(
-                'min-h-0 overflow-hidden',
-                !mobileShowDetail && 'hidden lg:block',
-              )}
-            >
-              <InboxDetailPane
-                item={selected}
-                platformConsole={platformConsole}
-                onBack={() => setMobileShowDetail(false)}
-                onOpen={handleSelect}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      {box === 'sent' ? (
+        <InboxSentTable
+          key="sent"
+          rows={visibleRows}
+          emptyDescription={labels.sentEmpty}
+          onDeleteItems={removeItems}
+        />
+      ) : (
+        <InboxReceivedTable
+          key="received"
+          rows={visibleRows}
+          statusFilter={statusFilter}
+          emptyDescription={labels.receivedEmpty}
+          platformConsole={platformConsole}
+          focusId={focusSelectId}
+          onOpen={handleSelect}
+          onRejectSeat={platformConsole ? handleRejectSeat : undefined}
+          onDeleteItems={removeItems}
+        />
+      )}
 
-      <SendToTradealModal open={sendOpen} onClose={closeCompose} onSent={() => void refresh()} />
+      {platformConsole ? (
+        <PlatformNotifyModal
+          open={composeOpen}
+          onClose={() => !savingNotice && closeCompose()}
+          organisations={organisations}
+          users={orgUsers}
+          defaultAudience="active_licences"
+          loading={savingNotice}
+          onSubmit={payload => void submitNotice(payload)}
+        />
+      ) : (
+        <SendToTradealModal open={composeOpen} onClose={closeCompose} onSent={() => void refresh()} />
+      )}
 
       {modals}
     </div>

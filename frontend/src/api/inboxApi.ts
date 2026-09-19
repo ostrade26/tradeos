@@ -71,4 +71,18 @@ export const inboxApi = {
   markAllRead() {
     return apiFetch<{ ok: boolean; updated: number }>('/me/inbox/read-all', { method: 'POST' })
   },
+
+  deleteItem(itemId: string) {
+    return apiFetch<{ ok: boolean; deleted: number }>(
+      `/me/inbox/items/${encodeURIComponent(itemId)}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  deleteItems(ids: string[]) {
+    return apiFetch<{ ok: boolean; deleted: number }>('/me/inbox/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    })
+  },
 }

@@ -8,7 +8,7 @@ export function useUnifiedInbox(mode: 'platform' | 'org', box: InboxBox = 'recei
   const { isAuthenticated, isPlatformAdmin } = useAuth()
   const enabled = isAuthenticated && (mode === 'platform' ? isPlatformAdmin : !isPlatformAdmin)
 
-  const { items: serverItems, openCount, bellCount, refresh, markRead, markAllRead } = useMeInbox(
+  const { items: serverItems, openCount, bellCount, refresh, markRead, markAllRead, removeItems } = useMeInbox(
     enabled,
     box,
   )
@@ -45,6 +45,7 @@ export function useUnifiedInbox(mode: 'platform' | 'org', box: InboxBox = 'recei
     refresh,
     markRead,
     markAllRead,
+    removeItems,
     refreshPlatform,
   }
 }

@@ -682,7 +682,20 @@ export function seatRequestColumns(handlers: {
       sortable: true,
       sortValue: r => r.status,
       render: r => (
-        <Badge variant={r.status === 'paid' ? 'info' : r.status === 'pending_payment' ? 'warning' : 'default'} className="capitalize">
+        <Badge
+          variant={
+            r.status === 'approved'
+              ? 'success'
+              : r.status === 'rejected'
+                ? 'danger'
+                : r.status === 'paid'
+                  ? 'info'
+                  : r.status === 'pending_payment'
+                    ? 'warning'
+                    : 'default'
+          }
+          className="capitalize"
+        >
           {seatRequestStatusLabel(r.status, 'platform')}
         </Badge>
       ),

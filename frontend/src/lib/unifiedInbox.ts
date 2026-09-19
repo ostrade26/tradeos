@@ -3,9 +3,21 @@ import type { UserNotification, ProductRequest, SeatRequest } from '../api/platf
 import type { InboxAction } from './actionInbox'
 import { inboxSubject, notificationSubtitle } from './notificationDisplay'
 import { isOpenProductRequest } from './platformProductRequestInbox'
-import { isOpenSeatRequest } from './platformSeatRequestInbox'
+import { isOpenSeatRequest, seatRequestInboxMessageLine } from './platformSeatRequestInbox'
 
 export type InboxCategory = 'work' | 'notice' | 'sent'
+
+/**
+ * Notice kinds with a real workflow loop (Open / Done / …).
+ * FYI kinds (product update, maintenance, backup, announcement, …) use
+ * unread styling only — no Status badge.
+ */
+export const WORKFLOW_NOTICE_KINDS = new Set([
+  'payment_reminder',
+  'deploy_review',
+  'product_request',
+  'seat_request',
+])
 
 export type UnifiedInboxItem = {
   id: string
@@ -24,6 +36,14 @@ export type UnifiedInboxItem = {
   productRequest?: ProductRequest
   send?: NotificationSend
   actionable: boolean
+}
+
+/** True when the Status column should show a badge (not FYI-only notices). */
+export function hasInboxWorkflowStatus(item: UnifiedInboxItem): boolean {
+  if (item.seatRequest || item.productRequest) return true
+  if (item.category === 'work') return true
+  if (item.category === 'sent') return Boolean(item.productRequest)
+  return WORKFLOW_NOTICE_KINDS.has(item.kind)
 }
 
 function byNewest(a: UnifiedInboxItem, b: UnifiedInboxItem) {
@@ -52,6 +72,12 @@ export function platformActionToInboxItem(action: InboxAction): UnifiedInboxItem
 }
 
 export function apiInboxItemToUnified(row: ApiInboxItem): UnifiedInboxItem {
+  const notice = row.notice ?? undefined
+  const seatRequest = row.seat_request ?? undefined
+  const seatLine =
+    seatRequest || notice?.kind === 'seat_request'
+      ? seatRequestInboxMessageLine(seatRequest ?? null, notice ?? null)
+      : ''
   return {
     id: row.id,
     kind: row.kind,
@@ -59,12 +85,12 @@ export function apiInboxItemToUnified(row: ApiInboxItem): UnifiedInboxItem {
     status: row.status,
     unread: row.unread,
     title: row.title,
-    subtitle: row.subtitle,
+    subtitle: seatLine || row.subtitle,
     from: row.from,
     dateIso: row.date_iso,
     href: row.href || undefined,
-    notice: row.notice ?? undefined,
-    seatRequest: row.seat_request ?? undefined,
+    notice,
+    seatRequest,
     productRequest: row.product_request ?? undefined,
     send: row.send ?? undefined,
     actionable: row.actionable,
@@ -72,15 +98,24 @@ export function apiInboxItemToUnified(row: ApiInboxItem): UnifiedInboxItem {
 }
 
 export function noticeToInboxItem(item: UserNotification): UnifiedInboxItem {
+  const from =
+    (typeof item.created_by_name === 'string' && item.created_by_name.trim()) ||
+    item.payload?.from_label?.trim() ||
+    item.payload?.sender_name?.trim() ||
+    item.payload?.sender_label?.trim() ||
+    item.payload?.from?.trim() ||
+    'System'
+  const workflow = WORKFLOW_NOTICE_KINDS.has(item.kind)
   return {
     id: `notice-${item.id}`,
     kind: item.kind,
     category: 'notice',
-    status: item.unread ? 'open' : 'done',
+    // FYI notices stay "done" for status; unread drives New / Unread filter.
+    status: workflow && item.unread ? 'open' : 'done',
     unread: item.unread,
     title: inboxSubject(item),
     subtitle: notificationSubtitle(item).replace(/\s+/g, ' '),
-    from: 'Tradeal',
+    from,
     dateIso: item.created_at,
     href: item.href || undefined,
     notice: item,

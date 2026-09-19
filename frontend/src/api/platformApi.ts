@@ -332,6 +332,7 @@ export type NotificationKind =
   | 'announcement'
   | 'backup_reminder'
   | 'product_request'
+  | 'seat_request'
   | 'deploy_review'
 export type NotificationAudience = 'user' | 'org' | 'active_licences'
 export type NotificationRecipientScope = 'org_admin' | 'all_users'
@@ -369,6 +370,9 @@ export interface UserNotification {
   feature_key?: string
   unread: boolean
   created_at: string
+  /** Display name of the sender when known (not a hard-coded brand). */
+  created_by_name?: string | null
+  created_by_user_id?: number | null
 }
 
 export type ReleaseCategory =

@@ -1,6 +1,6 @@
 import { Bell } from 'lucide-react'
 import { Badge } from '../ui/Badge'
-import { formatInboxDate, inboxKindIcon } from '../../lib/notificationDisplay'
+import { formatInboxDate, inboxIconToneClass, inboxItemVisual } from '../../lib/notificationDisplay'
 import { cn } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
 
@@ -30,7 +30,7 @@ export function InboxFeedList({
   return (
     <ul className="divide-y divide-gray-100 dark:divide-gray-800" role="list">
       {rows.map(row => {
-        const Icon = inboxKindIcon(row.kind, row.notice?.payload)
+        const { Icon, tone } = inboxItemVisual(row)
         const emphasize = row.status === 'open' && (row.unread || row.actionable)
         const selected = selectedId === row.id
         return (
@@ -58,9 +58,9 @@ export function InboxFeedList({
                 <div
                   className={cn(
                     'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                    selected || emphasize
+                    selected && tone === 'muted'
                       ? 'bg-accent/10 text-accent dark:bg-accent/20'
-                      : 'bg-gray-100 text-muted dark:bg-zinc-800',
+                      : inboxIconToneClass(tone),
                   )}
                 >
                   <Icon className="h-4 w-4" aria-hidden />

@@ -1,9 +1,23 @@
 import {
-  AlertCircle, ClipboardCheck, DatabaseBackup, KeyRound, Megaphone, MessageSquare, UserPlus, Wallet, Wrench, type LucideIcon,
+  AlertCircle,
+  BadgeCheck,
+  ClipboardCheck,
+  DatabaseBackup,
+  KeyRound,
+  Megaphone,
+  MessageSquare,
+  UserPlus,
+  Wallet,
+  Wrench,
+  XCircle,
+  type LucideIcon,
 } from 'lucide-react'
 import { platformAccessIcon, platformFeatureIcon, platformReleaseIcon } from './platformProductIcons'
 import { formatDateTime } from './utils'
 import type { UserNotification } from '../api/platformApi'
+import type { UnifiedInboxItem } from './unifiedInbox'
+
+export type InboxIconTone = 'success' | 'danger' | 'warning' | 'accent' | 'muted'
 
 export const notificationKindIcon: Record<string, LucideIcon> = {
   seat_request: UserPlus,
@@ -90,6 +104,14 @@ export function isProductUpdateNotice(item: UserNotification): boolean {
 
 export function notificationIcon(kind: string, payload?: UserNotification['payload']): LucideIcon {
   if (payload?.cta === 'review_interest') return platformAccessIcon
+  if (kind === 'seat_request') {
+    const decision = String(payload?.decision || payload?.status || '').toLowerCase()
+    if (decision === 'approved') return BadgeCheck
+    if (decision === 'rejected') return XCircle
+    return UserPlus
+  }
+  if (kind === 'feature_launch' && payload?.decision === 'approved') return BadgeCheck
+  if (kind === 'feature_launch' && payload?.decision === 'rejected') return XCircle
   return notificationKindIcon[kind] ?? AlertCircle
 }
 
@@ -97,17 +119,81 @@ export function inboxKindIcon(kind: string, payload?: UserNotification['payload'
   return notificationIcon(kind, payload)
 }
 
-/** Gmail-style inbox date: time today, day+month this year, else with year. */
-export function formatInboxDate(value: string): string {
-  if (!value) return ''
+/** Icon + tone for any unified inbox row (notices and work items). */
+export function inboxItemVisual(item: Pick<UnifiedInboxItem, 'kind' | 'notice' | 'seatRequest' | 'productRequest' | 'send'>): {
+  Icon: LucideIcon
+  tone: InboxIconTone
+} {
+  const payload = item.notice?.payload ?? (item.send?.payload as UserNotification['payload'] | undefined)
+  const seatStatus = String(item.seatRequest?.status || payload?.decision || payload?.status || '').toLowerCase()
+
+  if (item.kind === 'seat_request' || item.seatRequest) {
+    if (seatStatus === 'approved') return { Icon: BadgeCheck, tone: 'success' }
+    if (seatStatus === 'rejected') return { Icon: XCircle, tone: 'danger' }
+    return { Icon: UserPlus, tone: 'warning' }
+  }
+
+  if (item.kind === 'product_request' || item.productRequest) {
+    return { Icon: MessageSquare, tone: 'accent' }
+  }
+
+  if (item.kind === 'payment_reminder') return { Icon: Wallet, tone: 'warning' }
+  if (item.kind === 'maintenance') return { Icon: Wrench, tone: 'warning' }
+  if (item.kind === 'backup_reminder') return { Icon: DatabaseBackup, tone: 'muted' }
+  if (item.kind === 'credentials') return { Icon: KeyRound, tone: 'accent' }
+  if (item.kind === 'deploy_review') return { Icon: ClipboardCheck, tone: 'warning' }
+  if (item.kind === 'feature_interest') return { Icon: platformAccessIcon, tone: 'accent' }
+
+  if (payload?.decision === 'approved') {
+    return { Icon: BadgeCheck, tone: 'success' }
+  }
+  if (payload?.decision === 'rejected') {
+    return { Icon: XCircle, tone: 'danger' }
+  }
+
+  return { Icon: notificationIcon(item.kind, payload), tone: 'muted' }
+}
+
+export function inboxIconToneClass(tone: InboxIconTone): string {
+  switch (tone) {
+    case 'success':
+      return 'bg-success-muted text-success'
+    case 'danger':
+      return 'bg-danger-muted text-danger'
+    case 'warning':
+      return 'bg-warning-muted text-warning'
+    case 'accent':
+      return 'bg-accent/10 text-accent dark:bg-accent/20'
+    case 'muted':
+    default:
+      return 'bg-gray-100 text-muted dark:bg-zinc-800'
+  }
+}
+
+function inboxDateParts(value: string): { date: string; time: string } | null {
+  if (!value) return null
   const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return ''
+  if (Number.isNaN(parsed.getTime())) return null
   const now = new Date()
-  if (parsed.toDateString() === now.toDateString()) {
-    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(parsed)
-  }
-  if (parsed.getFullYear() === now.getFullYear()) {
-    return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(parsed)
-  }
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(parsed)
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(parsed)
+  const date =
+    parsed.getFullYear() === now.getFullYear()
+      ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(parsed)
+      : new Intl.DateTimeFormat('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }).format(parsed)
+  return { date, time }
+}
+
+/** Inbox date: day + month (+ year if needed) and 12-hour time with am/pm. */
+export function formatInboxDate(value: string): string {
+  const parts = inboxDateParts(value)
+  if (!parts) return ''
+  return `${parts.date} ${parts.time}`
 }

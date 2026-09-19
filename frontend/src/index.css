@@ -382,16 +382,17 @@ body {
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
-/* Sticky actions column: draw the right grid line inside the cell so overflow clip does not hide it. */
+/* Sticky actions: inset lines replace left/right cell borders so Status | ⋯
+   stays visible under the sticky fill without looking thicker than other columns. */
 .table-sticky-actions {
   box-shadow:
-    inset -1px 0 0 #e5e7eb,
-    -4px 0 8px -4px rgb(0 0 0 / 0.08);
+    inset 1px 0 0 #e5e7eb,
+    inset -1px 0 0 #e5e7eb;
 }
 :where(.dark, .dark *) .table-sticky-actions {
   box-shadow:
-    inset -1px 0 0 rgb(55 65 81 / 0.8),
-    -4px 0 8px -4px rgb(0 0 0 / 0.45);
+    inset 1px 0 0 rgb(55 65 81 / 0.8),
+    inset -1px 0 0 rgb(55 65 81 / 0.8);
 }
 
 @media print {

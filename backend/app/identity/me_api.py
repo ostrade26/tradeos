@@ -143,6 +143,80 @@ def inbox_item_read(
         return {"ok": True, "notification": item}
 
 
+class InboxDeleteBody(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+@router.delete("/inbox/items/{item_id}", summary="Delete an inbox item (Received notice or Sent outbox)")
+def inbox_item_delete(
+    request: Request,
+    item_id: str = Path(..., min_length=1, max_length=80),
+) -> dict[str, Any]:
+    session = _session(request)
+    from .inbox_repository import delete_inbox_item
+
+    org_id = session.user.organisation_id
+    if uses_postgres():
+        with _pg_connect() as conn:
+            ok = delete_inbox_item(
+                conn,
+                item_id,
+                session.user.id,
+                organisation_id=org_id,
+            )
+            if not ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This item cannot be deleted from inbox",
+                )
+            conn.commit()
+            return {"ok": True, "deleted": 1}
+    with _sqlite_connect() as conn:
+        ok = delete_inbox_item(
+            conn,
+            item_id,
+            session.user.id,
+            organisation_id=org_id,
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail="This item cannot be deleted from inbox",
+            )
+        conn.commit()
+        return {"ok": True, "deleted": 1}
+
+
+@router.post("/inbox/delete", summary="Delete inbox items (Received notices or Sent outbox)")
+def inbox_items_delete(body: InboxDeleteBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    from .inbox_repository import delete_inbox_items
+
+    ids = [str(i).strip() for i in body.ids if str(i).strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No items to delete")
+    org_id = session.user.organisation_id
+    if uses_postgres():
+        with _pg_connect() as conn:
+            count = delete_inbox_items(
+                conn,
+                ids,
+                session.user.id,
+                organisation_id=org_id,
+            )
+            conn.commit()
+            return {"ok": True, "deleted": count}
+    with _sqlite_connect() as conn:
+        count = delete_inbox_items(
+            conn,
+            ids,
+            session.user.id,
+            organisation_id=org_id,
+        )
+        conn.commit()
+        return {"ok": True, "deleted": count}
+
+
 # Legacy aliases — prefer /me/inbox
 @router.get("/notifications", summary="In-app notifications for the signed-in user")
 def list_my_notifications(

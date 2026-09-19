@@ -53,6 +53,12 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         ...(ASSISTANT_ENABLED
           ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
           : []),
+        {
+          id: 'send-update',
+          label: 'Send update',
+          group: 'Actions',
+          action: () => navigate('/platform-admin/notifications?compose=1'),
+        },
         ...nav,
       ]
     }
@@ -86,7 +92,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       ...(ASSISTANT_ENABLED
         ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
         : []),
-      { id: 'send-tradeal', label: 'Send to Tradeal', group: 'Actions', action: () => navigate(appPath('/notifications?compose=1')) },
+      { id: 'send-tradeal', label: 'Send request', group: 'Actions', action: () => navigate(appPath('/notifications?compose=1')) },
     ]
 
     const searchHits = buildGlobalSearchItems(store, navigate).map(item => ({

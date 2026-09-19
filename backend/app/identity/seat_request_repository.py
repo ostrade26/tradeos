@@ -24,7 +24,31 @@ def _row_to_request(row) -> dict[str, Any]:
         d["requested_by_user_id"] = int(d["requested_by_user_id"])
     if d.get("reviewed_by_user_id") is not None:
         d["reviewed_by_user_id"] = int(d["reviewed_by_user_id"])
+    if d.get("request_note") is not None and not d.get("note"):
+        d["note"] = str(d.get("request_note") or "")
     return d
+
+
+def get_seat_request_for_org(
+    conn,
+    request_id: int,
+    *,
+    organisation_id: int,
+) -> dict[str, Any] | None:
+    """Return a seat request for inbox notice context (org-scoped)."""
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT * FROM seat_requests WHERE id = %s AND organisation_id = %s",
+            (request_id, organisation_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM seat_requests WHERE id = ? AND organisation_id = ?",
+            (request_id, organisation_id),
+        ).fetchone()
+    if not row:
+        return None
+    return _row_to_request(row)
 
 
 def seat_addon_unit_price_cents(conn, subscription: dict[str, Any]) -> int:
@@ -298,6 +322,61 @@ def mark_seat_request_paid(
     return _get_request(conn, request_id)
 
 
+def _notify_requester_of_decision(
+    conn,
+    req: dict[str, Any],
+    *,
+    decision: str,
+    actor_user_id: int,
+    admin_note: str,
+) -> None:
+    """Inbox notice to the org user who requested seats."""
+    from .notifications_repository import create_notifications_for_audience
+
+    recipient_id = req.get("requested_by_user_id")
+    if recipient_id is None:
+        return
+    seats = int(req.get("requested_seats") or 1)
+    seat_word = "seat" if seats == 1 else "seats"
+    seat_type = str(req.get("seat_type") or "operator")
+    amount_cents = int(req.get("amount_cents") or 0)
+    ref = (req.get("payment_reference") or "").strip()
+    if decision == "approved":
+        title = f"Seat request approved · {seats} {seat_word}"
+        body = admin_note.strip() or (
+            f"Your request for {seats} {seat_word} was approved. Assign them under Settings → Plan & team."
+        )
+    else:
+        title = f"Seat request rejected · {seats} {seat_word}"
+        body = admin_note.strip() or (
+            f"Your request for {seats} {seat_word} was rejected. Open Settings → Plan & team for details."
+        )
+    payload: dict[str, str] = {
+        "seat_request_id": str(req["id"]),
+        "decision": decision,
+        "status": decision,
+        "requested_seats": str(seats),
+        "seat_type": seat_type,
+        "amount_cents": str(amount_cents),
+    }
+    if ref:
+        payload["payment_reference"] = ref
+    create_notifications_for_audience(
+        conn,
+        audience="user",
+        organisation_id=int(req["organisation_id"]),
+        recipient_user_id=int(recipient_id),
+        recipient_scope="all_users",
+        exclude_expired_amc=False,
+        kind="seat_request",
+        title=title,
+        body=body,
+        payload=payload,
+        href="/settings/plan",
+        actor_user_id=actor_user_id,
+    )
+
+
 def approve_seat_request(
     conn,
     request_id: int,
@@ -312,6 +391,12 @@ def approve_seat_request(
             status_code=400,
             detail="Only open seat requests can be approved (after off-platform payment is received)",
         )
+    ref = payment_reference.strip() or (req.get("payment_reference") or "").strip()
+    note = admin_note.strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Payment reference is required to approve")
+    if not note:
+        raise HTTPException(status_code=400, detail="A message to the organisation is required to approve")
     org_id = int(req["organisation_id"])
     count = int(req["requested_seats"])
     seat_type = req.get("seat_type") or "operator"
@@ -325,8 +410,6 @@ def approve_seat_request(
         seat_type=seat_type,
     )
     now = _now()
-    ref = payment_reference.strip() or (req.get("payment_reference") or "")
-    note = admin_note.strip()
     if uses_postgres():
         conn.execute(
             """
@@ -370,7 +453,15 @@ def approve_seat_request(
             "admin_note": note,
         },
     )
-    return {"request": _get_request(conn, request_id), "seats": seats}
+    updated = _get_request(conn, request_id)
+    _notify_requester_of_decision(
+        conn,
+        updated,
+        decision="approved",
+        actor_user_id=actor_user_id,
+        admin_note=note,
+    )
+    return {"request": updated, "seats": seats}
 
 
 def count_open_seat_requests(conn) -> int:
@@ -419,7 +510,15 @@ def reject_seat_request(
         entity_id=str(request_id),
         new_value={"admin_note": note},
     )
-    return _get_request(conn, request_id)
+    updated = _get_request(conn, request_id)
+    _notify_requester_of_decision(
+        conn,
+        updated,
+        decision="rejected",
+        actor_user_id=actor_user_id,
+        admin_note=note,
+    )
+    return updated
 
 
 def organisation_seat_request_context(conn, organisation_id: int) -> dict[str, Any]:

@@ -115,11 +115,12 @@ export function DetailPanelMenu({ items, onItemSelect, align = 'end', tableTrigg
       setOpen(false)
     }
     const timer = window.setTimeout(() => {
-      document.addEventListener('mousedown', onPointerDown)
+      // Capture phase: Modal/Drawer stopPropagation on bubble, which would skip document listeners.
+      document.addEventListener('mousedown', onPointerDown, true)
     }, 0)
     return () => {
       window.clearTimeout(timer)
-      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('mousedown', onPointerDown, true)
     }
   }, [open])
 

@@ -149,8 +149,9 @@ export function SearchableSelect({
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return
       handleClose()
     }
-    document.addEventListener('mousedown', onPointerDown)
-    return () => document.removeEventListener('mousedown', onPointerDown)
+    // Capture phase: Modal/Drawer stopPropagation on bubble, which would skip document listeners.
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [open, handleClose])
 
   useEffect(() => {

@@ -9,7 +9,20 @@ export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
   const [items, setItems] = useState<UnifiedInboxItem[]>([])
   const [openCount, setOpenCount] = useState(0)
   const [bellCount, setBellCount] = useState(0)
+  /** Box the current `items` were fetched for — used to hide stale rows before paint. */
+  const [itemsBox, setItemsBox] = useState<InboxBox>(box)
   const refreshSeq = useRef(0)
+  const boxRef = useRef(box)
+  boxRef.current = box
+
+  // Clear synchronously when the box changes so Sent never paints Received rows (and vice versa).
+  // useEffect clearing is one frame too late and causes the flash.
+  if (itemsBox !== box) {
+    setItemsBox(box)
+    setItems([])
+    setOpenCount(0)
+    refreshSeq.current += 1
+  }
 
   const refresh = useCallback(async () => {
     if (!enabled) {
@@ -18,25 +31,25 @@ export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
       setBellCount(0)
       return
     }
+    const requestBox = boxRef.current
     const seq = ++refreshSeq.current
     try {
-      const res = await inboxApi.list('all', 100, box)
-      if (seq !== refreshSeq.current) return
+      const res = await inboxApi.list('all', 100, requestBox)
+      if (seq !== refreshSeq.current || boxRef.current !== requestBox) return
       setItems(res.items.map(apiInboxItemToUnified))
+      setItemsBox(requestBox)
       setOpenCount(res.open_count)
       setBellCount(res.bell_count ?? res.notice_unread ?? res.open_count)
     } catch {
-      if (seq !== refreshSeq.current) return
+      if (seq !== refreshSeq.current || boxRef.current !== requestBox) return
       setItems([])
+      setItemsBox(requestBox)
       setOpenCount(0)
       setBellCount(0)
     }
-  }, [enabled, box])
+  }, [enabled])
 
   useEffect(() => {
-    // Drop the previous box's rows immediately so Sent/Received never flash the other list.
-    setItems([])
-    setOpenCount(0)
     void refresh()
     if (!enabled) return
     const timer = window.setInterval(() => {
@@ -58,7 +71,7 @@ export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener(INBOX_REFRESH_EVENT, onTradeRefresh)
     }
-  }, [enabled, refresh])
+  }, [enabled, box, refresh])
 
   const markRead = useCallback(async (itemId: string) => {
     if (!itemId.startsWith('notice-')) return
@@ -94,5 +107,30 @@ export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
     await refresh()
   }, [refresh])
 
-  return { items, openCount, bellCount, refresh, markRead, markAllRead }
+  const removeItems = useCallback(async (ids: string[]) => {
+    const deletable = ids.filter(
+      id =>
+        id.startsWith('notice-') ||
+        id.startsWith('send-') ||
+        id.startsWith('sent-product-request-'),
+    )
+    if (deletable.length === 0) return 0
+    setItems(prev => prev.filter(item => !deletable.includes(item.id)))
+    try {
+      const res =
+        deletable.length === 1
+          ? await inboxApi.deleteItem(deletable[0])
+          : await inboxApi.deleteItems(deletable)
+      await refresh()
+      return res.deleted
+    } catch {
+      await refresh()
+      throw new Error('Could not delete messages')
+    }
+  }, [refresh])
+
+  // Never expose rows that belong to the other box (belt-and-suspenders for any race).
+  const safeItems = itemsBox === box ? items : []
+
+  return { items: safeItems, openCount, bellCount, refresh, markRead, markAllRead, removeItems }
 }

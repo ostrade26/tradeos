@@ -82,8 +82,8 @@ export function MultiSelect({
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return
       setOpen(false)
     }
-    document.addEventListener('mousedown', onPointerDown)
-    return () => document.removeEventListener('mousedown', onPointerDown)
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [open])
 
   const toggleValue = (value: string) => {

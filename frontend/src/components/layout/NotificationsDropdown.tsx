@@ -10,6 +10,7 @@ import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabe
 import { formatInboxDate } from '../../lib/notificationDisplay'
 import { cn } from '../../lib/utils'
 import { appPath } from '../../lib/appShellMode'
+import { InboxKindGlyph } from '../inbox/InboxKindGlyph'
 
 export function NotificationsDropdown() {
   const [open, setOpen] = useState(false)
@@ -82,7 +83,7 @@ export function NotificationsDropdown() {
               {badgeCount === 0 ? 'All caught up' : `${badgeCount} need attention`}
             </p>
           </div>
-          {!isPlatformAdmin && badgeCount > 0 ? (
+          {badgeCount > 0 ? (
             <button
               type="button"
               onClick={() => void markAllRead()}
@@ -97,11 +98,7 @@ export function NotificationsDropdown() {
         <div className="px-4 py-10 text-center">
           <Bell className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600 mb-2" />
           <p className="text-sm text-muted">
-            {platformConsole
-              ? labels.bellEmpty
-              : badgeCount === 0
-                ? 'No unread messages from Tradeal.'
-                : 'Open inbox for conversations.'}
+            {badgeCount === 0 ? labels.bellEmpty : 'Open inbox for conversations.'}
           </p>
         </div>
         ) : (
@@ -116,6 +113,7 @@ export function NotificationsDropdown() {
                   row.unread && 'bg-accent/5 dark:bg-accent/10',
                 )}
               >
+                <InboxKindGlyph item={row} size="sm" className="mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-heading text-pretty truncate">{row.title}</p>
                   <p className="text-xs text-muted mt-0.5 leading-snug truncate">

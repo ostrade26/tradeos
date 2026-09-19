@@ -46,13 +46,13 @@ export function DetailPanelShell({
 }: DetailPanelShellProps) {
   return (
     <div className={cn('flex h-full min-h-0 flex-col bg-white dark:bg-card', className)}>
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3 sm:px-5">
+      <div className="flex h-14 sm:h-[70px] shrink-0 items-center justify-between border-b border-gray-200/80 dark:border-gray-700/50 px-4 sm:px-5">
         <div className="min-w-0 pr-3 flex-1">
-          <h2 id="drawer-title" className="text-base font-semibold text-heading truncate">{title}</h2>
+          <h2 id="drawer-title" className="text-base font-semibold text-heading truncate leading-snug">{title}</h2>
           {(subtitle || headerBadges) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 min-w-0">
               {subtitle ? (
-                <p className="text-[14px] text-muted tabular-nums truncate">{subtitle}</p>
+                <p className="text-[14px] text-muted tabular-nums truncate leading-snug">{subtitle}</p>
               ) : null}
               {headerBadges}
             </div>

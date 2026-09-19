@@ -12,6 +12,25 @@ import { captureFeedbackPagePath } from '../../lib/feedbackPagePath'
 import { fileToScreenshot, SCREENSHOT_MAX } from '../../lib/screenshotAttach'
 import { ScreenshotStrip } from './ScreenshotStrip'
 
+/** Recipients available for “Send request”. More parties (broker, etc.) can be added later. */
+export type RequestRecipientId = 'tradeal'
+
+export const REQUEST_RECIPIENT_OPTIONS: {
+  value: RequestRecipientId
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'tradeal',
+    label: 'Tradeal',
+    description: 'Product team — issues, improvements, and new needs',
+  },
+]
+
+export function requestRecipientLabel(id: string | undefined): string {
+  return REQUEST_RECIPIENT_OPTIONS.find(o => o.value === id)?.label || id || '—'
+}
+
 const KIND_OPTIONS: { value: ProductRequestKind; label: string }[] = [
   { value: 'issue', label: 'Issue' },
   { value: 'improvement', label: 'Improvement' },
@@ -36,6 +55,7 @@ export function SendToTradealModal({
   const location = useLocation()
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [to, setTo] = useState<RequestRecipientId>('tradeal')
   const [kind, setKind] = useState<ProductRequestKind>('issue')
   const [priority, setPriority] = useState<ProductRequestPriority>('p3')
   const [message, setMessage] = useState('')
@@ -45,6 +65,7 @@ export function SendToTradealModal({
 
   useEffect(() => {
     if (!open) {
+      setTo('tradeal')
       setKind('issue')
       setPriority('p3')
       setMessage('')
@@ -52,7 +73,7 @@ export function SendToTradealModal({
     }
   }, [open])
 
-  const valid = message.trim().length >= 8
+  const valid = Boolean(to) && message.trim().length >= 8
 
   const addScreenshots = async (files: FileList | null) => {
     if (!files?.length || attaching) return
@@ -78,6 +99,10 @@ export function SendToTradealModal({
 
   const submit = async () => {
     if (!valid || sending) return
+    if (to !== 'tradeal') {
+      toast.error('That recipient is not available yet')
+      return
+    }
     setSending(true)
     try {
       const res = await organisationApi.createProductRequest({
@@ -89,7 +114,7 @@ export function SendToTradealModal({
       })
       setMessage('')
       setScreenshots([])
-      toast.success('Sent to Tradeal')
+      toast.success(`Request sent to ${requestRecipientLabel(to)}`)
       onSent?.(res.request)
       onClose()
     } catch (err) {
@@ -103,8 +128,8 @@ export function SendToTradealModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Send to Tradeal"
-      subtitle="An issue, improvement, or new need — we see your organisation and this page."
+      title="Send request"
+      subtitle="Choose who should receive this, then describe the issue, improvement, or new need."
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -118,6 +143,13 @@ export function SendToTradealModal({
       }
     >
       <div className="space-y-4">
+        <Select
+          label="To"
+          searchable={false}
+          options={REQUEST_RECIPIENT_OPTIONS}
+          value={to}
+          onChange={e => setTo(e.target.value as RequestRecipientId)}
+        />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Select
             label="Type"

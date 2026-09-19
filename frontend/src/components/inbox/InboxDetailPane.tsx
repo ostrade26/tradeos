@@ -3,7 +3,8 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import {
   formatInboxDate,
-  inboxKindIcon,
+  inboxIconToneClass,
+  inboxItemVisual,
   isFeatureEnhancementNotice,
   isFeatureInterestNotice,
   isProductUpdateNotice,
@@ -11,10 +12,16 @@ import {
 } from '../../lib/notificationDisplay'
 import { cn } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
+import { isOpenSeatRequest, isSeatRequestDecisionItem } from '../../lib/platformSeatRequestInbox'
+import { SeatRequestInboxMessage } from './SeatRequestInboxMessage'
 
 function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (item.productRequest && platformConsole) return 'Review request'
-  if (item.seatRequest && platformConsole) return 'Review seat request'
+  if (item.seatRequest) {
+    if (platformConsole && isOpenSeatRequest(item.seatRequest.status)) return 'Approve'
+    return 'Review request'
+  }
+  if (isSeatRequestDecisionItem(item)) return 'Review request'
   if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
     if (item.notice.kind === 'deploy_review') return 'Open release'
@@ -66,7 +73,8 @@ export function InboxDetailPane({
     )
   }
 
-  const Icon = inboxKindIcon(item.kind, item.notice?.payload)
+  const { Icon, tone } = inboxItemVisual(item)
+  const isSeatMessage = Boolean(item.seatRequest || item.notice?.kind === 'seat_request')
   const body = item.notice?.body?.trim() || item.subtitle
   const emphasize = item.status === 'open' && (item.unread || item.actionable)
   const cta = actionLabel(item, platformConsole)
@@ -87,9 +95,9 @@ export function InboxDetailPane({
         <div
           className={cn(
             'flex h-10 w-10 shrink-0 items-center justify-center rounded-md',
-            emphasize
+            emphasize && tone === 'muted'
               ? 'bg-accent/10 text-accent dark:bg-accent/20'
-              : 'bg-gray-100 text-muted dark:bg-zinc-800',
+              : inboxIconToneClass(tone),
           )}
         >
           <Icon className="h-5 w-5" aria-hidden />
@@ -111,9 +119,17 @@ export function InboxDetailPane({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4">
-        <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{body}</p>
+        {isSeatMessage ? (
+          <SeatRequestInboxMessage
+            seatRequest={item.seatRequest}
+            notice={item.notice}
+            statusAudience={platformConsole ? 'platform' : 'org'}
+          />
+        ) : (
+          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{body}</p>
+        )}
         <div className="mt-4">
-          <Button size="sm" className="w-full sm:w-auto" onClick={() => onOpen(item)}>
+          <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => onOpen(item)}>
             {cta}
           </Button>
         </div>

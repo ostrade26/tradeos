@@ -269,12 +269,13 @@ export function SettingsLayout() {
         <p className="text-sm text-gray-600 dark:text-muted">
           This replaces all current trade data with the imported file
           {pendingImport?.exportedAt
-            ? ` exported on ${new Date(pendingImport.exportedAt).toLocaleString('en-IN', {
+            ? ` exported on ${new Date(pendingImport.exportedAt).toLocaleString('en-US', {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
-                hour: '2-digit',
+                hour: 'numeric',
                 minute: '2-digit',
+                hour12: true,
               })}`
             : ''}.
         </p>

@@ -155,6 +155,28 @@ def get_product_request(conn, request_id: int) -> dict[str, Any]:
     return _row(row)
 
 
+def get_product_request_for_user(
+    conn,
+    request_id: int,
+    *,
+    organisation_id: int,
+    user_id: int,
+) -> dict[str, Any] | None:
+    """Return a request only if it belongs to this org user (for Received reply context)."""
+    q = (
+        _LIST_SQL
+        + """
+        WHERE pr.id = ? AND pr.organisation_id = ? AND pr.requested_by_user_id = ?
+        """
+    )
+    if uses_postgres():
+        q = q.replace("?", "%s")
+        row = conn.execute(q, (request_id, organisation_id, user_id)).fetchone()
+    else:
+        row = conn.execute(q, (request_id, organisation_id, user_id)).fetchone()
+    return _row(row) if row else None
+
+
 def list_product_requests_for_user(conn, organisation_id: int, user_id: int, *, limit: int = 20) -> list[dict[str, Any]]:
     q = (
         _LIST_SQL
@@ -190,13 +212,16 @@ def list_product_requests_platform(conn, *, status: str | None = None, limit: in
 
 
 def count_open_product_requests(conn) -> int:
-    q = "SELECT COUNT(*) AS n FROM product_requests WHERE status = 'received'"
+    q = "SELECT COUNT(*) AS n FROM product_requests WHERE status IN ('received', 'in_progress')"
     row = conn.execute(q).fetchone()
     return int(dict(_mapping(row)).get("n") or 0)
 
 
 def list_open_product_requests_platform(conn, *, limit: int = 20) -> list[dict[str, Any]]:
-    q = _LIST_SQL + " WHERE pr.status = 'received' ORDER BY pr.id DESC LIMIT ?"
+    q = (
+        _LIST_SQL
+        + " WHERE pr.status IN ('received', 'in_progress') ORDER BY pr.id DESC LIMIT ?"
+    )
     if uses_postgres():
         q = q.replace("?", "%s")
         rows = conn.execute(q, (limit,)).fetchall()
@@ -217,8 +242,6 @@ def review_product_request(
     if status_key not in STATUSES:
         raise HTTPException(status_code=400, detail="Status must be received, in progress, or done")
     note = (reply or "").strip()
-    if note and status_key == "received":
-        status_key = "in_progress"
     if len(note) > 2000:
         raise HTTPException(status_code=400, detail="Keep the reply under 2,000 characters")
     existing = get_product_request(conn, request_id)

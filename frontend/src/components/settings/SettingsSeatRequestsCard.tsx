@@ -10,7 +10,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
 
-function statusVariant(status: string): 'default' | 'success' | 'warning' | 'info' {
+function statusVariant(status: string): 'default' | 'success' | 'warning' | 'info' | 'danger' {
   switch (status) {
     case 'approved':
       return 'success'
@@ -18,6 +18,8 @@ function statusVariant(status: string): 'default' | 'success' | 'warning' | 'inf
       return 'info'
     case 'pending_payment':
       return 'warning'
+    case 'rejected':
+      return 'danger'
     default:
       return 'default'
   }

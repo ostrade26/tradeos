@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { MessageSquare, PanelRight, PanelRightClose, Send, Trash2 } from 'lucide-react'
+import { Inbox, MessageSquare, PanelRight, PanelRightClose, Send, Trash2, XCircle } from 'lucide-react'
 import { DataTable } from '../ui/DataTable'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -18,49 +18,77 @@ import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
-import { notificationKindLabel, formatInboxDate } from '../../lib/notificationDisplay'
+import {
+  formatInboxDate,
+  isFeatureEnhancementNotice,
+  isFeatureInterestNotice,
+  isProductUpdateNotice,
+  notificationKindLabel,
+} from '../../lib/notificationDisplay'
 import { formatDateTime } from '../../lib/utils'
-import { requestRecipientLabel } from '../feedback/SendToTradealModal'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
 import { hasInboxWorkflowStatus } from '../../lib/unifiedInbox'
+import {
+  isOpenSeatRequest,
+  isSeatRequestDecisionItem,
+  seatRequestInboxMessageLine,
+} from '../../lib/platformSeatRequestInbox'
 import { InboxKindGlyph } from './InboxKindGlyph'
+import { SeatRequestInboxMessage } from './SeatRequestInboxMessage'
+import type { InboxStatusFilter } from './InboxFiltersBar'
 
-function isSentToTradeal(item: UnifiedInboxItem): boolean {
-  return item.category === 'sent' && Boolean(item.productRequest) && !item.send
+function isDeletableNotice(item: UnifiedInboxItem): boolean {
+  return item.id.startsWith('notice-')
 }
 
-function isDeletableSent(item: UnifiedInboxItem): boolean {
-  if (item.id.startsWith('sent-product-request-')) return true
-  if (item.id.startsWith('send-')) return item.send?.actor_user_id != null
-  return false
-}
-
-function sentTypeLabel(item: UnifiedInboxItem): string {
-  if (isSentToTradeal(item)) return 'Request'
+function kindLabel(item: UnifiedInboxItem): string {
+  if (item.kind === 'feature_interest') return 'Feature interest'
   return notificationKindLabel(item.kind)
 }
 
-function sourceLabel(source: string | undefined): string {
-  if (source === 'schedule') return 'Scheduled'
-  if (source === 'release') return 'Release'
-  if (source === 'credentials') return 'Credentials'
-  if (source === 'manual') return 'Manual'
-  return source ? source.replace(/_/g, ' ') : ''
+function receivedInlineMessage(item: UnifiedInboxItem): string {
+  if (item.seatRequest || item.notice?.kind === 'seat_request') {
+    const line = seatRequestInboxMessageLine(item.seatRequest, item.notice)
+    if (line) return line
+  }
+  return (item.notice?.body?.trim() || item.subtitle || '').trim()
 }
 
-function statusLabel(status: string | undefined): string {
-  if (!status) return ''
-  return status.replace(/_/g, ' ')
+function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
+  if (item.productRequest && platformConsole) return 'Review request'
+  if (item.seatRequest) {
+    if (platformConsole && isOpenSeatRequest(item.seatRequest.status)) return 'Approve'
+    return 'Review request'
+  }
+  if (isSeatRequestDecisionItem(item)) return 'Review request'
+  if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
+  if (item.notice) {
+    if (item.notice.kind === 'deploy_review') return 'Open release'
+    if (item.notice.payload?.cta === 'review_interest') return 'Review request'
+    if (isFeatureInterestNotice(item.notice)) return 'Express interest'
+    if (
+      isFeatureEnhancementNotice(item.notice) &&
+      !item.notice.applied &&
+      !item.notice.applied_at
+    ) {
+      return 'Choose enhancements'
+    }
+    if (isProductUpdateNotice(item.notice) && !item.notice.applied && !item.notice.applied_at) {
+      return 'Apply update'
+    }
+    return 'View message'
+  }
+  if (item.href) return 'Open'
+  return 'Open'
 }
 
-function sentStatusBadge(item: UnifiedInboxItem): ReactNode {
+function statusBadge(item: UnifiedInboxItem): ReactNode {
   if (!hasInboxWorkflowStatus(item)) {
     return <span className="text-sm text-muted">—</span>
   }
   const sizeClass = 'text-sm px-2.5 py-1'
-  const request = item.productRequest
-  if (request && (isSentToTradeal(item) || item.send)) {
-    const s = String(request.status || '').toLowerCase()
+  if (item.productRequest) {
+    const s = String(item.productRequest.status || '').toLowerCase()
     if (s === 'done') {
       return (
         <Badge variant="success" dot className={sizeClass}>
@@ -81,55 +109,115 @@ function sentStatusBadge(item: UnifiedInboxItem): ReactNode {
       </Badge>
     )
   }
-  return <span className="text-sm text-muted">—</span>
-}
-
-function sentToLabel(row: UnifiedInboxItem): string {
-  if (isSentToTradeal(row)) return requestRecipientLabel('tradeal')
-  if (row.send && row.kind === 'product_request' && row.productRequest?.organisation_name) {
-    return row.productRequest.organisation_name
+  if (item.seatRequest) {
+    const s = String(item.seatRequest.status || '').toLowerCase()
+    if (s === 'rejected') {
+      return (
+        <Badge variant="danger" dot className={sizeClass}>
+          Rejected
+        </Badge>
+      )
+    }
+    if (s === 'approved' || item.status === 'done') {
+      return (
+        <Badge variant="success" dot className={sizeClass}>
+          Done
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant="warning" dot className={sizeClass}>
+        Open
+      </Badge>
+    )
   }
-  const n = row.send?.sent_count
-  if (n == null) return '—'
-  return `${n} ${n === 1 ? 'person' : 'people'}`
+  if (item.status === 'done') {
+    return (
+      <Badge variant="success" dot className={sizeClass}>
+        Done
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="warning" dot className={sizeClass}>
+      Open
+    </Badge>
+  )
 }
 
-function buildSentMenuItems({
+function buildReceivedMenuItems({
   item,
+  platformConsole,
+  onOpen,
+  onRejectSeat,
   onDelete,
 }: {
   item: UnifiedInboxItem
-  onDelete: (item: UnifiedInboxItem) => void
+  platformConsole: boolean
+  onOpen: (item: UnifiedInboxItem) => void
+  onRejectSeat?: (item: UnifiedInboxItem) => void
+  onDelete?: (item: UnifiedInboxItem) => void
 }): DetailPanelMenuItem[] {
-  if (!isDeletableSent(item)) return []
+  const deletable = isDeletableNotice(item)
+  const openSeat =
+    platformConsole && item.seatRequest && isOpenSeatRequest(item.seatRequest.status) && onRejectSeat
   return groupMenuItems([
     {
       items: [
         {
           type: 'button' as const,
-          label: 'Delete',
-          icon: Trash2,
-          tone: 'danger' as const,
-          onClick: () => onDelete(item),
+          label: actionLabel(item, platformConsole),
+          icon: MessageSquare,
+          onClick: () => onOpen(item),
         },
+        ...(openSeat
+          ? [
+              {
+                type: 'button' as const,
+                label: 'Reject',
+                icon: XCircle,
+                tone: 'danger' as const,
+                onClick: () => onRejectSeat(item),
+              },
+            ]
+          : []),
       ],
+    },
+    {
+      items:
+        deletable && onDelete
+          ? [
+              {
+                type: 'button' as const,
+                label: 'Delete',
+                icon: Trash2,
+                tone: 'danger' as const,
+                onClick: () => onDelete(item),
+              },
+            ]
+          : [],
     },
   ])
 }
 
-function SentRowActions({
+function InboxRowActions({
   item,
+  platformConsole,
+  onOpen,
+  onRejectSeat,
   onDelete,
 }: {
   item: UnifiedInboxItem
+  platformConsole: boolean
+  onOpen: (item: UnifiedInboxItem) => void
+  onRejectSeat?: (item: UnifiedInboxItem) => void
   onDelete: (item: UnifiedInboxItem) => void
 }) {
   const { classes: density } = useTableDensity()
-  const items = useMemo(() => buildSentMenuItems({ item, onDelete }), [item, onDelete])
-
-  if (items.length === 0) {
-    return <span className="block w-8" aria-hidden />
-  }
+  const items = useMemo(
+    () => buildReceivedMenuItems({ item, platformConsole, onOpen, onRejectSeat, onDelete }),
+    [item, onDelete, onOpen, onRejectSeat, platformConsole],
+  )
 
   return (
     <div className="flex justify-center" onClick={e => e.stopPropagation()}>
@@ -138,71 +226,55 @@ function SentRowActions({
   )
 }
 
-function SentDetailPanel({ item }: { item: UnifiedInboxItem }) {
-  const toTradeal = isSentToTradeal(item)
-  const source = sourceLabel(item.send?.source)
+function ReceivedDetailPanel({
+  item,
+  platformConsole,
+  onOpen,
+  onRejectSeat,
+}: {
+  item: UnifiedInboxItem
+  platformConsole: boolean
+  onOpen: (item: UnifiedInboxItem) => void
+  onRejectSeat?: (item: UnifiedInboxItem) => void
+}) {
+  const isSeatMessage = Boolean(item.seatRequest || item.notice?.kind === 'seat_request')
+  const replyBody = (item.notice?.body?.trim() || item.subtitle || '').trim()
   const originalMessage = (item.productRequest?.message || '').trim()
-  const replyBody = (item.send?.body || item.productRequest?.reply || '').trim()
-  // Tradeal reply in Sent — same thread as org Received (request + reply).
-  const isReplyThread = Boolean(item.send && item.kind === 'product_request' && originalMessage)
-  const message = isReplyThread
-    ? ''
-    : (item.send?.body || item.productRequest?.message || '').trim()
-  const recipientCount = item.send?.sent_count
+  const isReplyThread = Boolean(item.notice?.kind === 'product_request' && originalMessage)
   const when = item.dateIso ? formatDateTime(item.dateIso) : '—'
-  const requestStatus = statusLabel(item.productRequest?.status)
-  const orgName = (item.productRequest?.organisation_name || '').trim()
-  const requestedBy = (item.productRequest?.requested_by_name || '').trim()
+  const cta = actionLabel(item, platformConsole)
+  const openSeat =
+    platformConsole && item.seatRequest && isOpenSeatRequest(item.seatRequest.status) && onRejectSeat
+  const showSummary =
+    !isReplyThread &&
+    Boolean(item.subtitle?.trim()) &&
+    item.subtitle.trim() !== replyBody &&
+    !item.notice?.body?.trim()
 
   return (
     <DetailPanelBody>
       <DetailMetricsSection>
         <DetailInlineStatRow>
-          {toTradeal || isReplyThread ? (
-            <DetailInlineStat
-              label="Status"
-              value={<span className="capitalize">{requestStatus || '—'}</span>}
-            />
-          ) : (
-            <DetailInlineStat
-              label="Recipients"
-              value={
-                recipientCount == null
-                  ? '—'
-                  : `${recipientCount} ${recipientCount === 1 ? 'person' : 'people'}`
-              }
-            />
-          )}
+          <DetailInlineStat label="Type" value={kindLabel(item)} />
           <DetailInlineStat label="When" value={when} />
         </DetailInlineStatRow>
       </DetailMetricsSection>
 
-      {isReplyThread ? (
-        <DetailGroup title="Details" icon={Send}>
+      {(item.from || showSummary) ? (
+        <DetailGroup title="Details" icon={Inbox}>
           <div className="space-y-2.5">
-            {orgName ? <DetailRow label="To" value={orgName} /> : null}
-            {requestedBy ? <DetailRow label="Request from" value={requestedBy} /> : null}
-            {source ? <DetailRow label="Source" value={source} /> : null}
-          </div>
-        </DetailGroup>
-      ) : (!toTradeal && item.subtitle) || source || toTradeal ? (
-        <DetailGroup title="Details" icon={Send}>
-          <div className="space-y-2.5">
-            {!toTradeal && item.subtitle ? (
-              <DetailRow label="Audience" value={item.subtitle} />
-            ) : null}
-            {source ? <DetailRow label="Source" value={source} /> : null}
-            {toTradeal ? <DetailRow label="To" value={requestRecipientLabel('tradeal')} /> : null}
+            {item.from ? <DetailRow label="From" value={item.from} /> : null}
+            {showSummary ? <DetailRow label="Summary" value={item.subtitle} /> : null}
           </div>
         </DetailGroup>
       ) : null}
 
       {isReplyThread ? (
         <>
-          <DetailGroup title="Their message" icon={Send} surface="muted">
+          <DetailGroup title="Your message" icon={Send} surface="muted">
             <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{originalMessage}</p>
           </DetailGroup>
-          <DetailGroup title="Your reply" icon={MessageSquare} surface="muted">
+          <DetailGroup title="Tradeal reply" icon={MessageSquare} surface="muted">
             {replyBody ? (
               <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{replyBody}</p>
             ) : (
@@ -210,38 +282,65 @@ function SentDetailPanel({ item }: { item: UnifiedInboxItem }) {
             )}
           </DetailGroup>
         </>
-      ) : message ? (
+      ) : isSeatMessage ? (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">
-          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{message}</p>
+          <SeatRequestInboxMessage
+            seatRequest={item.seatRequest}
+            notice={item.notice}
+            statusAudience={platformConsole ? 'platform' : 'org'}
+          />
+        </DetailGroup>
+      ) : replyBody ? (
+        <DetailGroup title="Message" icon={MessageSquare} surface="muted">
+          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{replyBody}</p>
         </DetailGroup>
       ) : (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">
           <p className="text-sm text-muted">No message body.</p>
         </DetailGroup>
       )}
+
+      <div className="flex flex-wrap gap-2 py-6">
+        <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => onOpen(item)}>
+          {cta}
+        </Button>
+        {openSeat ? (
+          <Button
+            size="sm"
+            variant="outlineDanger"
+            className="w-full sm:w-auto"
+            onClick={() => onRejectSeat(item)}
+          >
+            Reject
+          </Button>
+        ) : null}
+      </div>
     </DetailPanelBody>
   )
 }
 
-function sentHeaderBadges(item: UnifiedInboxItem): ReactNode {
-  const type = sentTypeLabel(item)
-  const source = sourceLabel(item.send?.source)
-  return (
-    <>
-      <Badge variant={isSentToTradeal(item) ? 'info' : 'default'}>{type}</Badge>
-      {source && source !== type ? <Badge variant="info">{source}</Badge> : null}
-      {hasInboxWorkflowStatus(item) ? sentStatusBadge(item) : null}
-    </>
-  )
+function receivedHeaderBadges(item: UnifiedInboxItem): ReactNode {
+  if (hasInboxWorkflowStatus(item)) return statusBadge(item)
+  return <Badge variant="default">{kindLabel(item)}</Badge>
 }
 
-export function InboxSentTable({
+export function InboxReceivedTable({
   rows,
+  statusFilter,
   emptyDescription,
+  platformConsole,
+  focusId,
+  onOpen,
+  onRejectSeat,
   onDeleteItems,
 }: {
   rows: UnifiedInboxItem[]
+  statusFilter: InboxStatusFilter
   emptyDescription: string
+  platformConsole: boolean
+  focusId?: string | null
+  onOpen: (item: UnifiedInboxItem) => void
+  onRejectSeat?: (item: UnifiedInboxItem) => void
   onDeleteItems: (ids: string[]) => Promise<number>
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -257,6 +356,11 @@ export function InboxSentTable({
     () => rows.find(r => r.id === selectedId) ?? null,
     [rows, selectedId],
   )
+
+  useEffect(() => {
+    if (!focusId) return
+    if (rows.some(r => r.id === focusId)) setSelectedId(focusId)
+  }, [focusId, rows])
 
   useEffect(() => {
     if (selectedId && !rows.some(r => r.id === selectedId)) {
@@ -284,6 +388,10 @@ export function InboxSentTable({
     [setDetailPanelOpen],
   )
 
+  const onRowClick = (row: UnifiedInboxItem) => {
+    setSelectedId(row.id)
+  }
+
   const toggleChecked = useCallback((id: string) => {
     setCheckedIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
   }, [])
@@ -301,20 +409,17 @@ export function InboxSentTable({
   }, [])
 
   const openDeleteOne = useCallback((item: UnifiedInboxItem) => {
-    if (!isDeletableSent(item)) return
+    if (!isDeletableNotice(item)) return
     setDeleteError('')
     setDeleteIds([item.id])
   }, [])
 
   const openDeleteSelected = useCallback(() => {
-    const ids = checkedIds.filter(id => {
-      const row = rows.find(r => r.id === id)
-      return row ? isDeletableSent(row) : false
-    })
+    const ids = checkedIds.filter(id => id.startsWith('notice-'))
     if (ids.length === 0) return
     setDeleteError('')
     setDeleteIds(ids)
-  }, [checkedIds, rows])
+  }, [checkedIds])
 
   const handleConfirmDelete = useCallback(async () => {
     if (!deleteIds?.length) return
@@ -331,23 +436,20 @@ export function InboxSentTable({
   }, [closePanel, deleteIds, onDeleteItems, selectedId])
 
   const deletableCheckedCount = useMemo(
-    () => checkedIds.filter(id => {
-      const row = rows.find(r => r.id === id)
-      return row ? isDeletableSent(row) : false
-    }).length,
-    [checkedIds, rows],
+    () => checkedIds.filter(id => id.startsWith('notice-')).length,
+    [checkedIds],
   )
 
   const columns = useMemo(
     () => [
       {
-        key: 'sent_to',
-        header: 'Sent to',
+        key: 'from',
+        header: 'From',
         className: 'w-36 min-w-[9rem]',
         sortable: true,
-        sortValue: (row: UnifiedInboxItem) => sentToLabel(row),
+        sortValue: (row: UnifiedInboxItem) => row.from,
         render: (row: UnifiedInboxItem) => (
-          <span className="text-sm text-muted whitespace-nowrap">{sentToLabel(row)}</span>
+          <span className="text-sm text-muted whitespace-nowrap">{row.from || '—'}</span>
         ),
       },
       {
@@ -355,29 +457,35 @@ export function InboxSentTable({
         header: 'Type',
         className: 'w-32 min-w-[8rem]',
         sortable: true,
-        sortValue: (row: UnifiedInboxItem) => sentTypeLabel(row),
+        sortValue: (row: UnifiedInboxItem) => kindLabel(row),
         render: (row: UnifiedInboxItem) => (
           <span className="inline-flex items-center gap-2 text-sm text-heading whitespace-nowrap min-w-0">
             <InboxKindGlyph item={row} size="sm" className="h-7 w-7" />
-            <span className="truncate">{sentTypeLabel(row)}</span>
+            <span className="truncate">{kindLabel(row)}</span>
           </span>
         ),
       },
       {
         key: 'title',
         header: 'Title',
-        className:
-          effectiveDocked && selectedId
-            ? 'min-w-0 max-w-[20rem]'
-            : 'min-w-0',
+        // Flexible column — absorbs leftover width when table is fullWidth.
+        className: 'min-w-0 w-full max-w-0',
         sortable: true,
         sortValue: (row: UnifiedInboxItem) => row.title,
         render: (row: UnifiedInboxItem) => {
-          const message = (row.send?.body || row.productRequest?.message || row.subtitle || '').trim()
+          const message = receivedInlineMessage(row)
           const showMessage = message && message !== (row.title || '').trim()
           return (
             <p className="min-w-0 truncate">
-              <span className="font-medium text-heading">{row.title || '—'}</span>
+              <span
+                className={
+                  row.unread || row.actionable
+                    ? 'font-semibold text-heading'
+                    : 'font-medium text-heading'
+                }
+              >
+                {row.title || '—'}
+              </span>
               {showMessage ? (
                 <span className="text-sm text-muted">
                   {' '}
@@ -391,6 +499,7 @@ export function InboxSentTable({
       {
         key: 'when',
         header: 'When',
+        // Hug date/time content — don't stretch under fullWidth.
         className: 'w-0 whitespace-nowrap',
         sortable: true,
         sortValue: (row: UnifiedInboxItem) => row.dateIso || '',
@@ -403,25 +512,33 @@ export function InboxSentTable({
       {
         key: 'status',
         header: 'Status',
-        className: 'w-24 text-center',
+        // Hard min-width so sticky ⋯ cannot crush badges; allow grow for longer labels.
+        className: 'min-w-[6.5rem] w-[6.5rem] text-center whitespace-nowrap',
         sortable: true,
-        sortValue: (row: UnifiedInboxItem) =>
-          isSentToTradeal(row)
-            ? String(row.productRequest?.status || '')
-            : 'sent',
+        sortValue: (row: UnifiedInboxItem) => {
+          if (!hasInboxWorkflowStatus(row)) return 3
+          if (row.status === 'open' || row.unread) return 0
+          return 2
+        },
         render: (row: UnifiedInboxItem) => (
-          <div className="flex justify-center">{sentStatusBadge(row)}</div>
+          <div className="flex justify-center">{statusBadge(row)}</div>
         ),
       },
       {
         key: 'actions',
         header: '',
         render: (row: UnifiedInboxItem) => (
-          <SentRowActions item={row} onDelete={openDeleteOne} />
+          <InboxRowActions
+            item={row}
+            platformConsole={platformConsole}
+            onOpen={onOpen}
+            onRejectSeat={onRejectSeat}
+            onDelete={openDeleteOne}
+          />
         ),
       },
     ],
-    [effectiveDocked, openDeleteOne, selectedId],
+    [onOpen, onRejectSeat, openDeleteOne, platformConsole],
   )
 
   const dockToggle = (
@@ -436,15 +553,22 @@ export function InboxSentTable({
     </button>
   )
 
-  const panelMenu =
-    selected && isDeletableSent(selected) ? (
-      <DetailPanelMenu items={buildSentMenuItems({ item: selected, onDelete: openDeleteOne })} />
-    ) : null
+  const panelMenu = selected ? (
+    <DetailPanelMenu
+      items={buildReceivedMenuItems({
+        item: selected,
+        platformConsole,
+        onOpen,
+        onRejectSeat,
+        onDelete: openDeleteOne,
+      })}
+    />
+  ) : null
 
   const panelProps = selected
     ? {
-        title: selected.title || 'Sent item',
-        headerBadges: sentHeaderBadges(selected),
+        title: selected.title || 'Inbox item',
+        headerBadges: receivedHeaderBadges(selected),
         onClose: closePanel,
         headerActions: (
           <>
@@ -485,6 +609,7 @@ export function InboxSentTable({
       ) : null}
 
       <DataTable
+        fullWidth
         columns={columns}
         data={rows}
         getRowId={row => row.id}
@@ -492,24 +617,42 @@ export function InboxSentTable({
         selectedRows={checkedIds}
         onSelectRow={toggleChecked}
         onSelectAllVisible={handleSelectAllVisible}
-        onRowClick={row => setSelectedId(row.id)}
+        onRowClick={onRowClick}
+        getRowTone={row =>
+          row.unread || (row.category === 'work' && row.status === 'open')
+            ? 'unread'
+            : undefined
+        }
         stickyLastColumn
-        emptyMessage="Nothing sent"
+        emptyMessage={statusFilter === 'open' ? 'Nothing unread' : 'Nothing received'}
         emptyState={
           <div className="py-10 text-center">
-            <p className="text-sm font-medium text-heading">Nothing sent</p>
+            <p className="text-sm font-medium text-heading">
+              {statusFilter === 'open' ? 'Nothing unread' : 'Nothing received'}
+            </p>
             <p className="text-xs text-muted mt-1 max-w-sm mx-auto">{emptyDescription}</p>
           </div>
         }
       />
+
       {selected && panelProps && effectiveDocked ? (
         <DockedPanel {...panelProps}>
-          <SentDetailPanel item={selected} />
+          <ReceivedDetailPanel
+            item={selected}
+            platformConsole={platformConsole}
+            onOpen={onOpen}
+            onRejectSeat={onRejectSeat}
+          />
         </DockedPanel>
       ) : null}
       {selected && panelProps && !effectiveDocked ? (
         <Drawer open {...panelProps}>
-          <SentDetailPanel item={selected} />
+          <ReceivedDetailPanel
+            item={selected}
+            platformConsole={platformConsole}
+            onOpen={onOpen}
+            onRejectSeat={onRejectSeat}
+          />
         </Drawer>
       ) : null}
 
@@ -520,13 +663,13 @@ export function InboxSentTable({
           setDeleteError('')
         }}
         onConfirm={handleConfirmDelete}
-        title={deleteCount === 1 ? 'Delete sent message?' : `Delete ${deleteCount} sent messages?`}
+        title={deleteCount === 1 ? 'Delete message?' : `Delete ${deleteCount} messages?`}
         error={deleteError}
       >
         <p className="text-sm text-muted">
           {deleteCount === 1
-            ? 'This removes the item from your Sent list. This cannot be undone.'
-            : `This removes ${deleteCount} items from your Sent list. This cannot be undone.`}
+            ? 'This removes the message from your inbox. This cannot be undone.'
+            : `This removes ${deleteCount} messages from your inbox. This cannot be undone.`}
         </p>
       </ConfirmDeleteModal>
     </>

@@ -1,5 +1,6 @@
 # After production deploy, auto-create a draft platform release from git commits (no manual typing).
 # Requires repo secrets: TRADEAL_API_URL, TRADEAL_API_TOKEN
+# (same token as Railway env TRADEAL_API_TOKEN / header x-tradeal-token).
 name: Register production release
 
 on:
@@ -24,10 +25,11 @@ jobs:
           TRADEAL_DEPLOY_ENV: production
         run: |
           if [[ -z "${TRADEAL_API_URL}" || -z "${TRADEAL_API_TOKEN}" ]]; then
-            echo "::error::Missing repository secrets TRADEAL_API_URL and/or TRADEAL_API_TOKEN."
-            echo "Set them to your production API base URL and deploy hook token (same as x-tradeal-token / TRADEAL_API_TOKEN on the API)."
-            echo "Without these, pushes will not create a Releases draft or notify Tradeal admins."
-            exit 1
+            echo "::warning::Skipping deploy notify — set repository secrets TRADEAL_API_URL and TRADEAL_API_TOKEN."
+            echo "TRADEAL_API_URL = production API origin (e.g. https://your-api.up.railway.app)"
+            echo "TRADEAL_API_TOKEN = same value as Railway TRADEAL_API_TOKEN (sent as x-tradeal-token)."
+            echo "Once set, pushes to main create a Releases draft and notify Tradeal admins."
+            exit 0
           fi
           chmod +x scripts/register-production-deploy.sh
           ./scripts/register-production-deploy.sh

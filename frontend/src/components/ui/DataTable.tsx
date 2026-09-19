@@ -32,6 +32,13 @@ interface DataTableProps<T> {
   activeRowId?: string
   /** Extra highlight (e.g. all rows for the open organisation). */
   isRowActive?: (row: T) => boolean
+  /** Optional per-row class on `<tr>` (e.g. unread emphasis). */
+  getRowClassName?: (row: T) => string | undefined
+  /**
+   * Soft background tone for non-selected rows (e.g. Gmail-style unread).
+   * Applied to cells so sticky columns stay opaque while scrolling.
+   */
+  getRowTone?: (row: T) => 'unread' | undefined
   onSelectRow?: (id: string) => void
   onSelectAllVisible?: (select: boolean, visibleIds: string[]) => void
   getRowId?: (row: T) => string
@@ -141,15 +148,32 @@ const TABLE_CELL_SELECTED_BG = 'bg-blue-50/60 dark:bg-blue-950/25'
 /** Opaque equivalent over --color-card — sticky cells need solid bg when scrolling. */
 const TABLE_STICKY_SELECTED =
   'bg-[color-mix(in_srgb,#eff6ff_60%,var(--color-card)_40%)] dark:bg-[color-mix(in_srgb,#172554_25%,var(--color-card)_75%)]'
+/** Gmail-style unread — soft cool tint vs plain read rows. */
+const TABLE_CELL_UNREAD_BG = 'bg-sky-50/70 dark:bg-sky-950/25'
+const TABLE_STICKY_UNREAD =
+  'bg-[color-mix(in_srgb,#f0f9ff_70%,var(--color-card)_30%)] dark:bg-[color-mix(in_srgb,#082f49_25%,var(--color-card)_75%)]'
+const TABLE_CELL_UNREAD_HOVER = 'group-hover:bg-sky-50 dark:group-hover:bg-sky-950/40'
 
 const TABLE_GRID_BORDER = 'border border-gray-200 dark:border-gray-700/80'
 const TABLE_GRID_BORDER_SELECTED = 'border border-accent/20'
 
-function gridCellClasses(selected: boolean, isSticky: boolean, isHeader = false) {
+function gridCellClasses(
+  selected: boolean,
+  isSticky: boolean,
+  isHeader = false,
+  tone?: 'unread',
+) {
   if (selected) {
     return cn(
       isSticky ? TABLE_STICKY_SELECTED : TABLE_CELL_SELECTED_BG,
       TABLE_GRID_BORDER_SELECTED,
+    )
+  }
+  if (tone === 'unread' && !isHeader) {
+    return cn(
+      TABLE_GRID_BORDER,
+      isSticky ? TABLE_STICKY_UNREAD : TABLE_CELL_UNREAD_BG,
+      TABLE_CELL_UNREAD_HOVER,
     )
   }
   return cn(
@@ -181,6 +205,8 @@ export function DataTable<T extends { id?: string | number }>({
   selectedRows = [],
   activeRowId,
   isRowActive,
+  getRowClassName,
+  getRowTone,
   onSelectRow,
   onSelectAllVisible,
   getRowId,
@@ -272,6 +298,7 @@ export function DataTable<T extends { id?: string | number }>({
             const id = getRowId?.(row) || (row as { id?: string }).id || String(i)
             const checked = selectedRows.includes(id)
             const highlighted = checked || activeRowId === id || Boolean(isRowActive?.(row))
+            const tone = getRowTone?.(row)
             return (
               <div
                 key={id}
@@ -279,7 +306,9 @@ export function DataTable<T extends { id?: string | number }>({
                 className={cn(
                   density.mobileRow,
                   onRowClick && 'cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50',
+                  !highlighted && tone === 'unread' && 'bg-sky-50/70 dark:bg-sky-950/25',
                   highlighted && cn(TABLE_CELL_SELECTED_BG, TABLE_GRID_BORDER_SELECTED),
+                  getRowClassName?.(row),
                 )}
               >
                 {mobileRender(row)}
@@ -344,6 +373,7 @@ export function DataTable<T extends { id?: string | number }>({
               {columns.map((col, colIndex) => {
                 const isStickyFirst = stickyFirstColumn && colIndex === 0
                 const isStickyLast = stickActions && colIndex === lastColIndex
+                const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
                 return (
                 <th
                   key={col.key}
@@ -359,9 +389,12 @@ export function DataTable<T extends { id?: string | number }>({
                       STICKY_REF_SHADOW,
                       'pr-2',
                     ),
+                    isBeforeStickyActions && 'border-r-0',
                     isStickyLast && cn(
                       'sticky right-0 z-30',
                       STICKY_ACTIONS_SHADOW,
+                      // Vertical edges come from inset shadow — avoid double weight with cell border.
+                      'border-l-0 border-r-0',
                     ),
                     col.className,
                   )}
@@ -391,6 +424,7 @@ export function DataTable<T extends { id?: string | number }>({
               const id = getRowId?.(row) || (row as { id?: string }).id || String(i)
               const checked = selectedRows.includes(id)
               const highlighted = checked || activeRowId === id || Boolean(isRowActive?.(row))
+              const tone = highlighted ? undefined : getRowTone?.(row)
               return (
                 <tr
                   key={id}
@@ -398,6 +432,7 @@ export function DataTable<T extends { id?: string | number }>({
                   className={cn(
                     'group transition-colors duration-100',
                     onRowClick && 'cursor-pointer',
+                    getRowClassName?.(row),
                   )}
                 >
                   {onSelectRow && getRowId && (
@@ -405,9 +440,9 @@ export function DataTable<T extends { id?: string | number }>({
                       className={cn(
                         CHECKBOX_COL_CLASS,
                         `${density.bodyY} hidden md:table-cell`,
-                        gridCellClasses(highlighted, stickyFirstColumn),
+                        gridCellClasses(highlighted, stickyFirstColumn, false, tone),
                         stickyFirstColumn && 'sticky left-0 z-20',
-                        !highlighted && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
+                        !highlighted && !tone && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                       )}
                       onClick={e => e.stopPropagation()}
                     >
@@ -424,6 +459,7 @@ export function DataTable<T extends { id?: string | number }>({
                   {columns.map((col, colIndex) => {
                     const isStickyFirst = stickyFirstColumn && colIndex === 0
                     const isStickyLast = stickActions && colIndex === lastColIndex
+                    const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
                     const isStickyCol = isStickyFirst || isStickyLast
                     return (
                     <td
@@ -431,17 +467,20 @@ export function DataTable<T extends { id?: string | number }>({
                       className={cn(
                         isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
                         `${density.text} text-gray-700 dark:text-gray-300`,
-                        gridCellClasses(highlighted, isStickyCol),
-                        !highlighted && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
+                        gridCellClasses(highlighted, isStickyCol, false, tone),
+                        !highlighted && !tone && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                         isStickyFirst && cn(
                           'sticky z-20 whitespace-nowrap',
                           stickyRefLeft,
                           STICKY_REF_SHADOW,
                           'pr-2',
                         ),
+                        isBeforeStickyActions && 'border-r-0',
                         isStickyLast && cn(
                           'sticky right-0 z-20',
                           STICKY_ACTIONS_SHADOW,
+                          // Vertical edges come from inset shadow — avoid double weight with cell border.
+                          'border-l-0 border-r-0',
                         ),
                         col.className,
                       )}

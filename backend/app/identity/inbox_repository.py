@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from ..db import uses_postgres
 from .notifications_repository import (
     list_notification_sends_for_actor,
     list_notifications_for_user,
@@ -24,7 +25,12 @@ FilterKind = Literal["open", "all"]
 BoxKind = Literal["received", "sent"]
 
 OPEN_SEAT_STATUSES = frozenset({"pending_payment", "paid"})
-OPEN_PRODUCT_STATUSES = frozenset({"received"})
+# Still needs attention until fully resolved.
+OPEN_PRODUCT_STATUSES = frozenset({"received", "in_progress"})
+# Notice kinds with a workflow Status (Open/Done). FYI kinds use unread only.
+WORKFLOW_NOTICE_KINDS = frozenset(
+    {"payment_reminder", "deploy_review", "product_request", "seat_request"}
+)
 
 _KIND_LABEL = {"issue": "Issue", "improvement": "Improvement", "requirement": "New need"}
 _PRIORITY_SHORT = {"p1": "P1", "p2": "P2", "p3": "P3"}
@@ -81,26 +87,78 @@ def _is_review_interest_notice(notice: dict[str, Any]) -> bool:
     return str(payload.get("cta") or "") == "review_interest"
 
 
-def _notice_items(conn, user_id: int, limit: int) -> list[dict[str, Any]]:
+def _notice_from_label(notice: dict[str, Any]) -> str:
+    """Sender label for Received — never hardcode a product brand."""
+    name = str(notice.get("created_by_name") or "").strip()
+    if name:
+        return name
+    payload = notice.get("payload") or {}
+    for key in ("from_label", "sender_name", "sender_label", "from"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return "System"
+
+
+def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = None) -> list[dict[str, Any]]:
+    from .product_request_repository import get_product_request_for_user
+    from .seat_request_repository import get_seat_request_for_org
+
     out: list[dict[str, Any]] = []
     for n in list_notifications_for_user(conn, user_id, limit=limit):
         if _is_review_interest_notice(n):
             continue
         unread = bool(n.get("unread"))
+        linked_request: dict[str, Any] | None = None
+        linked_seat: dict[str, Any] | None = None
+        payload = n.get("payload") or {}
+        raw_pr_id = str(payload.get("product_request_id") or "").strip()
+        if (
+            str(n.get("kind") or "") == "product_request"
+            and raw_pr_id.isdigit()
+            and organisation_id
+        ):
+            linked_request = get_product_request_for_user(
+                conn,
+                int(raw_pr_id),
+                organisation_id=int(organisation_id),
+                user_id=user_id,
+            )
+        raw_sr_id = str(payload.get("seat_request_id") or "").strip()
+        if str(n.get("kind") or "") == "seat_request" and raw_sr_id.isdigit() and organisation_id:
+            linked_seat = get_seat_request_for_org(
+                conn,
+                int(raw_sr_id),
+                organisation_id=int(organisation_id),
+            )
+        kind = str(n.get("kind") or "notice")
+        if linked_request is not None:
+            status = "open" if _product_open(str(linked_request.get("status") or "")) else "done"
+        elif linked_seat is not None:
+            status = "open" if _seat_open(str(linked_seat.get("status") or "")) else "done"
+        elif kind == "seat_request" and str(payload.get("decision") or "") in ("approved", "rejected"):
+            status = "done"
+        elif kind in WORKFLOW_NOTICE_KINDS:
+            status = "open" if unread else "done"
+        else:
+            # FYI (product update, maintenance, backup, announcement, …) — no workflow status.
+            status = "done"
         out.append(
             _inbox_item(
                 item_id=f"notice-{n['id']}",
-                kind=str(n.get("kind") or "notice"),
+                kind=kind,
                 category="notice",
-                status="open" if unread else "done",
+                status=status,
                 unread=unread,
                 title=str(n.get("title") or ""),
                 subtitle=str(n.get("body") or "")[:240],
-                from_label="Tradeal",
+                from_label=_notice_from_label(n),
                 date_iso=str(n.get("created_at") or ""),
                 actionable=unread,
                 href=str(n.get("href") or ""),
                 notice=n,
+                product_request=linked_request,
+                seat_request=linked_seat,
             )
         )
     return out
@@ -211,6 +269,8 @@ def _audience_subtitle(send: dict[str, Any]) -> str:
 
 
 def _send_items(conn, user_id: int, role_slug: str, limit: int) -> list[dict[str, Any]]:
+    from .product_request_repository import get_product_request
+
     include_system = role_slug == "platform_admin"
     out: list[dict[str, Any]] = []
     for row in list_notification_sends_for_actor(
@@ -220,10 +280,18 @@ def _send_items(conn, user_id: int, role_slug: str, limit: int) -> list[dict[str
         limit=limit,
     ):
         actor = row.get("actor_user_id")
-        from_label = "Tradeal system" if actor is None else "You"
+        from_label = "System" if actor is None else "You"
         source = str(row.get("source") or "manual")
         if source == "schedule":
-            from_label = "Tradeal system"
+            from_label = "System"
+        linked_request: dict[str, Any] | None = None
+        payload = row.get("payload") or {}
+        raw_pr_id = str(payload.get("product_request_id") or "").strip()
+        if str(row.get("kind") or "") == "product_request" and raw_pr_id.isdigit():
+            try:
+                linked_request = get_product_request(conn, int(raw_pr_id))
+            except Exception:  # noqa: BLE001 — missing request should not break Sent list
+                linked_request = None
         out.append(
             _inbox_item(
                 item_id=f"send-{row['id']}",
@@ -238,6 +306,7 @@ def _send_items(conn, user_id: int, role_slug: str, limit: int) -> list[dict[str
                 actionable=False,
                 href=str(row.get("href") or ""),
                 send=row,
+                product_request=linked_request,
             )
         )
     return out
@@ -297,8 +366,10 @@ def list_inbox_for_session(
     if box == "sent":
         items: list[dict[str, Any]] = []
         if role_slug == "platform_admin":
+            # Platform outbox: campaigns / notices the admin (or system) sent.
             items.extend(_send_items(conn, user_id, role_slug, limit=limit))
         elif organisation_id:
+            # Org outbox: only requests this user sent to Tradeal — never inbound notices.
             items.extend(
                 _org_sent_product_items(
                     conn,
@@ -307,13 +378,17 @@ def list_inbox_for_session(
                     limit=limit,
                 )
             )
-            items.extend(_send_items(conn, user_id, role_slug, limit=limit))
-        else:
-            items.extend(_send_items(conn, user_id, role_slug, limit=limit))
         return _sort_items(items)[:limit]
 
     items = []
-    items.extend(_notice_items(conn, user_id, limit=min(limit, NOTICE_INBOX_LIMIT)))
+    items.extend(
+        _notice_items(
+            conn,
+            user_id,
+            limit=min(limit, NOTICE_INBOX_LIMIT),
+            organisation_id=organisation_id,
+        )
+    )
     if role_slug == "platform_admin":
         items.extend(_seat_items(conn, limit))
         items.extend(_product_items(conn, limit))
@@ -379,7 +454,17 @@ def parse_inbox_item_id(item_id: str) -> tuple[str, int] | None:
     raw = (item_id or "").strip()
     if raw.startswith("notice-"):
         try:
-            return ("notice", int(raw.split("-", 1)[1]))
+            return ("notice", int(raw[len("notice-") :]))
+        except ValueError:
+            return None
+    if raw.startswith("sent-product-request-"):
+        try:
+            return ("sent_product_request", int(raw[len("sent-product-request-") :]))
+        except ValueError:
+            return None
+    if raw.startswith("send-"):
+        try:
+            return ("send", int(raw[len("send-") :]))
         except ValueError:
             return None
     return None
@@ -397,3 +482,101 @@ def mark_inbox_item_read(conn, item_id: str, user_id: int) -> dict[str, Any] | N
 
 def mark_all_inbox_notices_read(conn, user_id: int) -> int:
     return mark_all_read_for_user(conn, user_id)
+
+
+def delete_notification_for_user(conn, notification_id: int, user_id: int) -> bool:
+    """Permanently remove a notice from this user's inbox."""
+    if uses_postgres():
+        cur = conn.execute(
+            "DELETE FROM user_notifications WHERE id = %s AND recipient_user_id = %s",
+            (notification_id, user_id),
+        )
+    else:
+        cur = conn.execute(
+            "DELETE FROM user_notifications WHERE id = ? AND recipient_user_id = ?",
+            (notification_id, user_id),
+        )
+    return int(getattr(cur, "rowcount", 0) or 0) > 0
+
+
+def delete_notification_send_for_actor(conn, send_id: int, user_id: int) -> bool:
+    """Remove an outbox send record owned by this actor."""
+    if uses_postgres():
+        cur = conn.execute(
+            "DELETE FROM notification_sends WHERE id = %s AND actor_user_id = %s",
+            (send_id, user_id),
+        )
+    else:
+        cur = conn.execute(
+            "DELETE FROM notification_sends WHERE id = ? AND actor_user_id = ?",
+            (send_id, user_id),
+        )
+    return int(getattr(cur, "rowcount", 0) or 0) > 0
+
+
+def delete_sent_product_request_for_user(
+    conn,
+    request_id: int,
+    *,
+    user_id: int,
+    organisation_id: int,
+) -> bool:
+    """Remove a Send-to-Tradeal request from this user's Sent box."""
+    if uses_postgres():
+        cur = conn.execute(
+            """
+            DELETE FROM product_requests
+            WHERE id = %s AND requested_by_user_id = %s AND organisation_id = %s
+            """,
+            (request_id, user_id, organisation_id),
+        )
+    else:
+        cur = conn.execute(
+            """
+            DELETE FROM product_requests
+            WHERE id = ? AND requested_by_user_id = ? AND organisation_id = ?
+            """,
+            (request_id, user_id, organisation_id),
+        )
+    return int(getattr(cur, "rowcount", 0) or 0) > 0
+
+
+def delete_inbox_item(
+    conn,
+    item_id: str,
+    user_id: int,
+    *,
+    organisation_id: int | None = None,
+) -> bool:
+    parsed = parse_inbox_item_id(item_id)
+    if not parsed:
+        return False
+    kind, pk = parsed
+    if kind == "notice":
+        return delete_notification_for_user(conn, pk, user_id)
+    if kind == "send":
+        return delete_notification_send_for_actor(conn, pk, user_id)
+    if kind == "sent_product_request":
+        if not organisation_id:
+            return False
+        return delete_sent_product_request_for_user(
+            conn,
+            pk,
+            user_id=user_id,
+            organisation_id=int(organisation_id),
+        )
+    return False
+
+
+def delete_inbox_items(
+    conn,
+    item_ids: list[str],
+    user_id: int,
+    *,
+    organisation_id: int | None = None,
+) -> int:
+    deleted = 0
+    for item_id in item_ids:
+        if delete_inbox_item(conn, item_id, user_id, organisation_id=organisation_id):
+            deleted += 1
+    return deleted

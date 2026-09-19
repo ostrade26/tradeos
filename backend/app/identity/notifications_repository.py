@@ -24,6 +24,7 @@ NOTIFICATION_KINDS = frozenset(
         "announcement",
         "backup_reminder",
         "product_request",
+        "seat_request",
         "deploy_review",
     }
 )
@@ -627,9 +628,16 @@ def list_notifications_for_user(conn, user_id: int, limit: int = 50) -> list[dic
     if uses_postgres():
         rows = conn.execute(
             """
-            SELECT * FROM user_notifications
-            WHERE recipient_user_id = %s
-            ORDER BY id DESC
+            SELECT n.*,
+                   COALESCE(
+                     NULLIF(TRIM(u.name), ''),
+                     NULLIF(TRIM(u.username), ''),
+                     NULLIF(TRIM(u.email), '')
+                   ) AS created_by_name
+            FROM user_notifications n
+            LEFT JOIN users u ON u.id = n.created_by_user_id
+            WHERE n.recipient_user_id = %s
+            ORDER BY n.id DESC
             LIMIT %s
             """,
             (user_id, limit),
@@ -637,9 +645,16 @@ def list_notifications_for_user(conn, user_id: int, limit: int = 50) -> list[dic
     else:
         rows = conn.execute(
             """
-            SELECT * FROM user_notifications
-            WHERE recipient_user_id = ?
-            ORDER BY id DESC
+            SELECT n.*,
+                   COALESCE(
+                     NULLIF(TRIM(u.name), ''),
+                     NULLIF(TRIM(u.username), ''),
+                     NULLIF(TRIM(u.email), '')
+                   ) AS created_by_name
+            FROM user_notifications n
+            LEFT JOIN users u ON u.id = n.created_by_user_id
+            WHERE n.recipient_user_id = ?
+            ORDER BY n.id DESC
             LIMIT ?
             """,
             (user_id, limit),

@@ -32,6 +32,7 @@ import { FeatureLaunchInterestModal } from '../components/feedback/FeatureLaunch
 import type { ProductRequestStatus, UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
 import { INBOX_REFRESH_EVENT } from './useMeInbox'
+import { isOpenSeatRequest, isSeatRequestDecisionItem } from '../lib/platformSeatRequestInbox'
 
 function markFeatureInterestInboxNotices(
   items: UnifiedInboxItem[],
@@ -117,8 +118,19 @@ export function useInboxItemActions({
       setReviewingRequest(row.productRequest)
       return
     }
-    if (row.seatRequest && platformConsole) {
-      setSeatDecision({ mode: 'approve', row: row.seatRequest })
+    if (row.seatRequest) {
+      const open = isOpenSeatRequest(row.seatRequest.status)
+      if (platformConsole) {
+        setSeatDecision({ mode: open ? 'approve' : 'view', row: row.seatRequest })
+      } else if (!open || isSeatRequestDecisionItem(row)) {
+        setSeatDecision({ mode: 'view', row: row.seatRequest })
+      }
+      if (row.category === 'notice' && row.unread) void markRead(row.id)
+      return
+    }
+    if (isSeatRequestDecisionItem(row)) {
+      toast.error('Could not load seat request details')
+      if (row.category === 'notice' && row.unread) void markRead(row.id)
       return
     }
     if (row.notice) {
@@ -202,6 +214,17 @@ export function useInboxItemActions({
     }
   }
 
+  const openSeatDecision = useCallback(
+    (mode: SeatRequestDecisionMode, row: NonNullable<UnifiedInboxItem['seatRequest']>) => {
+      if (mode !== 'view' && !isOpenSeatRequest(row.status)) {
+        setSeatDecision({ mode: 'view', row })
+        return
+      }
+      setSeatDecision({ mode, row })
+    },
+    [],
+  )
+
   const submitSeatDecision = async ({
     paymentReference,
     message,
@@ -211,6 +234,7 @@ export function useInboxItemActions({
   }) => {
     if (!seatDecision) return
     const { mode: decisionMode, row } = seatDecision
+    if (decisionMode === 'view') return
     setSeatDecisionBusy(true)
     try {
       if (decisionMode === 'approve') {
@@ -247,7 +271,13 @@ export function useInboxItemActions({
           open={readNotice != null}
           onClose={() => setReadNotice(null)}
           title={readNotice?.title ?? 'Message'}
-          subtitle="From Tradeal"
+          subtitle={
+            readNotice?.created_by_name?.trim()
+              ? `From ${readNotice.created_by_name.trim()}`
+              : platformConsole
+                ? undefined
+                : 'From Tradeal'
+          }
           size="md"
         >
           <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">
@@ -366,11 +396,12 @@ export function useInboxItemActions({
         mode={seatDecision?.mode ?? 'approve'}
         request={seatDecision?.row ?? null}
         loading={seatDecisionBusy}
+        viewAudience={platformConsole ? 'platform' : 'org'}
         onClose={() => !seatDecisionBusy && setSeatDecision(null)}
         onSubmit={payload => void submitSeatDecision(payload)}
       />
     </>
   )
 
-  return { handleSelect, modals }
+  return { handleSelect, openSeatDecision, modals }
 }

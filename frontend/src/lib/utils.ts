@@ -134,9 +134,9 @@ export function formatDateRange(start: string, end: string): string {
 }
 
 const DATE_TIME_CLOCK: Intl.DateTimeFormatOptions = {
-  hour: '2-digit',
+  hour: 'numeric',
   minute: '2-digit',
-  hour12: false,
+  hour12: true,
 }
 
 function parseDateTimeValue(value: string): Date | null {
@@ -149,11 +149,12 @@ function parseDateTimeValue(value: string): Date | null {
   return parseDateValue(text.slice(0, 10))
 }
 
+/** Date + time — e.g. `17 Sep 2026 3:48 AM`. Times are always 12-hour with AM/PM. */
 export function formatDateTime(date: string): string {
   if (!date) return '—'
   const parsed = parseDateTimeValue(date)
   if (!parsed) return '—'
-  const clock = new Intl.DateTimeFormat('en-GB', DATE_TIME_CLOCK).format(parsed)
+  const clock = new Intl.DateTimeFormat('en-US', DATE_TIME_CLOCK).format(parsed)
   return `${formatDayMonthYear(parsed)} ${clock}`
 }
 
