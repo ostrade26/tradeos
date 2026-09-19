@@ -34,6 +34,9 @@ export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
   }, [enabled, box])
 
   useEffect(() => {
+    // Drop the previous box's rows immediately so Sent/Received never flash the other list.
+    setItems([])
+    setOpenCount(0)
     void refresh()
     if (!enabled) return
     const timer = window.setInterval(() => {
