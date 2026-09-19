@@ -1,4 +1,5 @@
 import { clearAuthSession, loadAuthSession } from '../lib/auth'
+import { setLoginNotice } from '../lib/loginNotice'
 import { classifyApiFailure, emitServiceIssue } from '../lib/serviceIssue'
 
 /** Accepts `/api/v1`, `https://host`, or `https://host/api/v1`. */
@@ -43,6 +44,10 @@ function authHeaders(): Record<string, string> {
 
 function formatApiDetail(detail: unknown): string {
   if (typeof detail === 'string' && detail.trim()) return detail
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'message' in detail) {
+    const msg = String((detail as { message: unknown }).message ?? '').trim()
+    if (msg) return msg
+  }
   if (Array.isArray(detail)) {
     const parts = detail.map(item => {
       if (item && typeof item === 'object' && 'msg' in item) {
@@ -64,6 +69,14 @@ function formatApiDetail(detail: unknown): string {
     }
   }
   return ''
+}
+
+function authDetailCode(detail: unknown): string | null {
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'code' in detail) {
+    const code = String((detail as { code: unknown }).code ?? '')
+    return code || null
+  }
+  return null
 }
 
 export class ApiError extends Error {
@@ -114,10 +127,17 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   const body = await parseJson(res)
   if (!res.ok) {
-    const detail = body && typeof body === 'object' && 'detail' in body
-      ? (formatApiDetail((body as { detail: unknown }).detail) || res.statusText || 'Request failed')
+    const rawDetail = body && typeof body === 'object' && 'detail' in body
+      ? (body as { detail: unknown }).detail
+      : undefined
+    const detail = rawDetail !== undefined
+      ? (formatApiDetail(rawDetail) || res.statusText || 'Request failed')
       : res.statusText || 'Request failed'
     if (res.status === 401 && !path.startsWith('/auth/login')) {
+      const code = authDetailCode(rawDetail)
+      if (code === 'session_replaced') {
+        setLoginNotice('session_replaced')
+      }
       clearAuthSession()
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.assign('/login')

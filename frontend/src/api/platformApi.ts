@@ -328,10 +328,31 @@ export type NotificationKind =
   | 'product_update'
   | 'feature_launch'
   | 'release_notes'
+  | 'maintenance'
+  | 'announcement'
+  | 'backup_reminder'
   | 'product_request'
   | 'deploy_review'
 export type NotificationAudience = 'user' | 'org' | 'active_licences'
 export type NotificationRecipientScope = 'org_admin' | 'all_users'
+
+export type BackupReminderFrequency = 'daily' | 'twice_weekly' | 'weekly' | 'off'
+
+export interface BackupReminderSettings {
+  enabled: boolean
+  frequency: BackupReminderFrequency
+  send_hour: number
+  send_minute: number
+  timezone: string
+  weekdays: number[]
+  title: string
+  body: string
+  recipient_scope: NotificationRecipientScope
+  exclude_expired_amc: boolean
+  last_sent_at: string | null
+  last_sent_local_date: string | null
+  updated_at: string | null
+}
 
 export interface UserNotification {
   id: number
@@ -749,5 +770,20 @@ export const platformApi = {
   deleteFeatureOffer: (offerId: number) =>
     apiFetch<{ ok: boolean; offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {
       method: 'DELETE',
+    }),
+
+  getBackupReminders: () =>
+    apiFetch<{ settings: BackupReminderSettings }>('/platform/backup-reminders'),
+
+  updateBackupReminders: (body: Partial<BackupReminderSettings>) =>
+    apiFetch<{ settings: BackupReminderSettings }>('/platform/backup-reminders', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  runBackupReminders: () =>
+    apiFetch<{ sent: number; skipped_expired_amc?: number }>('/platform/backup-reminders/run', {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
 }

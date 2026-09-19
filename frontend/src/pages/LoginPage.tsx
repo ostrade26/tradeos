@@ -2,10 +2,17 @@ import { useState } from 'react'
 import { Navigate, useNavigate, Link } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { Button } from '../components/ui/Button'
+import { Checkbox } from '../components/ui/Checkbox'
 import { Input } from '../components/ui/Input'
 import { PasswordInput } from '../components/ui/PasswordInput'
+import { Modal } from '../components/ui/Drawer'
 import { useAuth } from '../hooks/useAuth'
-import { loadAuthSession } from '../lib/auth'
+import {
+  loadAuthSession,
+  loadKeepSignedIn,
+  loadRememberedUsername,
+} from '../lib/auth'
+import { consumeLoginNotice, LOGIN_NOTICE_COPY } from '../lib/loginNotice'
 import { APP_HOME } from '../lib/appShellMode'
 import { ApiError } from '../api/client'
 import type { AuthSession } from '../lib/auth'
@@ -18,8 +25,14 @@ export function LoginPage() {
   const { isAuthenticated, login } = useAuth()
   const navigate = useNavigate()
 
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(() => loadRememberedUsername())
   const [password, setPassword] = useState('')
+  const [keepSignedIn, setKeepSignedIn] = useState(() => loadKeepSignedIn())
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [loginNotice] = useState(() => {
+    const code = consumeLoginNotice()
+    return code ? LOGIN_NOTICE_COPY[code] : null
+  })
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -32,7 +45,7 @@ export function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      await login(username.trim(), password)
+      await login(username.trim(), password, { keepSignedIn })
       navigate(homeAfterLogin(loadAuthSession()), { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.status === 0) {
@@ -58,6 +71,16 @@ export function LoginPage() {
           <p className="text-sm text-muted mt-2">Use your login ID and password</p>
         </div>
 
+        {loginNotice ? (
+          <div
+            className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/40"
+            role="status"
+          >
+            <p className="font-medium text-heading">{loginNotice.title}</p>
+            <p className="text-muted mt-1 leading-relaxed">{loginNotice.body}</p>
+          </div>
+        ) : null}
+
         <form
           onSubmit={handleSubmit}
           className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
@@ -79,6 +102,22 @@ export function LoginPage() {
             required
           />
 
+          <div className="flex items-center justify-between gap-3">
+            <Checkbox
+              label="Keep me signed in"
+              checked={keepSignedIn}
+              onChange={e => setKeepSignedIn(e.target.checked)}
+              tight
+            />
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="text-sm font-medium text-accent hover:text-accent-hover cursor-pointer attex-focus shrink-0"
+            >
+              Need help?
+            </button>
+          </div>
+
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400" role="alert">
               {error}
@@ -96,16 +135,34 @@ export function LoginPage() {
             Back to Tradeal
           </Link>
         </div>
+      </div>
 
-        <div className="mt-6 rounded-md border border-gray-200 dark:border-gray-700 bg-card/60 px-4 py-3 text-sm text-muted leading-relaxed">
-          <p className="font-medium text-heading text-sm mb-1">After a platform password reset</p>
+      <Modal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title="Need help signing in?"
+        size="sm"
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={() => setHelpOpen(false)}>Got it</Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
-            Use the modal <span className="text-heading">Login ID</span> and{' '}
-            <span className="text-heading">temporary password</span> exactly (Copy all). Wrong password shows
-            &quot;Invalid username or password&quot; — not a timeout.
+            After a platform password reset, use the modal{' '}
+            <span className="font-medium text-heading">Login ID</span> and{' '}
+            <span className="font-medium text-heading">temporary password</span> exactly
+            (Copy all).
+          </p>
+          <p>
+            Wrong password shows &quot;Invalid username or password&quot; — not a timeout.
+          </p>
+          <p>
+            Ask your organisation admin or another Tradeal admin if you need a password reset.
           </p>
         </div>
-      </div>
+      </Modal>
     </div>
   )
 }

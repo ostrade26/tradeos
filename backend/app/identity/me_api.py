@@ -41,10 +41,11 @@ def inbox_summary(request: Request) -> dict[str, int]:
         }
 
 
-@router.get("/inbox", summary="Unified inbox — notices and platform work items")
+@router.get("/inbox", summary="Unified inbox — Received (to me) or Sent (outbox)")
 def list_inbox(
     request: Request,
     filter: Literal["open", "all"] = Query(default="all", alias="filter"),
+    box: Literal["received", "sent"] = Query(default="received"),
     limit: int = Query(default=100, ge=1, le=200),
 ) -> dict[str, Any]:
     session = _session(request)
@@ -56,6 +57,7 @@ def list_inbox(
     )
 
     fk = filter if filter in ("open", "all") else "all"
+    box_kind = box if box in ("received", "sent") else "received"
     org_id = session.user.organisation_id
     if uses_postgres():
         with _pg_connect() as conn:
@@ -65,10 +67,12 @@ def list_inbox(
                 role_slug=session.user.role_slug,
                 organisation_id=org_id,
                 filter_kind=fk,
+                box=box_kind,
                 limit=limit,
             )
             return {
                 "items": items,
+                "box": box_kind,
                 "open_count": inbox_open_count(
                     conn, session.user.id, session.user.role_slug, organisation_id=org_id
                 ),
@@ -84,10 +88,12 @@ def list_inbox(
             role_slug=session.user.role_slug,
             organisation_id=org_id,
             filter_kind=fk,
+            box=box_kind,
             limit=limit,
         )
         return {
             "items": items,
+            "box": box_kind,
             "open_count": inbox_open_count(
                 conn, session.user.id, session.user.role_slug, organisation_id=org_id
             ),

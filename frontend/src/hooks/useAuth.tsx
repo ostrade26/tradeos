@@ -12,12 +12,16 @@ import {
   canDeleteOrders,
   canEditOrders,
   clearAuthSession,
+  clearRememberedUsername,
   hasPermission,
   hasAppliedUpdate,
   isAdmin,
   loadAuthSession,
+  loadKeepSignedIn,
   roleLabel,
   saveAuthSession,
+  saveKeepSignedIn,
+  saveRememberedUsername,
   type AuthSession,
   type RoleSlug,
   type UserRole,
@@ -42,7 +46,7 @@ interface AuthContextValue {
   organisationSandboxTools: boolean
   hasPermission: (permission: string) => boolean
   hasAppliedUpdate: (featureKey: string) => boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string, options?: { keepSignedIn?: boolean }) => Promise<void>
   logout: () => Promise<void>
   applySession: (next: AuthSession) => void
 }
@@ -79,8 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(next)
   }, [])
 
-  const login = useCallback(async (username: string, password: string) => {
-    const result = await authApi.login(username, password)
+  const login = useCallback(async (username: string, password: string, options?: { keepSignedIn?: boolean }) => {
+    const keepSignedIn = options?.keepSignedIn ?? loadKeepSignedIn()
+    const result = await authApi.login(username, password, { keepSignedIn })
     const next = sessionFromApi(result, result.token)
     if (
       result.isFirstLogin &&
@@ -89,7 +94,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ) {
       markPendingAccountWelcome()
     }
-    saveAuthSession(next)
+    saveKeepSignedIn(keepSignedIn)
+    if (keepSignedIn) {
+      saveRememberedUsername(username)
+    } else {
+      clearRememberedUsername()
+    }
+    saveAuthSession(next, { keepSignedIn })
     applyUserPreferences(next.preferences, preferenceUserKey())
     setSession(next)
   }, [])

@@ -720,7 +720,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       toast.success(`Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${skipped}`)
       setNotifyOpen(false)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not send notice')
+      toast.error(err instanceof ApiError ? err.message : 'Could not send update')
     } finally {
       setSavingNotice(false)
     }

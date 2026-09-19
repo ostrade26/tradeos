@@ -1,5 +1,5 @@
 import {
-  AlertCircle, ClipboardCheck, KeyRound, Megaphone, MessageSquare, UserPlus, Wallet, type LucideIcon,
+  AlertCircle, ClipboardCheck, DatabaseBackup, KeyRound, Megaphone, MessageSquare, UserPlus, Wallet, Wrench, type LucideIcon,
 } from 'lucide-react'
 import { platformAccessIcon, platformFeatureIcon, platformReleaseIcon } from './platformProductIcons'
 import { formatDateTime } from './utils'
@@ -12,6 +12,9 @@ export const notificationKindIcon: Record<string, LucideIcon> = {
   product_update: Megaphone,
   feature_launch: platformFeatureIcon,
   release_notes: platformReleaseIcon,
+  maintenance: Wrench,
+  announcement: Megaphone,
+  backup_reminder: DatabaseBackup,
   product_request: MessageSquare,
   deploy_review: ClipboardCheck,
   feature_interest: platformAccessIcon,
@@ -23,7 +26,10 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'payment_reminder') return 'Payment'
   if (kind === 'product_update') return 'Product update'
   if (kind === 'feature_launch') return 'New feature'
-  if (kind === 'release_notes') return 'Release'
+  if (kind === 'release_notes') return 'Product update'
+  if (kind === 'maintenance') return 'Maintenance'
+  if (kind === 'announcement') return 'Announcement'
+  if (kind === 'backup_reminder') return 'Backup'
   if (kind === 'deploy_review') return 'Deploy review'
   if (kind === 'product_request') return 'Tradeal reply'
   if (kind === 'sent_request') return 'Your request'
@@ -53,7 +59,14 @@ export function notificationSubtitle(item: UserNotification): string {
 }
 
 export function isReleaseStyleNoticeKind(kind: string): boolean {
-  return kind === 'release_notes' || kind === 'product_update' || kind === 'feature_launch'
+  return (
+    kind === 'release_notes' ||
+    kind === 'product_update' ||
+    kind === 'feature_launch' ||
+    kind === 'maintenance' ||
+    kind === 'announcement' ||
+    kind === 'backup_reminder'
+  )
 }
 
 export function isFeatureInterestNotice(item: UserNotification): boolean {

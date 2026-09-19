@@ -49,9 +49,22 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
       setForm(emptyOrganisationForm())
       setStep(1)
       setUsernameTouched(false)
+      return
     }
-  }, [open])
+    const preferred =
+      plans.find(p => p.slug === 'tradeal-standard' && p.status === 'active') ??
+      plans.find(p => p.slug === 'tradeal-standard') ??
+      plans.find(p => p.status === 'active') ??
+      null
+    if (preferred) {
+      setForm(f => ({ ...f, plan_id: String(preferred.id) }))
+    }
+  }, [open, plans])
 
+  const selectedPlan =
+    plans.find(p => String(p.id) === form.plan_id) ??
+    plans.find(p => p.slug === 'tradeal-standard') ??
+    null
   const usernameError = usernameTouched ? loginUsernameError(form.admin_username) : null
   const emailError = contactEmailError(form.admin_email)
   const accountValid = Boolean(
@@ -125,8 +138,8 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
     >
       {step === 1 ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Organisation name *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-          <Input label="Legal name" value={form.legal_name} onChange={e => setForm(f => ({ ...f, legal_name: e.target.value }))} />
+          <Input label="Trader Name *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <Input label="Organisation Name" value={form.legal_name} onChange={e => setForm(f => ({ ...f, legal_name: e.target.value }))} />
           <Input
             label="Business address *"
             className="sm:col-span-2"
@@ -141,21 +154,14 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
           <Input label="Pincode *" value={form.pincode} onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))} />
           <Input label="GSTIN" value={form.gstin} onChange={e => setForm(f => ({ ...f, gstin: e.target.value }))} />
           <Input label="PAN" value={form.pan} onChange={e => setForm(f => ({ ...f, pan: e.target.value }))} />
-          <Select
+          <Input
             label="Subscription plan"
-            options={[
-              { value: '', label: 'Default plan' },
-              ...plans.filter(p => p.status === 'active').map(p => {
-                const seats = (p.included_admin_seats ?? 0) + (p.included_operator_seats ?? 0) || p.included_seats
-                return {
-                  value: String(p.id),
-                  label: `${p.name} (${seats} seat${seats === 1 ? '' : 's'})`,
-                }
-              }),
-            ]}
-            value={form.plan_id}
-            onChange={e => setForm(f => ({ ...f, plan_id: e.target.value }))}
-            searchable={false}
+            value={
+              plans.find(p => p.slug === 'tradeal-standard')?.name ??
+              selectedPlan?.name ??
+              'Tradeal Standard'
+            }
+            readOnly
           />
           <Select
             label="Billing cycle"

@@ -43,13 +43,39 @@ export interface AuthSession {
 import { storageGet, storageRemove, storageSet } from './storage'
 
 const STORAGE_KEY = 'tradeal-auth-session'
+const KEEP_SIGNED_IN_KEY = 'tradeal-keep-signed-in'
+const REMEMBERED_USERNAME_KEY = 'tradeal-remembered-username'
 
 const VALID_LEGACY_ROLES: UserRole[] = ['admin', 'operator', 'view_only']
 
-export function loadAuthSession(): AuthSession | null {
+function sessionStorageGet(key: string): string | null {
   try {
-    const raw = storageGet(STORAGE_KEY)
-    if (!raw) return null
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function sessionStorageSet(key: string, value: string): boolean {
+  try {
+    sessionStorage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function sessionStorageRemove(key: string): void {
+  try {
+    sessionStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}
+
+function parseAuthSession(raw: string | null): AuthSession | null {
+  if (!raw) return null
+  try {
     const parsed = JSON.parse(raw) as AuthSession
     if (!parsed?.token) return null
     if (!parsed.roleSlug && parsed.role && VALID_LEGACY_ROLES.includes(parsed.role)) {
@@ -75,12 +101,54 @@ export function loadAuthSession(): AuthSession | null {
   }
 }
 
-export function saveAuthSession(session: AuthSession) {
-  storageSet(STORAGE_KEY, JSON.stringify(session))
+/** Default true — matches previous always-persist behaviour. */
+export function loadKeepSignedIn(): boolean {
+  const raw = storageGet(KEEP_SIGNED_IN_KEY)
+  if (raw === null) return true
+  return raw === '1'
+}
+
+export function saveKeepSignedIn(keep: boolean) {
+  storageSet(KEEP_SIGNED_IN_KEY, keep ? '1' : '0')
+}
+
+export function loadRememberedUsername(): string {
+  return storageGet(REMEMBERED_USERNAME_KEY) ?? ''
+}
+
+export function saveRememberedUsername(username: string) {
+  const trimmed = username.trim()
+  if (!trimmed) {
+    storageRemove(REMEMBERED_USERNAME_KEY)
+    return
+  }
+  storageSet(REMEMBERED_USERNAME_KEY, trimmed)
+}
+
+export function clearRememberedUsername() {
+  storageRemove(REMEMBERED_USERNAME_KEY)
+}
+
+export function loadAuthSession(): AuthSession | null {
+  return parseAuthSession(sessionStorageGet(STORAGE_KEY)) ?? parseAuthSession(storageGet(STORAGE_KEY))
+}
+
+export function saveAuthSession(session: AuthSession, options?: { keepSignedIn?: boolean }) {
+  const keep = options?.keepSignedIn ?? loadKeepSignedIn()
+  const raw = JSON.stringify(session)
+  if (keep) {
+    storageSet(STORAGE_KEY, raw)
+    sessionStorageRemove(STORAGE_KEY)
+  } else {
+    sessionStorageSet(STORAGE_KEY, raw)
+    storageRemove(STORAGE_KEY)
+  }
+  saveKeepSignedIn(keep)
 }
 
 export function clearAuthSession() {
   storageRemove(STORAGE_KEY)
+  sessionStorageRemove(STORAGE_KEY)
 }
 
 export function hasPermission(session: AuthSession | null, permission: string): boolean {

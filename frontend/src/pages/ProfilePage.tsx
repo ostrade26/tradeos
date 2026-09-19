@@ -69,7 +69,7 @@ export function ProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Company / trader name" value={form.name} onChange={set('name')} placeholder="" />
+          <Input label="Trader Name" value={form.name} onChange={set('name')} placeholder="" />
           <Input
             label="Username"
             value={form.username}

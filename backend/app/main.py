@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
 import sqlite3
 from typing import Any
 
@@ -11,13 +14,13 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
 
 from . import auth
-from .db import init_db, insert_demo_request, ping_db
+from .db import init_db, insert_demo_request, ping_db, uses_postgres, _pg_connect, _sqlite_connect
 from .identity.me_api import router as me_router
 from .identity.org_api import router as organisation_router
 from .identity.platform_api import router as platform_router
 from .trade.service import TradeService
-import os
 
+logger = logging.getLogger(__name__)
 OPENAPI_TAGS = [
     {"name": "auth", "description": "Login, logout, and session."},
     {"name": "health", "description": "Service health and discovery."},
@@ -124,6 +127,7 @@ class ImportBody(BaseModel):
 class LoginBody(BaseModel):
     username: str
     password: str
+    remember: bool = True
 
 
 class ProfilePatchBody(BaseModel):
@@ -173,8 +177,33 @@ def _require_order_perm(session: auth.Session, body: dict, action: str) -> None:
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     init_db()
+    asyncio.create_task(_backup_reminder_loop())
+
+
+async def _backup_reminder_loop() -> None:
+    """Poll once a minute and send scheduled backup reminders when due."""
+    from .identity.backup_reminder_repository import run_backup_reminder_tick
+
+    await asyncio.sleep(5)
+    while True:
+        try:
+            if uses_postgres():
+                with _pg_connect() as conn:
+                    result = run_backup_reminder_tick(conn)
+                    if result is not None:
+                        conn.commit()
+                        logger.info("Backup reminder sent: %s", result)
+            else:
+                with _sqlite_connect() as conn:
+                    result = run_backup_reminder_tick(conn)
+                    if result is not None:
+                        conn.commit()
+                        logger.info("Backup reminder sent: %s", result)
+        except Exception:
+            logger.exception("Backup reminder scheduler tick failed")
+        await asyncio.sleep(60)
 
 
 @app.middleware("http")
@@ -194,7 +223,7 @@ async def auth_guard(request: Request, call_next):
             return await call_next(request)
         if auth.is_api_token_request(request):
             return await call_next(request)
-        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return JSONResponse({"detail": auth.unauthorized_detail(request)}, status_code=401)
 
     if path.startswith("/api/v1/admin"):
         if auth.is_api_token_request(request):
@@ -202,10 +231,10 @@ async def auth_guard(request: Request, call_next):
         if session:
             request.state.session = session
             return await call_next(request)
-        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return JSONResponse({"detail": auth.unauthorized_detail(request)}, status_code=401)
 
     if not session:
-        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        return JSONResponse({"detail": auth.unauthorized_detail(request)}, status_code=401)
 
     request.state.session = session
     if session.user.role_slug != "platform_admin":
@@ -277,7 +306,7 @@ def health() -> dict:
 
 @app.post("/api/v1/auth/login", tags=["auth"], summary="Sign in")
 def auth_login(body: LoginBody) -> dict:
-    token, session, is_first_login = auth.login(body.username, body.password)
+    token, session, is_first_login = auth.login(body.username, body.password, remember=body.remember)
     return {"token": token, "isFirstLogin": is_first_login, **auth.session_to_dict(session)}
 
 

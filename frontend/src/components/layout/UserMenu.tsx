@@ -13,10 +13,19 @@ export function UserMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const { profile, initials } = useUser()
-  const { roleLabel, logout, session, isPlatformAdmin } = useAuth()
+  const { roleLabel, logout, isPlatformAdmin, roleSlug } = useAuth()
   const platformConsole = isPlatformAdmin && isPlatformAdminPath(location.pathname)
-  const profilePath = platformConsole ? '/platform-admin/profile' : appPath('/profile')
+  const profilePath = platformConsole ? '/platform-admin/settings/account' : appPath('/profile')
   const settingsPath = platformConsole ? '/platform-admin/settings' : appPath('/settings')
+  const traderName = profile.name.trim() || profile.username || profile.email
+  const shortRole =
+    roleSlug === 'organisation_admin'
+      ? 'Organisation Admin'
+      : roleSlug === 'operator'
+        ? 'Operator'
+        : roleSlug === 'view_only'
+          ? 'Viewer'
+          : roleLabel
 
   return (
     <DropdownPanel
@@ -36,22 +45,18 @@ export function UserMenu() {
             {initials}
           </div>
           <div className="hidden md:block min-w-0 text-left">
-            <p className="text-sm font-medium text-heading truncate leading-tight">{profile.name}</p>
-            <p className="text-xs text-muted truncate leading-tight">{profile.location}</p>
+            <p className="text-sm font-medium text-heading truncate leading-tight">{traderName}</p>
+            {shortRole && (
+              <p className="text-xs text-muted truncate leading-tight">{shortRole}</p>
+            )}
           </div>
         </button>
       )}
     >
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <p className="text-sm font-semibold text-heading truncate">{profile.name}</p>
-        <p className="text-xs text-muted truncate">
-          {profile.username ? `@${profile.username}` : profile.email}
-        </p>
-        {session?.organisationName && (
-          <p className="text-xs text-muted truncate mt-0.5">{session.organisationName}</p>
-        )}
-        {roleLabel && (
-          <p className="text-xs font-medium text-accent mt-1">{roleLabel}</p>
+        <p className="text-sm font-semibold text-heading truncate">{traderName}</p>
+        {shortRole && (
+          <p className="text-xs font-medium text-accent mt-1">{shortRole}</p>
         )}
       </div>
       <div className="py-1">

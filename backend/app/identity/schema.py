@@ -465,6 +465,15 @@ def init_identity_schema() -> None:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS auth_session_revocations (
+                    token TEXT PRIMARY KEY,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS audit_logs (
                     id SERIAL PRIMARY KEY,
                     organisation_id INTEGER REFERENCES organisations(id),
@@ -513,6 +522,9 @@ def init_identity_schema() -> None:
         from .feature_offers_schema import init_feature_offers_schema
 
         init_feature_offers_schema()
+        from .backup_reminder_schema import init_backup_reminder_schema
+
+        init_backup_reminder_schema()
         return
 
     with _sqlite_connect() as conn:
@@ -589,6 +601,15 @@ def init_identity_schema() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS auth_session_revocations (
+                token TEXT PRIMARY KEY,
+                reason TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 organisation_id INTEGER REFERENCES organisations(id),
@@ -632,3 +653,6 @@ def init_identity_schema() -> None:
     from .feature_offers_schema import init_feature_offers_schema
 
     init_feature_offers_schema()
+    from .backup_reminder_schema import init_backup_reminder_schema
+
+    init_backup_reminder_schema()

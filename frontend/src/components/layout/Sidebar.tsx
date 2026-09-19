@@ -12,6 +12,11 @@ import {
 import { cn } from '../../lib/utils'
 import { isPlatformAdminPath, APP_HOME, appPath } from '../../lib/appShellMode'
 import { isSettingsAreaPath, SETTINGS_SECTIONS, settingsPath } from '../../lib/settingsSections'
+import {
+  isPlatformSettingsAreaPath,
+  PLATFORM_SETTINGS_SECTIONS,
+  platformSettingsPath,
+} from '../../lib/platformSettingsSections'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
 import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
@@ -79,6 +84,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
   const platformAdminMode = isPlatformAdminPath(location.pathname)
+  const platformSettingsMode = platformAdminMode && isPlatformSettingsAreaPath(location.pathname)
   const settingsMode = !platformAdminMode && isSettingsAreaPath(location.pathname)
   const { isPlatformAdmin } = useAuth()
   const { hasPermission } = usePermissions()
@@ -166,7 +172,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
         )}
 
         <nav className="flex-1 overflow-y-auto overscroll-contain px-2.5 py-2 pb-[env(safe-area-inset-bottom)]">
-          {settingsMode ? (
+          {settingsMode || platformSettingsMode ? (
             <>
               {showLabels && (
                 <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
@@ -175,14 +181,18 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               )}
               <div className="space-y-0.5 mb-3">
                 <NavLink
-                  to={APP_HOME}
+                  to={platformSettingsMode ? '/platform-admin/organisations' : APP_HOME}
                   end
-                  title={iconOnly ? 'Dashboard' : undefined}
+                  title={iconOnly ? (platformSettingsMode ? 'Organisations' : 'Dashboard') : undefined}
                   className={navClass}
                   onClick={onMobileClose}
                 >
-                  <LayoutDashboard className="h-5 w-5 shrink-0" />
-                  {showLabels && 'Dashboard'}
+                  {platformSettingsMode ? (
+                    <Building2 className="h-5 w-5 shrink-0" />
+                  ) : (
+                    <LayoutDashboard className="h-5 w-5 shrink-0" />
+                  )}
+                  {showLabels && (platformSettingsMode ? 'Organisations' : 'Dashboard')}
                 </NavLink>
               </div>
               {showLabels && (
@@ -191,10 +201,14 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                 </p>
               )}
               <div className="space-y-0.5">
-                {settingsNavItems.map(item => (
+                {(platformSettingsMode ? PLATFORM_SETTINGS_SECTIONS : settingsNavItems).map(item => (
                   <NavLink
                     key={item.id}
-                    to={settingsPath(item.segment)}
+                    to={
+                      platformSettingsMode
+                        ? platformSettingsPath(item.segment)
+                        : settingsPath(item.segment)
+                    }
                     title={iconOnly ? item.label : undefined}
                     className={navClass}
                     onClick={onMobileClose}

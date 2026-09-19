@@ -20,6 +20,9 @@ NOTIFICATION_KINDS = frozenset(
         "product_update",
         "feature_launch",
         "release_notes",
+        "maintenance",
+        "announcement",
+        "backup_reminder",
         "product_request",
         "deploy_review",
     }
@@ -37,6 +40,176 @@ def normalize_feature_key(raw: str, title: str = "") -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _infer_send_source(kind: str, payload: dict[str, Any], source: str | None) -> str:
+    if source and str(source).strip():
+        return str(source).strip()[:40]
+    raw = str(payload.get("source") or "").strip()
+    if raw:
+        return raw[:40]
+    if kind == "credentials":
+        return "credentials"
+    if kind == "deploy_review":
+        return "release"
+    if kind in ("release_notes", "feature_launch") and payload.get("changelog"):
+        return "release"
+    return "manual"
+
+
+def _record_notification_send(
+    conn,
+    *,
+    actor_user_id: int | None,
+    kind: str,
+    title: str,
+    body: str,
+    audience: str,
+    recipient_scope: str,
+    organisation_id: int | None,
+    sent_count: int,
+    skipped_expired_amc: int,
+    source: str,
+    href: str,
+    payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Persist one outbox row for Inbox → Sent (product UI; audit_logs stay for compliance)."""
+    now = _now_iso()
+    safe_payload = dict(payload or {})
+    if "temporary_password" in safe_payload:
+        safe_payload["temporary_password"] = "[redacted]"
+    payload_json = json.dumps(safe_payload)
+    vals = (
+        actor_user_id,
+        kind,
+        title.strip(),
+        (body or "").strip(),
+        audience or "",
+        recipient_scope or "",
+        organisation_id,
+        int(sent_count),
+        int(skipped_expired_amc or 0),
+        source or "manual",
+        href or "",
+        payload_json,
+        now,
+    )
+    if uses_postgres():
+        row = conn.execute(
+            """
+            INSERT INTO notification_sends
+            (actor_user_id, kind, title, body, audience, recipient_scope, organisation_id,
+             sent_count, skipped_expired_amc, source, href, payload_json, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            vals,
+        ).fetchone()
+        return dict(row_dict(row))
+    cur = conn.execute(
+        """
+        INSERT INTO notification_sends
+        (actor_user_id, kind, title, body, audience, recipient_scope, organisation_id,
+         sent_count, skipped_expired_amc, source, href, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        vals,
+    )
+    return dict(
+        row_dict(
+            conn.execute(
+                "SELECT * FROM notification_sends WHERE id = ?",
+                (cur.lastrowid,),
+            ).fetchone()
+        )
+    )
+
+
+def _send_row(row: Any) -> dict[str, Any]:
+    data = dict(row_dict(row))
+    raw = data.pop("payload_json", None)
+    try:
+        payload = json.loads(raw) if raw else {}
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    data["payload"] = payload
+    data["id"] = int(data["id"])
+    if data.get("actor_user_id") is not None:
+        data["actor_user_id"] = int(data["actor_user_id"])
+    if data.get("organisation_id") is not None:
+        data["organisation_id"] = int(data["organisation_id"])
+    data["sent_count"] = int(data.get("sent_count") or 0)
+    data["skipped_expired_amc"] = int(data.get("skipped_expired_amc") or 0)
+    return data
+
+
+def list_notification_sends_for_actor(
+    conn,
+    *,
+    actor_user_id: int,
+    include_system: bool = False,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 200))
+    if uses_postgres():
+        if include_system:
+            rows = conn.execute(
+                """
+                SELECT * FROM notification_sends
+                WHERE actor_user_id = %s OR actor_user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (actor_user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM notification_sends
+                WHERE actor_user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (actor_user_id, limit),
+            ).fetchall()
+    else:
+        if include_system:
+            rows = conn.execute(
+                """
+                SELECT * FROM notification_sends
+                WHERE actor_user_id = ? OR actor_user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (actor_user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM notification_sends
+                WHERE actor_user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (actor_user_id, limit),
+            ).fetchall()
+    return [_send_row(r) for r in rows]
+
+
+def get_notification_send(conn, send_id: int) -> dict[str, Any] | None:
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT * FROM notification_sends WHERE id = %s",
+            (send_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM notification_sends WHERE id = ?",
+            (send_id,),
+        ).fetchone()
+    return _send_row(row) if row else None
 
 
 def _parse_payload(raw: Any) -> dict[str, Any]:
@@ -94,7 +267,7 @@ def _insert_notification(
     body: str,
     payload: dict[str, Any] | None,
     href: str,
-    actor_user_id: int,
+    actor_user_id: int | None,
 ) -> dict[str, Any]:
     now = _now_iso()
     payload = dict(payload or {})
@@ -282,7 +455,8 @@ def create_notifications_for_audience(
     body: str,
     payload: dict[str, Any] | None,
     href: str,
-    actor_user_id: int,
+    actor_user_id: int | None,
+    source: str | None = None,
 ) -> dict[str, Any]:
     if kind not in NOTIFICATION_KINDS:
         raise HTTPException(status_code=400, detail="Invalid notification type")
@@ -356,11 +530,28 @@ def create_notifications_for_audience(
             "payload": audit_payload,
         },
     )
+    send_source = _infer_send_source(kind, payload, source)
+    send_row = _record_notification_send(
+        conn,
+        actor_user_id=actor_user_id,
+        kind=kind,
+        title=title,
+        body=body,
+        audience=audience,
+        recipient_scope=recipient_scope,
+        organisation_id=organisation_id,
+        sent_count=len(items),
+        skipped_expired_amc=skipped_amc,
+        source=send_source,
+        href=href or "",
+        payload=payload,
+    )
     return {
         "sent": len(items),
         "skipped_expired_amc": skipped_amc,
         "notifications": items,
         "notification": items[0],
+        "send": send_row,
     }
 
 
@@ -373,6 +564,7 @@ def notify_platform_admins(
     payload: dict[str, Any] | None,
     href: str,
     actor_user_id: int,
+    source: str | None = None,
 ) -> dict[str, Any]:
     from .platform_admins_repository import list_platform_admins
 
@@ -411,7 +603,24 @@ def notify_platform_admins(
             "title": title,
         },
     )
-    return {"sent": len(items), "notifications": items}
+    payload = dict(payload or {})
+    send_source = _infer_send_source(kind, payload, source or "release")
+    send_row = _record_notification_send(
+        conn,
+        actor_user_id=actor_user_id,
+        kind=kind,
+        title=title,
+        body=body,
+        audience="platform_admins",
+        recipient_scope="all_users",
+        organisation_id=None,
+        sent_count=len(items),
+        skipped_expired_amc=0,
+        source=send_source,
+        href=href or "",
+        payload=payload,
+    )
+    return {"sent": len(items), "notifications": items, "send": send_row}
 
 
 def list_notifications_for_user(conn, user_id: int, limit: int = 50) -> list[dict[str, Any]]:

@@ -1,22 +1,30 @@
-"""Unified in-app inbox — account conversations and platform work (no trade register items)."""
+"""Unified in-app inbox — Received (to me) and Sent (outbox).
+
+Received: user_notifications for the signed-in user, plus platform work queues for
+Tradeal admins (seat/product/feature requests). Bell badges Received only.
+
+Sent: notification_sends for the actor (plus system sends for platform admins),
+and org users' product requests to Tradeal.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
 from .notifications_repository import (
+    list_notification_sends_for_actor,
     list_notifications_for_user,
     mark_all_read_for_user,
     mark_notification_read,
 )
-from .product_request_repository import list_product_requests_platform
+from .product_request_repository import list_product_requests_for_user, list_product_requests_platform
 from .seat_request_repository import list_seat_requests_platform
 
 FilterKind = Literal["open", "all"]
+BoxKind = Literal["received", "sent"]
 
 OPEN_SEAT_STATUSES = frozenset({"pending_payment", "paid"})
 OPEN_PRODUCT_STATUSES = frozenset({"received"})
-OPEN_FEATURE_INTEREST_STATUS = "interested"
 
 _KIND_LABEL = {"issue": "Issue", "improvement": "Improvement", "requirement": "New need"}
 _PRIORITY_SHORT = {"p1": "P1", "p2": "P2", "p3": "P3"}
@@ -46,6 +54,7 @@ def _inbox_item(
     notice: dict[str, Any] | None = None,
     seat_request: dict[str, Any] | None = None,
     product_request: dict[str, Any] | None = None,
+    send: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": item_id,
@@ -62,6 +71,7 @@ def _inbox_item(
         "notice": notice,
         "seat_request": seat_request,
         "product_request": product_request,
+        "send": send,
     }
 
 
@@ -176,6 +186,94 @@ def _product_items(conn, limit: int) -> list[dict[str, Any]]:
     return out
 
 
+def _audience_subtitle(send: dict[str, Any]) -> str:
+    audience = str(send.get("audience") or "")
+    scope = str(send.get("recipient_scope") or "")
+    sent = int(send.get("sent_count") or 0)
+    if audience == "active_licences":
+        base = "All active licences"
+    elif audience == "org":
+        base = "One organisation"
+    elif audience == "user":
+        base = "One user"
+    elif audience == "platform_admins":
+        base = "Platform admins"
+    else:
+        base = audience.replace("_", " ").title() or "Recipients"
+    who = ""
+    if audience not in ("user", "platform_admins"):
+        if scope == "org_admin":
+            who = " · org admins"
+        elif scope == "all_users":
+            who = " · all licensed users"
+    people = f"{sent} {'person' if sent == 1 else 'people'}"
+    return f"{base}{who} · {people}"
+
+
+def _send_items(conn, user_id: int, role_slug: str, limit: int) -> list[dict[str, Any]]:
+    include_system = role_slug == "platform_admin"
+    out: list[dict[str, Any]] = []
+    for row in list_notification_sends_for_actor(
+        conn,
+        actor_user_id=user_id,
+        include_system=include_system,
+        limit=limit,
+    ):
+        actor = row.get("actor_user_id")
+        from_label = "Tradeal system" if actor is None else "You"
+        source = str(row.get("source") or "manual")
+        if source == "schedule":
+            from_label = "Tradeal system"
+        out.append(
+            _inbox_item(
+                item_id=f"send-{row['id']}",
+                kind=str(row.get("kind") or "notice"),
+                category="sent",
+                status="done",
+                unread=False,
+                title=str(row.get("title") or ""),
+                subtitle=_audience_subtitle(row),
+                from_label=from_label,
+                date_iso=str(row.get("created_at") or ""),
+                actionable=False,
+                href=str(row.get("href") or ""),
+                send=row,
+            )
+        )
+    return out
+
+
+def _org_sent_product_items(
+    conn,
+    *,
+    organisation_id: int,
+    user_id: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in list_product_requests_for_user(conn, organisation_id, user_id, limit=limit):
+        kind = _KIND_LABEL.get(str(row.get("kind") or ""), "Request")
+        pri = _PRIORITY_SHORT.get(str(row.get("priority") or "p3"), "P3")
+        status = str(row.get("status") or "received")
+        snippet = " ".join(str(row.get("message") or "").split())[:120]
+        out.append(
+            _inbox_item(
+                item_id=f"sent-product-request-{row['id']}",
+                kind="product_request",
+                category="sent",
+                status="done",
+                unread=False,
+                title=f"{pri} {kind}",
+                subtitle=f"To Tradeal · {status.replace('_', ' ')} · {snippet}",
+                from_label="You",
+                date_iso=str(row.get("created_at") or ""),
+                actionable=False,
+                product_request=row,
+            )
+        )
+    return out
+
+
 def _sort_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def key(item: dict[str, Any]) -> str:
         return str(item.get("date_iso") or "")
@@ -193,11 +291,28 @@ def list_inbox_for_session(
     role_slug: str,
     organisation_id: int | None = None,
     filter_kind: FilterKind = "all",
+    box: BoxKind = "received",
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    # organisation_id reserved for future account-to-account conversation threads
-    _ = organisation_id
-    items: list[dict[str, Any]] = []
+    if box == "sent":
+        items: list[dict[str, Any]] = []
+        if role_slug == "platform_admin":
+            items.extend(_send_items(conn, user_id, role_slug, limit=limit))
+        elif organisation_id:
+            items.extend(
+                _org_sent_product_items(
+                    conn,
+                    organisation_id=int(organisation_id),
+                    user_id=user_id,
+                    limit=limit,
+                )
+            )
+            items.extend(_send_items(conn, user_id, role_slug, limit=limit))
+        else:
+            items.extend(_send_items(conn, user_id, role_slug, limit=limit))
+        return _sort_items(items)[:limit]
+
+    items = []
     items.extend(_notice_items(conn, user_id, limit=min(limit, NOTICE_INBOX_LIMIT)))
     if role_slug == "platform_admin":
         items.extend(_seat_items(conn, limit))
@@ -210,7 +325,6 @@ def list_inbox_for_session(
 
 
 def inbox_notice_unread(conn, user_id: int) -> int:
-    # Exclude legacy review_interest notices (duplicates of feature_interest work).
     return sum(
         1
         for n in list_notifications_for_user(conn, user_id, limit=200)
@@ -254,7 +368,7 @@ def inbox_bell_count(
     role_slug: str,
     organisation_id: int | None = None,
 ) -> int:
-    """Bell badge — unread Tradeal notices; platform admins also see open seat/product work."""
+    """Bell badge — Received only (unread notices; platform admins + open work)."""
     count = inbox_notice_unread(conn, user_id)
     if role_slug == "platform_admin":
         count += inbox_work_open_count(conn, role_slug, organisation_id)

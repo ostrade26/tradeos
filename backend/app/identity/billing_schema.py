@@ -12,28 +12,9 @@ LEGACY_DEFAULT_ORG_NAME = "Existing Tradeal Organisation"
 # Migrated single-tenant org before Tradeal rebrand (2026).
 PRE_REBRAND_LEGACY_ORG_NAME = "Existing TradeOS Organisation"
 
-DEFAULT_PLANS: list[dict[str, Any]] = [
-    {
-        "slug": "starter",
-        "name": "Starter",
-        "description": "One admin seat; add operators or viewers after approval.",
-        "monthly_price_cents": 0,
-        "annual_price_cents": 0,
-        "included_seats": 1,
-        "additional_seat_monthly_price_cents": 150000,
-        "additional_seat_annual_price_cents": 1500000,
-    },
-    {
-        "slug": "professional",
-        "name": "Professional",
-        "description": "Full Tradeal for growing wholesalers.",
-        "monthly_price_cents": 0,
-        "annual_price_cents": 0,
-        "included_seats": 1,
-        "additional_seat_monthly_price_cents": 200000,
-        "additional_seat_annual_price_cents": 2000000,
-    },
-]
+# Legacy SaaS tiers — retired; only Tradeal Standard is offered.
+DEFAULT_PLANS: list[dict[str, Any]] = []
+LEGACY_PLAN_SLUGS = ("starter", "professional")
 
 
 def _now() -> str:
@@ -464,6 +445,17 @@ def _backfill_seat_types(conn) -> None:
 
 def _seed_plans(conn, execute: Callable, fetchone: Callable, commit: Callable) -> None:
     now = _now()
+    # Retire Starter / Professional — Tradeal Standard is seeded in licence_schema.
+    placeholders = ",".join(["%s"] * len(LEGACY_PLAN_SLUGS)) if uses_postgres() else ",".join("?" for _ in LEGACY_PLAN_SLUGS)
+    ts_ph = "%s" if uses_postgres() else "?"
+    execute(
+        f"""
+        UPDATE subscription_plans
+        SET status = 'inactive', updated_at = {ts_ph}
+        WHERE slug IN ({placeholders}) AND status <> 'inactive'
+        """,
+        (now, *LEGACY_PLAN_SLUGS),
+    )
     for plan in DEFAULT_PLANS:
         if uses_postgres():
             execute(

@@ -260,7 +260,7 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
                         <Building2 className="h-4 w-4 text-accent shrink-0" aria-hidden />
                         <div className="min-w-0 text-sm">
                           <p className="text-muted">Sign-in ID</p>
-                          <p className="font-medium text-heading truncate">@{session.username}</p>
+                          <p className="font-medium text-heading truncate">{session.username}</p>
                         </div>
                       </div>
                     </div>

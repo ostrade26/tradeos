@@ -1980,9 +1980,9 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
     if body.feature_key.strip():
         payload["feature_key"] = body.feature_key.strip()
     raw_items = str(payload.get("items") or "").strip()
-    if body.kind == "release_notes":
+    if body.kind in ("release_notes", "maintenance", "announcement", "backup_reminder"):
         payload.setdefault("cta", "acknowledge")
-        if raw_items:
+        if body.kind == "release_notes" and raw_items:
             lines = [ln.strip() for ln in raw_items.splitlines() if ln.strip()]
             payload["items"] = "\n".join(lines)
             payload["changelog"] = _json.dumps(
@@ -2006,6 +2006,9 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
             payload["feature_keys"] = "\n".join(keys)
             payload["feature_key"] = keys[0]
             payload["items"] = "\n".join(lines)
+    href = body.href.strip()
+    if body.kind == "backup_reminder" and not href:
+        href = "/app/settings/data"
     kwargs = dict(
         audience=body.audience,
         organisation_id=body.organisation_id,
@@ -2016,7 +2019,7 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
         title=body.title,
         body=body.body,
         payload=payload,
-        href=body.href,
+        href=href,
         actor_user_id=session.user.id,
     )
     if uses_postgres():
@@ -2027,6 +2030,130 @@ def send_org_notification(body: SendNotificationBody, request: Request) -> dict[
             return result
     with _sqlite_connect() as conn:
         result = create_notifications_for_audience(conn, **kwargs)
+        conn.commit()
+        result.pop("notifications", None)
+        return result
+
+
+class BackupReminderSettingsBody(BaseModel):
+    enabled: bool | None = None
+    frequency: str | None = None
+    send_hour: int | None = None
+    send_minute: int | None = None
+    timezone: str | None = None
+    weekdays: list[int] | None = None
+    title: str | None = None
+    body: str | None = None
+    recipient_scope: str | None = None
+    exclude_expired_amc: bool | None = None
+
+
+@router.get("/backup-reminders", summary="Get backup reminder schedule")
+def get_backup_reminders(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.view")
+    from .backup_reminder_repository import get_backup_reminder_settings
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"settings": get_backup_reminder_settings(conn)}
+    with _sqlite_connect() as conn:
+        return {"settings": get_backup_reminder_settings(conn)}
+
+
+@router.patch("/backup-reminders", summary="Update backup reminder schedule")
+def patch_backup_reminders(body: BackupReminderSettingsBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .backup_reminder_repository import update_backup_reminder_settings
+
+    patch = body.model_dump(exclude_none=True)
+    if uses_postgres():
+        with _pg_connect() as conn:
+            settings = update_backup_reminder_settings(conn, patch)
+            append_audit_log(
+                organisation_id=None,
+                actor_user_id=session.user.id,
+                action="backup_reminder.settings_updated",
+                entity_type="backup_reminder_settings",
+                entity_id="1",
+                new_value=settings,
+                conn=conn,
+            )
+            conn.commit()
+            return {"settings": settings}
+    with _sqlite_connect() as conn:
+        settings = update_backup_reminder_settings(conn, patch)
+        append_audit_log(
+            organisation_id=None,
+            actor_user_id=session.user.id,
+            action="backup_reminder.settings_updated",
+            entity_type="backup_reminder_settings",
+            entity_id="1",
+            new_value=settings,
+            conn=conn,
+        )
+        conn.commit()
+        return {"settings": settings}
+
+
+@router.post("/backup-reminders/run", summary="Send backup reminders now")
+def run_backup_reminders_now(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .backup_reminder_repository import (
+        BACKUP_HREF,
+        get_backup_reminder_settings,
+        mark_backup_reminder_sent,
+    )
+    from .notifications_repository import create_notifications_for_audience
+    from zoneinfo import ZoneInfo
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            settings = get_backup_reminder_settings(conn)
+            result = create_notifications_for_audience(
+                conn,
+                audience="active_licences",
+                organisation_id=None,
+                recipient_user_id=None,
+                recipient_scope="all_users",
+                exclude_expired_amc=bool(settings.get("exclude_expired_amc", True)),
+                kind="backup_reminder",
+                title=str(settings.get("title") or "Backup reminder"),
+                body=str(settings.get("body") or ""),
+                payload={"cta": "acknowledge", "source": "manual"},
+                href=BACKUP_HREF,
+                actor_user_id=session.user.id,
+            )
+            tz = ZoneInfo(str(settings.get("timezone") or "Asia/Kolkata"))
+            local_date = datetime.now(tz).date().isoformat()
+            mark_backup_reminder_sent(conn, local_date=local_date)
+            conn.commit()
+            result.pop("notifications", None)
+            return result
+    with _sqlite_connect() as conn:
+        settings = get_backup_reminder_settings(conn)
+        result = create_notifications_for_audience(
+            conn,
+            audience="active_licences",
+            organisation_id=None,
+            recipient_user_id=None,
+            recipient_scope="all_users",
+            exclude_expired_amc=bool(settings.get("exclude_expired_amc", True)),
+            kind="backup_reminder",
+            title=str(settings.get("title") or "Backup reminder"),
+            body=str(settings.get("body") or ""),
+            payload={"cta": "acknowledge", "source": "manual"},
+            href=BACKUP_HREF,
+            actor_user_id=session.user.id,
+        )
+        tz = ZoneInfo(str(settings.get("timezone") or "Asia/Kolkata"))
+        local_date = datetime.now(tz).date().isoformat()
+        mark_backup_reminder_sent(conn, local_date=local_date)
         conn.commit()
         result.pop("notifications", None)
         return result

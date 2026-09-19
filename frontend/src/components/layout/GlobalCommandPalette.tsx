@@ -46,7 +46,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         },
         { id: 'inbox', label: 'Inbox', group: 'Product', action: () => navigate('/platform-admin/notifications') },
         { id: 'audit', label: 'Audit log', group: 'Product', action: () => navigate('/platform-admin/audit') },
-        { id: 'profile', label: 'Profile', group: 'Account', action: () => navigate('/platform-admin/profile') },
+        { id: 'profile', label: 'Profile', group: 'Account', action: () => navigate('/platform-admin/settings/account') },
         { id: 'settings', label: 'Settings', group: 'Account', action: () => navigate('/platform-admin/settings') },
       ]
       return [

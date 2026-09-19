@@ -70,3 +70,36 @@ def _create_tables(conn) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_applied_updates_user ON user_applied_updates(user_id)"
     )
+    # Outbox header — one row per broadcast/send for Inbox → Sent.
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS notification_sends (
+            id {pk},
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            audience TEXT NOT NULL DEFAULT '',
+            recipient_scope TEXT NOT NULL DEFAULT '',
+            organisation_id INTEGER REFERENCES organisations(id) ON DELETE SET NULL,
+            sent_count INTEGER NOT NULL DEFAULT 0,
+            skipped_expired_amc INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'manual',
+            href TEXT NOT NULL DEFAULT '',
+            payload_json TEXT NOT NULL DEFAULT '{{}}',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notification_sends_actor_created
+            ON notification_sends(actor_user_id, created_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notification_sends_created
+            ON notification_sends(created_at DESC)
+        """
+    )

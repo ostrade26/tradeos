@@ -12,6 +12,7 @@ from .identity.repository import (
     Session,
     append_audit_log,
     authenticate,
+    auth_failure_detail,
     create_session,
     delete_session,
     get_session,
@@ -31,6 +32,7 @@ __all__ = [
     "login",
     "logout",
     "session_from_request",
+    "unauthorized_detail",
     "require_session",
     "require_admin",
     "require_platform",
@@ -57,13 +59,13 @@ def extract_bearer_token(request: Request) -> str:
     return ""
 
 
-def login(username: str, password: str) -> tuple[str, Session, bool]:
+def login(username: str, password: str, *, remember: bool = True) -> tuple[str, Session, bool]:
     from .identity.repository import user_has_prior_login
 
     user = authenticate(username, password)
     is_first_login = not user_has_prior_login(user.id)
     touch_user_login(user.id)
-    token, session = create_session(user)
+    token, session = create_session(user, remember=remember)
     append_audit_log(
         organisation_id=user.organisation_id,
         actor_user_id=user.id,
@@ -82,10 +84,17 @@ def session_from_request(request: Request) -> Session | None:
     return get_session(extract_bearer_token(request))
 
 
+def unauthorized_detail(request: Request) -> str | dict[str, str]:
+    token = extract_bearer_token(request)
+    if not token:
+        return "Not authenticated"
+    return auth_failure_detail(token)
+
+
 def require_session(request: Request) -> Session:
     session = session_from_request(request)
     if not session:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail=unauthorized_detail(request))
     return session
 
 

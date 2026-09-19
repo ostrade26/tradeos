@@ -31,12 +31,12 @@ export function Card({ children, className, padding = true, hover, onClick }: Ca
 
 export function CardHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between mb-4 pb-0">
-      <div>
+    <div className="flex items-start justify-between gap-4 mb-4 pb-0">
+      <div className="min-w-0">
         <h3 className="text-base font-semibold text-heading">{title}</h3>
         {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   )
 }

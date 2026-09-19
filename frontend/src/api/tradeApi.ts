@@ -196,10 +196,14 @@ export interface AuthMeResponse {
 }
 
 export const authApi = {
-  login: (username: string, password: string) =>
+  login: (username: string, password: string, options?: { keepSignedIn?: boolean }) =>
     apiFetch<AuthMeResponse & { token: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({
+        username,
+        password,
+        remember: options?.keepSignedIn ?? true,
+      }),
     }),
 
   logout: () => apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' }),

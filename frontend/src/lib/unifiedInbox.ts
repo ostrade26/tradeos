@@ -1,11 +1,11 @@
-import type { ApiInboxItem } from '../api/inboxApi'
+import type { ApiInboxItem, NotificationSend } from '../api/inboxApi'
 import type { UserNotification, ProductRequest, SeatRequest } from '../api/platformApi'
 import type { InboxAction } from './actionInbox'
 import { inboxSubject, notificationSubtitle } from './notificationDisplay'
 import { isOpenProductRequest } from './platformProductRequestInbox'
 import { isOpenSeatRequest } from './platformSeatRequestInbox'
 
-export type InboxCategory = 'work' | 'notice'
+export type InboxCategory = 'work' | 'notice' | 'sent'
 
 export type UnifiedInboxItem = {
   id: string
@@ -22,6 +22,7 @@ export type UnifiedInboxItem = {
   notice?: UserNotification
   seatRequest?: SeatRequest
   productRequest?: ProductRequest
+  send?: NotificationSend
   actionable: boolean
 }
 
@@ -65,6 +66,7 @@ export function apiInboxItemToUnified(row: ApiInboxItem): UnifiedInboxItem {
     notice: row.notice ?? undefined,
     seatRequest: row.seat_request ?? undefined,
     productRequest: row.product_request ?? undefined,
+    send: row.send ?? undefined,
     actionable: row.actionable,
   }
 }

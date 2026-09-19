@@ -10,6 +10,7 @@ import { DetailPanelMenu, groupMenuItems } from '../ui/DetailPanelMenu'
 import type { OrganisationDetailResponse } from '../../api/platformApi'
 import { OrganisationSubscriptionPanel } from './OrganisationSubscriptionPanel'
 import { organisationIsTest } from './platformAdminRegisterColumns'
+import { platformBroadcastLabels } from '../../lib/inboxLabels'
 
 const actionBtnClass = 'h-auto w-full py-2.5 text-sm'
 
@@ -169,7 +170,7 @@ export function PlatformOrganisationDetailDrawer({
           onClick={onNotify}
         >
           <Bell className="h-4 w-4" aria-hidden />
-          Send update to customers
+          {platformBroadcastLabels.orgDrawerAction}
         </Button>
       ) : null}
       <Button

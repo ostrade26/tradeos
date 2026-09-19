@@ -15,7 +15,11 @@ import { RequirePlatformAdmin } from './components/auth/RequirePlatformAdmin'
 import { RequireOrganisationUser } from './components/auth/RequireOrganisationUser'
 import { PlatformAdminPage } from './pages/PlatformAdminPage'
 import { PlatformAdminProfilePage } from './pages/PlatformAdminProfilePage'
-import { PlatformAdminSettingsPage } from './pages/PlatformAdminSettingsPage'
+import {
+  PlatformAdminSettingsHubPage,
+  PlatformAdminSettingsLayout,
+  PlatformAdminSettingsSectionPage,
+} from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { APP_HOME, appPath, isAppPath } from './lib/appShellMode'
 import { MarketingPage } from './pages/MarketingPage'
@@ -112,7 +116,14 @@ const router = createBrowserRouter([
                 element: <ShellLayout />,
                 children: [
                   { path: 'platform-admin/profile', element: <PlatformAdminProfilePage /> },
-                  { path: 'platform-admin/settings', element: <PlatformAdminSettingsPage /> },
+                  {
+                    path: 'platform-admin/settings',
+                    element: <PlatformAdminSettingsLayout />,
+                    children: [
+                      { index: true, element: <PlatformAdminSettingsHubPage /> },
+                      { path: ':section', element: <PlatformAdminSettingsSectionPage /> },
+                    ],
+                  },
                   { path: 'platform-admin/notifications', element: <InboxPage /> },
                   { path: 'platform-admin', element: <Navigate to="/platform-admin/organisations" replace /> },
                   { path: 'platform-admin/:section', element: <PlatformAdminPage /> },

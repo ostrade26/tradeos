@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { inboxApi } from '../api/inboxApi'
+import { inboxApi, type InboxBox } from '../api/inboxApi'
 import { apiInboxItemToUnified, type UnifiedInboxItem } from '../lib/unifiedInbox'
 
 const POLL_MS = 20_000
 export const INBOX_REFRESH_EVENT = 'tradeal-inbox-refresh'
 
-export function useMeInbox(enabled: boolean) {
+export function useMeInbox(enabled: boolean, box: InboxBox = 'received') {
   const [items, setItems] = useState<UnifiedInboxItem[]>([])
   const [openCount, setOpenCount] = useState(0)
   const [bellCount, setBellCount] = useState(0)
@@ -20,7 +20,7 @@ export function useMeInbox(enabled: boolean) {
     }
     const seq = ++refreshSeq.current
     try {
-      const res = await inboxApi.list('all', 100)
+      const res = await inboxApi.list('all', 100, box)
       if (seq !== refreshSeq.current) return
       setItems(res.items.map(apiInboxItemToUnified))
       setOpenCount(res.open_count)
@@ -31,7 +31,7 @@ export function useMeInbox(enabled: boolean) {
       setOpenCount(0)
       setBellCount(0)
     }
-  }, [enabled])
+  }, [enabled, box])
 
   useEffect(() => {
     void refresh()

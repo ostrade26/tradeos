@@ -40,6 +40,13 @@ export const ANNOUNCEMENT_THEMES: Record<AnnouncementVariant, AnnouncementTheme>
 
 export function announcementVariantFromKind(kind: NotificationKind | string): AnnouncementVariant {
   if (kind === 'feature_launch') return 'feature'
-  if (kind === 'product_update') return 'update'
+  if (
+    kind === 'product_update' ||
+    kind === 'maintenance' ||
+    kind === 'announcement' ||
+    kind === 'backup_reminder'
+  ) {
+    return 'update'
+  }
   return 'release'
 }

@@ -112,9 +112,9 @@ export function PlatformEditOrganisationModal({
       }
     >
       <div className="grid gap-4 sm:grid-cols-2 pt-1">
-        <Input label="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <Input label="Trader Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
         <Input
-          label="Legal name"
+          label="Organisation Name"
           value={form.legal_name}
           onChange={e => setForm(f => ({ ...f, legal_name: e.target.value }))}
         />

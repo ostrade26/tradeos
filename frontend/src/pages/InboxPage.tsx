@@ -4,11 +4,14 @@ import { MessageSquare } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { SendToTradealModal } from '../components/feedback/SendToTradealModal'
 import { InboxDetailPane } from '../components/inbox/InboxDetailPane'
 import { InboxFeedList } from '../components/inbox/InboxFeedList'
+import { InboxSentTable } from '../components/inbox/InboxSentTable'
 import { useInboxItemActions } from '../hooks/useInboxItemActions'
 import { useUnifiedInbox } from '../hooks/useUnifiedInbox'
+import type { InboxBox } from '../api/inboxApi'
 import { APP_HOME, isPlatformAdminPath } from '../lib/appShellMode'
 import { orgNoticesLabels, platformActionInboxLabels } from '../lib/inboxLabels'
 import { cn } from '../lib/utils'
@@ -24,6 +27,9 @@ export function InboxPage() {
   const labels = platformConsole ? platformActionInboxLabels : orgNoticesLabels
   const home = platformConsole ? '/platform-admin/organisations' : APP_HOME
 
+  const boxParam = searchParams.get('box')
+  const [box, setBox] = useState<InboxBox>(boxParam === 'sent' ? 'sent' : 'received')
+
   const {
     items,
     attentionCount,
@@ -31,7 +37,7 @@ export function InboxPage() {
     markRead,
     markAllRead,
     refreshPlatform,
-  } = useUnifiedInbox(mode)
+  } = useUnifiedInbox(mode, box)
 
   const { handleSelect, modals } = useInboxItemActions({
     platformConsole,
@@ -52,11 +58,12 @@ export function InboxPage() {
   )
 
   const visibleRows = useMemo(
-    () => (filter === 'open' ? items.filter(row => row.status === 'open') : items),
-    [filter, items],
+    () => (box === 'sent' ? items : filter === 'open' ? items.filter(row => row.status === 'open') : items),
+    [filter, items, box],
   )
 
   useEffect(() => {
+    if (box === 'sent') return
     if (visibleRows.length === 0) {
       setSelectedId(null)
       setMobileShowDetail(false)
@@ -65,7 +72,7 @@ export function InboxPage() {
     if (!selectedId || !visibleRows.some(row => row.id === selectedId)) {
       setSelectedId(visibleRows[0]!.id)
     }
-  }, [visibleRows, selectedId])
+  }, [visibleRows, selectedId, box])
 
   const selected: UnifiedInboxItem | null = useMemo(
     () => visibleRows.find(row => row.id === selectedId) ?? null,
@@ -79,6 +86,7 @@ export function InboxPage() {
     const row = items.find(item => item.id === focusId)
     if (!row) return
     handledFocusRef.current = focusId
+    setBox('received')
     setFilter(row.status === 'open' ? 'open' : 'all')
     setSelectedId(row.id)
     setMobileShowDetail(true)
@@ -105,11 +113,33 @@ export function InboxPage() {
     if (row.category === 'notice' && row.unread) void markRead(row.id)
   }
 
+  const switchBox = (next: InboxBox) => {
+    setBox(next)
+    setMobileShowDetail(false)
+    setSelectedId(null)
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev)
+      if (next === 'sent') p.set('box', 'sent')
+      else p.delete('box')
+      return p
+    }, { replace: true })
+  }
+
   return (
     <div className="animate-fade-in min-w-0">
       <PageHeader
         title="Inbox"
-        subtitle={attentionCount > 0 ? `${attentionCount} need attention` : 'Conversations with Tradeal and other accounts'}
+        subtitle={
+          box === 'sent'
+            ? platformConsole
+              ? 'Updates and reminders you have sent'
+              : 'Requests you have sent to Tradeal'
+            : attentionCount > 0
+              ? `${attentionCount} need attention`
+              : platformConsole
+                ? 'Work and notices addressed to you'
+                : 'Messages from Tradeal'
+        }
         breadcrumb={
           <Breadcrumb
             items={[
@@ -127,7 +157,7 @@ export function InboxPage() {
                 Send to Tradeal
               </Button>
             ) : null}
-            {mode === 'org' && attentionCount > 0 ? (
+            {mode === 'org' && box === 'received' && attentionCount > 0 ? (
               <Button variant="outline" size="sm" onClick={() => void markAllRead()}>
                 Mark all read
               </Button>
@@ -136,66 +166,80 @@ export function InboxPage() {
         }
       />
 
-      <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden flex flex-col h-[min(36rem,calc(100dvh-11rem))] min-h-[22rem]">
-        <div className="px-2 sm:px-3 shrink-0">
+      <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden flex flex-col min-h-[22rem]">
+        <div className="px-2 sm:px-3 shrink-0 border-b border-gray-100 dark:border-gray-800">
           <Tabs
-            active={filter}
-            onChange={id => {
-              setFilter(id as InboxFilter)
-              setMobileShowDetail(false)
-            }}
+            active={box}
+            onChange={id => switchBox(id as InboxBox)}
             buttonClassName="px-4 py-3.5"
             tabs={[
-              { id: 'open', label: 'Open', count: openCount },
-              { id: 'all', label: 'All', count: items.length },
+              {
+                id: 'received',
+                label: labels.receivedTab,
+                count: box === 'received' ? openCount : undefined,
+              },
+              {
+                id: 'sent',
+                label: labels.sentTab,
+                count: box === 'sent' ? items.length : undefined,
+              },
             ]}
           />
         </div>
 
-        <div className="grid flex-1 min-h-0 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
-          {visibleRows.length === 0 ? (
-            <div className="col-span-full h-full min-h-0">
-              <InboxFeedList
-                rows={visibleRows}
-                selectedId={selectedId}
-                emptyTitle={filter === 'open' ? 'Nothing open' : 'Inbox is empty'}
-                emptyDescription={labels.bellEmpty}
-                onSelect={onRowSelect}
-              />
-            </div>
-          ) : (
-            <>
-              <div
-                className={cn(
-                  'min-h-0 h-full overflow-y-auto lg:border-r lg:border-gray-100 dark:lg:border-gray-800',
-                  mobileShowDetail && 'hidden lg:block',
-                )}
-              >
+        {box === 'sent' ? (
+          <div className="p-4 sm:p-5">
+            <InboxSentTable rows={visibleRows} emptyDescription={labels.sentEmpty} />
+          </div>
+        ) : (
+          <div className="grid flex-1 min-h-[22rem] h-[min(32rem,calc(100dvh-14rem))] lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
+            <div
+              className={cn(
+                'min-h-0 h-full flex flex-col lg:border-r lg:border-gray-100 dark:lg:border-gray-800',
+                mobileShowDetail && 'hidden lg:flex',
+              )}
+            >
+              <div className="shrink-0 flex items-center px-3 py-2.5 border-b border-gray-100 dark:border-gray-800">
+                <SegmentedControl
+                  size="sm"
+                  ariaLabel="Filter received items"
+                  value={filter}
+                  onChange={id => {
+                    setFilter(id)
+                    setMobileShowDetail(false)
+                  }}
+                  options={[
+                    { id: 'open', label: openCount > 0 ? `Open (${openCount})` : 'Open' },
+                    { id: 'all', label: 'All' },
+                  ]}
+                />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 <InboxFeedList
                   rows={visibleRows}
                   selectedId={selectedId}
-                  emptyTitle={filter === 'open' ? 'Nothing open' : 'Inbox is empty'}
-                  emptyDescription={labels.bellEmpty}
+                  emptyTitle={filter === 'open' ? 'Nothing open' : 'Nothing received'}
+                  emptyDescription={labels.receivedEmpty}
                   onSelect={onRowSelect}
                 />
               </div>
+            </div>
 
-              <div
-                className={cn(
-                  'min-h-0 overflow-hidden',
-                  !mobileShowDetail && 'hidden lg:block',
-                )}
-              >
-                <InboxDetailPane
-                  item={selected}
-                  platformConsole={platformConsole}
-                  onBack={() => setMobileShowDetail(false)}
-                  onOpen={handleSelect}
-                />
-              </div>
-            </>
-          )}
-        </div>
+            <div
+              className={cn(
+                'min-h-0 overflow-hidden',
+                !mobileShowDetail && 'hidden lg:block',
+              )}
+            >
+              <InboxDetailPane
+                item={selected}
+                platformConsole={platformConsole}
+                onBack={() => setMobileShowDetail(false)}
+                onOpen={handleSelect}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <SendToTradealModal open={sendOpen} onClose={closeCompose} onSent={() => void refresh()} />

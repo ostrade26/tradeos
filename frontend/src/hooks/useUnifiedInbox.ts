@@ -1,13 +1,17 @@
 import { useMemo } from 'react'
 import { useAuth } from './useAuth'
 import { useMeInbox } from './useMeInbox'
+import type { InboxBox } from '../api/inboxApi'
 import { sortInboxItems, type UnifiedInboxItem } from '../lib/unifiedInbox'
 
-export function useUnifiedInbox(mode: 'platform' | 'org') {
+export function useUnifiedInbox(mode: 'platform' | 'org', box: InboxBox = 'received') {
   const { isAuthenticated, isPlatformAdmin } = useAuth()
   const enabled = isAuthenticated && (mode === 'platform' ? isPlatformAdmin : !isPlatformAdmin)
 
-  const { items: serverItems, openCount, bellCount, refresh, markRead, markAllRead } = useMeInbox(enabled)
+  const { items: serverItems, openCount, bellCount, refresh, markRead, markAllRead } = useMeInbox(
+    enabled,
+    box,
+  )
 
   const items = useMemo((): UnifiedInboxItem[] => {
     if (!enabled) return []
