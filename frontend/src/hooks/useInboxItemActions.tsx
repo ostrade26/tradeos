@@ -135,12 +135,8 @@ export function useInboxItemActions({
     }
     if (row.notice) {
       if (row.notice.kind === 'deploy_review') {
-        const releaseId = row.notice.payload?.release_id
-        if (releaseId) {
-          navigate(`/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`)
-        } else if (row.notice.href) {
-          navigate(row.notice.href.startsWith('/') ? row.notice.href : appPath(row.notice.href))
-        }
+        // Legacy notices — drafts are reviewed under Releases, not inbox.
+        navigate('/platform-admin/releases')
         if (row.category === 'notice' && row.unread) void markRead(row.id)
         return
       }

@@ -301,10 +301,10 @@ def create_deploy_draft_release(
     summary: str,
     items: list[dict[str, Any]],
     actor_user_id: int,
-    notify_platform_admins: bool = True,
+    notify_platform_admins: bool = False,
 ) -> dict[str, Any]:
-    from .notifications_repository import notify_platform_admins
-
+    # notify_platform_admins kept for API compat; deploy drafts are reviewed in Releases, not inbox.
+    _ = notify_platform_admins
     sha = _normalize_commit_sha(commit_sha)
     existing = get_release_by_deploy_commit(conn, sha)
     if existing:
@@ -364,24 +364,8 @@ def create_deploy_draft_release(
     )
     release = _get_release(conn, release_id)
     notified = 0
-    if notify_platform_admins:
-        href = f"/platform-admin/releases?releaseId={release_id}"
-        result = notify_platform_admins(
-            conn,
-            kind="deploy_review",
-            title=f"Production deploy ready · v{version}",
-            body=summary_text[:500],
-            payload={
-                "cta": "review",
-                "release_id": str(release_id),
-                "version": version,
-                "deploy_commit_sha": sha,
-                "deploy_environment": env,
-            },
-            href=href,
-            actor_user_id=actor_user_id,
-        )
-        notified = int(result.get("sent") or 0)
+    # Deploy drafts live under Platform Admin → Releases. Do not push Tradeal admins
+    # into inbox — they review/publish from the Releases register.
     return {"release": release, "created": True, "notified": notified}
 
 

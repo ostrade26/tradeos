@@ -330,15 +330,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }, [load])
 
   const releaseIdFromInbox = searchParams.get('releaseId')
-  useEffect(() => {
-    if (!releaseIdFromInbox || releases.length === 0) return
-    const id = Number(releaseIdFromInbox)
-    if (!Number.isFinite(id)) return
-    const row = releases.find(r => r.id === id)
-    if (!row) return
-    setEditingRelease(row)
-    setReleaseModalOpen(true)
-    // Drop ?releaseId= so Save draft / refresh does not reopen this modal.
+  const handledReleaseQueryRef = useRef<string | null>(null)
+
+  const clearReleaseIdParam = useCallback(() => {
     setSearchParams(
       prev => {
         if (!prev.get('releaseId')) return prev
@@ -348,22 +342,28 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       },
       { replace: true },
     )
-  }, [releaseIdFromInbox, releases, setSearchParams])
+  }, [setSearchParams])
+
+  useEffect(() => {
+    if (!releaseIdFromInbox || releases.length === 0) return
+    // Open at most once per query id — clearing URL alone races with load() after Save draft.
+    if (handledReleaseQueryRef.current === releaseIdFromInbox) return
+    const id = Number(releaseIdFromInbox)
+    handledReleaseQueryRef.current = releaseIdFromInbox
+    clearReleaseIdParam()
+    if (!Number.isFinite(id)) return
+    const row = releases.find(r => r.id === id)
+    if (!row || row.status !== 'draft') return
+    setEditingRelease(row)
+    setReleaseModalOpen(true)
+  }, [releaseIdFromInbox, releases, clearReleaseIdParam])
 
   const closeReleaseModal = useCallback(() => {
     if (savingRelease) return
     setReleaseModalOpen(false)
     setEditingRelease(null)
-    setSearchParams(
-      prev => {
-        if (!prev.get('releaseId')) return prev
-        const next = new URLSearchParams(prev)
-        next.delete('releaseId')
-        return next
-      },
-      { replace: true },
-    )
-  }, [savingRelease, setSearchParams])
+    clearReleaseIdParam()
+  }, [savingRelease, clearReleaseIdParam])
 
   useEffect(() => {
     if (!session) return
@@ -767,28 +767,41 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }
 
+  const saveReleaseDraft = async (payload: ReleaseFormPayload): Promise<PlatformRelease> => {
+    if (editingRelease) {
+      const res = await platformApi.updateRelease(editingRelease.id, payload)
+      return res.release
+    }
+    const res = await platformApi.createRelease(payload)
+    return res.release
+  }
+
   const submitRelease = async (payload: ReleaseFormPayload) => {
     setSavingRelease(true)
     try {
-      if (editingRelease) {
-        await platformApi.updateRelease(editingRelease.id, payload)
-        toast.success(`Saved ${payload.version} — Publish when you want organisations notified`)
-      } else {
-        await platformApi.createRelease(payload)
-        toast.success(`Draft ${payload.version} created — Publish when you want organisations notified`)
-      }
+      await saveReleaseDraft(payload)
+      toast.success(`Draft ${payload.version} saved`)
       setReleaseModalOpen(false)
       setEditingRelease(null)
-      setSearchParams(
-        prev => {
-          if (!prev.get('releaseId')) return prev
-          const next = new URLSearchParams(prev)
-          next.delete('releaseId')
-          return next
-        },
-        { replace: true },
-      )
+      clearReleaseIdParam()
       await load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save release')
+    } finally {
+      setSavingRelease(false)
+    }
+  }
+
+  const submitReleaseAndPublish = async (payload: ReleaseFormPayload) => {
+    setSavingRelease(true)
+    try {
+      const saved = await saveReleaseDraft(payload)
+      toast.success(`Draft ${payload.version} saved`)
+      setReleaseModalOpen(false)
+      setEditingRelease(null)
+      clearReleaseIdParam()
+      await load()
+      await openReleasePublish(saved)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save release')
     } finally {
@@ -807,10 +820,17 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setPublishingRelease(true)
     try {
       const res = await platformApi.publishRelease(publishingReleaseRow.id, payload)
+      const sent = res.release.sent ?? 0
       const skipped = res.release.skipped_expired_amc
         ? ` · ${res.release.skipped_expired_amc} skipped (expired AMC)`
         : ''
-      toast.success(`Published ${res.release.version} to ${res.release.sent ?? 0} ${res.release.sent === 1 ? 'person' : 'people'}${skipped}`)
+      if (sent <= 0) {
+        toast.error(`Published ${res.release.version}, but no recipients were notified${skipped}`)
+      } else {
+        toast.success(
+          `Published ${res.release.version} — notified ${sent} ${sent === 1 ? 'person' : 'people'}${skipped}`,
+        )
+      }
       setPublishingReleaseRow(null)
       await load()
     } catch (err) {
@@ -1612,6 +1632,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         nextVersion={nextReleaseVersion}
         loading={savingRelease}
         onSubmit={payload => void submitRelease(payload)}
+        onPublish={payload => void submitReleaseAndPublish(payload)}
       />
 
       <PlatformPublishReleaseModal

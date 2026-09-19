@@ -1,6 +1,7 @@
 # After production deploy, auto-create a draft platform release from git commits (no manual typing).
 # Requires repo secrets: TRADEAL_API_URL, TRADEAL_API_TOKEN
 # (same token as Railway env TRADEAL_API_TOKEN / header x-tradeal-token).
+# Drafts appear under Platform Admin → Releases; publish there to notify organisations.
 name: Register production release
 
 on:
@@ -28,7 +29,7 @@ jobs:
             echo "::warning::Skipping deploy notify — set repository secrets TRADEAL_API_URL and TRADEAL_API_TOKEN."
             echo "TRADEAL_API_URL = production API origin (e.g. https://your-api.up.railway.app)"
             echo "TRADEAL_API_TOKEN = same value as Railway TRADEAL_API_TOKEN (sent as x-tradeal-token)."
-            echo "Once set, pushes to main create a Releases draft and notify Tradeal admins."
+            echo "Once set, pushes to main create a Releases draft (publish from Platform Admin to notify orgs)."
             exit 0
           fi
           chmod +x scripts/register-production-deploy.sh

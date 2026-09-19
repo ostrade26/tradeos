@@ -54,6 +54,7 @@ export function PlatformReleaseModal({
   nextVersion,
   loading,
   onSubmit,
+  onPublish,
 }: {
   open: boolean
   onClose: () => void
@@ -61,6 +62,8 @@ export function PlatformReleaseModal({
   nextVersion: string
   loading: boolean
   onSubmit: (payload: ReleaseFormPayload) => void
+  /** Save draft then continue to audience / publish. Draft releases only. */
+  onPublish?: (payload: ReleaseFormPayload) => void
 }) {
   const [form, setForm] = useState<ReleaseFormPayload>(formFromRelease(null, nextVersion))
 
@@ -71,6 +74,7 @@ export function PlatformReleaseModal({
 
   const categories = useMemo(() => form.items.map(item => item.category), [form.items])
   const suggested = suggestNextVersion(nextVersion === form.version ? '' : nextVersion, categories)
+  const canPublish = Boolean(onPublish && (!release || release.status === 'draft'))
 
   const valid = Boolean(
     form.version.trim() &&
@@ -91,16 +95,26 @@ export function PlatformReleaseModal({
       open={open}
       onClose={onClose}
       title={release ? `Edit ${release.version}` : 'New release'}
-      subtitle="Customers see this copy. Version is unique."
+      subtitle="Customers see this copy. Version is unique. Publish sends the notice to organisations."
       size="lg"
       footer={
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button loading={loading} disabled={!valid || loading} onClick={() => onSubmit(form)}>
+          <Button
+            variant="secondary"
+            loading={loading}
+            disabled={!valid || loading}
+            onClick={() => onSubmit(form)}
+          >
             Save draft
           </Button>
+          {canPublish ? (
+            <Button loading={loading} disabled={!valid || loading} onClick={() => onPublish?.(form)}>
+              Publish
+            </Button>
+          ) : null}
         </div>
       }
     >

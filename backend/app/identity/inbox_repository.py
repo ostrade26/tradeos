@@ -108,6 +108,9 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
     for n in list_notifications_for_user(conn, user_id, limit=limit):
         if _is_review_interest_notice(n):
             continue
+        # Deploy drafts are reviewed under Releases, not inbox.
+        if str(n.get("kind") or "") == "deploy_review":
+            continue
         unread = bool(n.get("unread"))
         linked_request: dict[str, Any] | None = None
         linked_seat: dict[str, Any] | None = None
@@ -403,7 +406,9 @@ def inbox_notice_unread(conn, user_id: int) -> int:
     return sum(
         1
         for n in list_notifications_for_user(conn, user_id, limit=200)
-        if n.get("unread") and not _is_review_interest_notice(n)
+        if n.get("unread")
+        and not _is_review_interest_notice(n)
+        and str(n.get("kind") or "") != "deploy_review"
     )
 
 

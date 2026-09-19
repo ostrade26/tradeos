@@ -158,7 +158,7 @@ def main() -> None:
         "title": "",
         "summary": "",
         "items": items,
-        "notify_platform_admins": True,
+        "notify_platform_admins": False,
     }
     json.dump(payload, sys.stdout)
     sys.stdout.write("\n")

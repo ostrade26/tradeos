@@ -38,7 +38,7 @@ export function PlatformPublishReleaseModal({
   const [audience, setAudience] = useState<NotificationAudience>('active_licences')
   const [orgId, setOrgId] = useState('')
   const [recipientId, setRecipientId] = useState('')
-  const [scope, setScope] = useState<NotificationRecipientScope>('org_admin')
+  const [scope, setScope] = useState<NotificationRecipientScope>('all_users')
   const [excludeExpiredAmc, setExcludeExpiredAmc] = useState(true)
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function PlatformPublishReleaseModal({
     setAudience('active_licences')
     setOrgId('')
     setRecipientId('')
-    setScope('org_admin')
+    setScope('all_users')
     setExcludeExpiredAmc(true)
   }, [open])
 
