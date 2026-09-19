@@ -96,7 +96,7 @@ function summaryResult(snapshot: PlatformAssistantSnapshot): AssistantResult {
     ].join('\n'),
     actions: [
       { label: 'Organisations', path: '/platform-admin/organisations', count: live.length },
-      { label: 'Seat requests', path: '/platform-admin/seat-requests', count: pendingSeats },
+      { label: 'Seat requests', path: '/platform-admin/seats?tab=requests', count: pendingSeats },
       { label: 'Licences', path: '/platform-admin/licenses', count: activeLicences.length },
     ],
   }
@@ -144,7 +144,7 @@ export function runPlatformAssistantQuery(
       ].join('\n'),
       actions: [
         { label: 'Organisations', path: '/platform-admin/organisations' },
-        { label: 'Seat requests', path: '/platform-admin/seat-requests' },
+        { label: 'Seat requests', path: '/platform-admin/seats?tab=requests' },
         { label: 'Features & Access', path: '/platform-admin/add-ons' },
       ],
     }
@@ -175,8 +175,8 @@ export function runPlatformAssistantQuery(
         n === 0
           ? 'No open seat requests right now.'
           : `**${n}** open seat request${n === 1 ? '' : 's'} waiting for review or payment.`,
-      actions: [{ label: 'Seat requests', path: '/platform-admin/seat-requests', count: n }],
-      navigateTo: '/platform-admin/seat-requests',
+      actions: [{ label: 'Seat requests', path: '/platform-admin/seats?tab=requests', count: n }],
+      navigateTo: '/platform-admin/seats?tab=requests',
     }
   }
 
@@ -259,7 +259,7 @@ export function runPlatformAssistantQuery(
       message: `**${snapshot.seats.length}** seat${snapshot.seats.length === 1 ? '' : 's'} currently assigned across organisations.`,
       actions: [
         { label: 'Seats', path: '/platform-admin/seats', count: snapshot.seats.length },
-        { label: 'Seat requests', path: '/platform-admin/seat-requests', count: snapshot.seatRequests.length },
+        { label: 'Seat requests', path: '/platform-admin/seats?tab=requests', count: snapshot.seatRequests.length },
       ],
       navigateTo: '/platform-admin/seats',
     }

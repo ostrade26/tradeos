@@ -32,7 +32,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
           id: 'seat-requests',
           label: 'Seat requests',
           group: 'Customers',
-          action: () => navigate('/platform-admin/seat-requests'),
+          action: () => navigate('/platform-admin/seats?tab=requests'),
         },
         { id: 'plans', label: 'Plans & Pricing', group: 'Commerce', action: () => navigate('/platform-admin/plans') },
         { id: 'licenses', label: 'Licences', group: 'Commerce', action: () => navigate('/platform-admin/licenses') },

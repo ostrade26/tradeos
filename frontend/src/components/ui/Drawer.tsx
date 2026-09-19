@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils'
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, type LucideIcon } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
@@ -218,14 +218,34 @@ export function DockedPanel({
   className,
 }: DockedPanelProps) {
   const { containerRef, setOpen } = useDetailPanelSlot()
+  const [containerReady, setContainerReady] = useState(false)
 
   useLayoutEffect(() => {
     setOpen(true, width)
     return () => setOpen(false)
   }, [setOpen, width])
 
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      setContainerReady(true)
+      return
+    }
+    // Slot column may not have committed yet (e.g. first open after another panel closed).
+    let raf = 0
+    let attempts = 0
+    const tryAttach = () => {
+      if (containerRef.current) {
+        setContainerReady(true)
+        return
+      }
+      if (attempts++ < 10) raf = requestAnimationFrame(tryAttach)
+    }
+    raf = requestAnimationFrame(tryAttach)
+    return () => cancelAnimationFrame(raf)
+  }, [containerRef])
+
   const container = containerRef.current
-  if (!container) return null
+  if (!container || !containerReady) return null
 
   return createPortal(
     <div className={cn('flex h-full min-h-0 flex-col overflow-hidden', className)}>

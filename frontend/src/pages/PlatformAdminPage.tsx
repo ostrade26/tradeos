@@ -79,6 +79,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
+import { isOpenSeatRequest } from '../lib/platformSeatRequestInbox'
 const PLATFORM_SECTIONS = [
   'organisations',
   'seats',
@@ -86,7 +87,6 @@ const PLATFORM_SECTIONS = [
   'licenses',
   'amcs',
   'payments',
-  'seat-requests',
   'add-ons',
   'audit',
   'releases',
@@ -131,11 +131,6 @@ const SECTION_META: Record<
     subtitle: '',
     breadcrumb: 'Payments',
   },
-  'seat-requests': {
-    title: 'Seat requests',
-    subtitle: '',
-    breadcrumb: 'Seat requests',
-  },
   'add-ons': {
     title: 'Features & Access',
     subtitle: '',
@@ -168,6 +163,9 @@ export function PlatformAdminPage() {
   const { section: sectionParam } = useParams<{ section: string }>()
   if (sectionParam === 'users') {
     return <Navigate to="/platform-admin/seats" replace />
+  }
+  if (sectionParam === 'seat-requests') {
+    return <Navigate to="/platform-admin/seats?tab=requests" replace />
   }
   if (sectionParam === 'requests') {
     return <Navigate to="/platform-admin/notifications" replace />
@@ -344,8 +342,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       setOrganisations(orgRes.organisations)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not load organisations')
-    } finally {
-      if (blockRegisters) setLoading(false)
     }
 
     try {
@@ -380,6 +376,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       }
     } catch {
       setLicensedSeats([])
+    } finally {
+      // Keep skeleton until seats/licences/etc. arrive — clearing after orgs left Seats empty until refresh.
+      if (blockRegisters) setLoading(false)
     }
   }, [toast])
 
@@ -472,8 +471,29 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }, [toast])
 
   useEffect(() => {
-    if (section === 'seat-requests') void loadSeatRequests()
+    if (section === 'seats') void loadSeatRequests()
   }, [section, loadSeatRequests])
+
+  const seatsTab = searchParams.get('tab') === 'requests' ? 'requests' : 'assigned'
+  const setSeatsTab = useCallback(
+    (id: string) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev)
+          if (id === 'requests') next.set('tab', 'requests')
+          else next.delete('tab')
+          return next
+        },
+        { replace: true },
+      )
+      if (id === 'requests') closeOrgDetail()
+    },
+    [setSearchParams, closeOrgDetail],
+  )
+  const openSeatRequestCount = useMemo(
+    () => seatRequests.filter(r => isOpenSeatRequest(r.status)).length,
+    [seatRequests],
+  )
 
   useEffect(() => {
     if (section !== 'releases') return
@@ -969,9 +989,15 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }, [])
 
   const loadOrgDetail = useCallback(async (orgId: number, linkedRowId?: string) => {
+    // Keep the dock slot open when switching rows — same pattern as releases/plans.
+    setReleaseDetailOpen(false)
+    setSelectedReleaseId(null)
+    setPlanDetailOpen(false)
+    setSelectedPlanId(null)
     setSelectedOrgId(orgId)
     setSelectedLinkedRowId(linkedRowId ?? null)
     setOrgDetailOpen(true)
+    if (effectiveDocked) setDetailPanelOpen(true, 'lg')
     setLoadingDetail(true)
     try {
       const detail = await platformApi.getOrganisation(orgId)
@@ -982,7 +1008,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     } finally {
       setLoadingDetail(false)
     }
-  }, [toast])
+  }, [toast, effectiveDocked, setDetailPanelOpen])
 
   const issuePrimaryAdminSignIn = useCallback(
     async (usernameDraft?: string) => {
@@ -1242,7 +1268,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <Wallet className="h-4 w-4" aria-hidden />
         Record payment
       </Button>
-    ) : section === 'seat-requests' ? (
+    ) : section === 'seats' && seatsTab === 'requests' ? (
       <Button variant="outline" size="sm" loading={seatRequestLoading} onClick={() => void loadSeatRequests()}>
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
@@ -1290,7 +1316,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                 ? `${testOrganisationCount} test account${testOrganisationCount === 1 ? '' : 's'}`
                 : `${deactivatedOrganisationCount} deactivated organisation${deactivatedOrganisationCount === 1 ? '' : 's'}`
             : section === 'seats'
-              ? `${licensedSeats.length} in use`
+              ? seatsTab === 'requests'
+                ? `${seatRequests.length} request${seatRequests.length === 1 ? '' : 's'}`
+                : `${licensedSeats.length} in use`
               : section === 'plans'
                 ? `${plans.length} plan${plans.length === 1 ? '' : 's'}`
                 : section === 'licenses'
@@ -1299,8 +1327,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                     ? `${amcs.length} period${amcs.length === 1 ? '' : 's'}`
                     : section === 'payments'
                       ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
-                      : section === 'seat-requests'
-                        ? `${seatRequests.length} request${seatRequests.length === 1 ? '' : 's'}`
                         : section === 'add-ons'
                           ? addOnsOpenAccess > 0
                             ? `${addOnsOpenAccess} open access request${addOnsOpenAccess === 1 ? '' : 's'}`
@@ -1406,7 +1432,27 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           />
         ))}
 
+      {section === 'seats' ? (
+        <Tabs
+          active={seatsTab}
+          onChange={setSeatsTab}
+          className="gap-6"
+          buttonClassName="pt-2.5 px-0"
+          tabs={[
+            { id: 'assigned', label: 'Assigned', count: licensedSeats.length },
+            {
+              id: 'requests',
+              label: 'Requests',
+              ...(openSeatRequestCount > 0
+                ? { countLabel: String(openSeatRequestCount) }
+                : { count: seatRequests.length }),
+            },
+          ]}
+        />
+      ) : null}
+
       {section === 'seats' &&
+        seatsTab === 'assigned' &&
         (loading && licensedSeats.length === 0 ? (
           <TableSkeleton rows={10} cols={5} />
         ) : (
@@ -1433,6 +1479,40 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                 <p className="text-xs text-muted">
                   {seat.seat_label} · {seat.seat_type.replace(/_/g, ' ')}
                 </p>
+              </div>
+            )}
+          />
+        ))}
+
+      {section === 'seats' &&
+        seatsTab === 'requests' &&
+        (seatRequestLoading && seatRequests.length === 0 ? (
+          <TableSkeleton rows={8} cols={6} />
+        ) : (
+          <DataTable
+            data={sortedSeatRequests}
+            columns={seatRequestColumnDefs}
+            getRowId={r => String(r.id)}
+            stickyFirstColumn
+            sortKey={seatRequestSort.key}
+            sortDirection={seatRequestSort.direction}
+            onSortChange={handleSeatRequestSortChange}
+            defaultPageSize={25}
+            emptyState={
+              <EmptyState
+                title="No seat requests"
+                description="Orgs submit these from Settings after payment."
+                action={
+                  <Button variant="outline" size="sm" onClick={() => void loadSeatRequests()}>
+                    Refresh
+                  </Button>
+                }
+              />
+            }
+            mobileRender={row => (
+              <div className="px-4 py-3 space-y-1">
+                <p className="font-medium text-heading">{row.organisation_name ?? `Org #${row.organisation_id}`}</p>
+                <p className="text-xs text-muted capitalize">{row.status.replace(/_/g, ' ')}</p>
               </div>
             )}
           />
@@ -1540,39 +1620,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       {section === 'add-ons' ? (
         <PlatformAddOnsAdminPanel ref={addOnsPanelRef} onOpenAccessCountChange={setAddOnsOpenAccess} />
       ) : null}
-
-      {section === 'seat-requests' &&
-        (seatRequestLoading && seatRequests.length === 0 ? (
-          <TableSkeleton rows={8} cols={6} />
-        ) : (
-          <DataTable
-            data={sortedSeatRequests}
-            columns={seatRequestColumnDefs}
-            getRowId={r => String(r.id)}
-            stickyFirstColumn
-            sortKey={seatRequestSort.key}
-            sortDirection={seatRequestSort.direction}
-            onSortChange={handleSeatRequestSortChange}
-            defaultPageSize={25}
-            emptyState={
-              <EmptyState
-                title="No seat requests"
-                description="Orgs submit these from Settings after payment."
-                action={
-                  <Button variant="outline" size="sm" onClick={() => void loadSeatRequests()}>
-                    Refresh
-                  </Button>
-                }
-              />
-            }
-            mobileRender={row => (
-              <div className="px-4 py-3 space-y-1">
-                <p className="font-medium text-heading">{row.organisation_name ?? `Org #${row.organisation_id}`}</p>
-                <p className="text-xs text-muted capitalize">{row.status.replace(/_/g, ' ')}</p>
-              </div>
-            )            }
-          />
-        ))}
 
       {section === 'audit' && (auditOrgFilter || auditUserFilter) && (
         <p className="text-sm text-muted flex flex-wrap items-center gap-x-3 gap-y-1">

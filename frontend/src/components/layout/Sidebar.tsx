@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package,
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
-  Building2, Users, UserPlus, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Bell,
+  Building2, Users, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Bell,
 } from 'lucide-react'
 import {
   platformFeaturesAccessNavIcon,
@@ -53,7 +53,6 @@ const platformAdminNavGroups = [
     items: [
       { to: '/platform-admin/organisations', icon: Building2, label: 'Organisations', end: true },
       { to: '/platform-admin/seats', icon: Users, label: 'Seats' },
-      { to: '/platform-admin/seat-requests', icon: UserPlus, label: 'Seat requests' },
     ],
   },
   {
@@ -269,7 +268,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                   ) : null}
                   <div className="space-y-0.5">
                     {group.items.map(item => {
-                      const seatBadge = item.to.includes('seat-requests') && openSeatRequests > 0
+                      const seatBadge = item.to === '/platform-admin/seats' && openSeatRequests > 0
                       const inboxBadge =
                         item.to === '/platform-admin/notifications' && inboxBadgeCount > 0
                       const badgeCount = seatBadge
