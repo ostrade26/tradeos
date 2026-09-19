@@ -134,9 +134,9 @@ export function ReleaseNoticeModal({
           </ul>
         </div>
 
-        <div className="shrink-0 border-t border-gray-100 p-8 sm:p-10 dark:border-gray-800">
+        <div className="shrink-0 border-t border-gray-200 px-6 py-6 dark:border-gray-700">
           <div className="flex justify-end">
-            <Button type="button" className="min-h-10 min-w-[5.5rem] px-5 font-semibold" onClick={onClose}>
+            <Button type="button" onClick={onClose}>
               Got it
             </Button>
           </div>
