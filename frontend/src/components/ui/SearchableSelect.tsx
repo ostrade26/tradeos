@@ -83,7 +83,12 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(-1)
-  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [panelStyle, setPanelStyle] = useState<{
+    top: number
+    left: number
+    width: number
+    maxHeight: number
+  } | null>(null)
   const [creating, setCreating] = useState(false)
   const [createName, setCreateName] = useState('')
   const [createError, setCreateError] = useState('')
@@ -120,12 +125,25 @@ export function SearchableSelect({
     const el = rootRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
+    const gap = 4
+    const viewportPad = 8
+    const measured = panelRef.current?.offsetHeight
+    // Compact page-size lists are short; fall back so first paint can flip correctly.
+    const estimatedHeight = measured && measured > 0 ? measured : Math.min(288, 40 + options.length * 36)
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPad
+    const spaceAbove = rect.top - viewportPad
+    const openUp = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
+    const maxHeight = Math.max(120, openUp ? spaceAbove - gap : spaceBelow - gap)
+    const top = openUp
+      ? Math.max(viewportPad, rect.top - gap - Math.min(estimatedHeight, maxHeight))
+      : rect.bottom + gap
     setPanelStyle({
-      top: rect.bottom + 4,
+      top,
       left: rect.left,
       width: rect.width,
+      maxHeight,
     })
-  }, [])
+  }, [options.length])
 
   useEffect(() => {
     if (!open) {
@@ -133,10 +151,13 @@ export function SearchableSelect({
       return
     }
     syncPanelPosition()
+    // Re-measure after paint so flip uses real panel height.
+    const raf = requestAnimationFrame(() => syncPanelPosition())
     const onScrollOrResize = () => syncPanelPosition()
     window.addEventListener('scroll', onScrollOrResize, true)
     window.addEventListener('resize', onScrollOrResize)
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('scroll', onScrollOrResize, true)
       window.removeEventListener('resize', onScrollOrResize)
     }
@@ -339,7 +360,11 @@ export function SearchableSelect({
           }}
           className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg overflow-hidden"
         >
-          <div className="max-h-72 overflow-y-auto py-1" onMouseLeave={() => setHighlight(-1)}>
+          <div
+            className="overflow-y-auto py-1"
+            style={{ maxHeight: panelStyle.maxHeight }}
+            onMouseLeave={() => setHighlight(-1)}
+          >
             {filtered.length === 0 ? (
               <p className="px-3 py-2 text-sm text-muted">
                 {allowCustom && searchable && query.trim()

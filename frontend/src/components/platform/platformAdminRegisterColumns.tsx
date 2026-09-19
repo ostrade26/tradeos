@@ -804,8 +804,6 @@ export function mapAuditLogs(logs: Record<string, unknown>[]): AuditLogRow[] {
 
 
 export function releaseColumns(handlers: {
-  onEdit: (row: PlatformRelease) => void
-  onPublish: (row: PlatformRelease) => void
   /** Newest release (usually the latest deploy draft). */
   latestReleaseId?: number | null
 }): Column<PlatformRelease>[] {
@@ -874,25 +872,6 @@ export function releaseColumns(handlers: {
       sortValue: r => r.published_at ?? '',
       render: r => (
         <span className="tabular-nums text-[14px]">{r.published_at ? formatDateTime(r.published_at) : '—'}</span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      actionsWide: true,
-      render: r => (
-        <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
-          {r.status === 'draft' ? (
-            <>
-              <Button type="button" variant="outline" size="sm" onClick={() => handlers.onEdit(r)}>
-                Edit
-              </Button>
-              <Button type="button" size="sm" onClick={() => handlers.onPublish(r)}>
-                Publish
-              </Button>
-            </>
-          ) : null}
-        </div>
       ),
     },
   ]

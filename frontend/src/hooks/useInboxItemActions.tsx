@@ -140,10 +140,9 @@ export function useInboxItemActions({
     }
     if (isDeployReviewItem(row)) {
       const href = deployReviewHref(row)
-      void (async () => {
-        if (row.category === 'notice' && row.unread) await markRead(row.id)
-        navigate(href)
-      })()
+      // Navigate first — awaiting markRead delayed the Releases refresh behind the inbox.
+      navigate(href)
+      if (row.category === 'notice' && row.unread) void markRead(row.id)
       return
     }
     if (row.notice) {

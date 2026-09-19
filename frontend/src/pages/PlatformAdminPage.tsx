@@ -332,9 +332,12 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     saveOrderPanelDocked(docked)
   }, [setDetailPanelOpen])
 
+  const releasesFetchIdRef = useRef(0)
+
   const load = useCallback(async (opts?: { background?: boolean }) => {
     const blockRegisters = !opts?.background
     if (blockRegisters) setLoading(true)
+    const releasesGate = releasesFetchIdRef.current
 
     try {
       const orgRes = await platformApi.listOrganisations()
@@ -370,8 +373,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       setLicenses(licRes.licenses)
       setAmcs(amcRes.amcs)
       setPayments(payRes.payments)
-      setReleases(relRes.releases)
-      setNextReleaseVersion(relRes.next_version || '1.0.0')
+      // Don't clobber a newer dedicated releases refresh (bell / section enter).
+      if (releasesFetchIdRef.current === releasesGate) {
+        setReleases(relRes.releases)
+        setNextReleaseVersion(relRes.next_version || '1.0.0')
+      }
     } catch {
       setLicensedSeats([])
     }
@@ -379,8 +385,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
   /** Fast path — deploy drafts must appear as soon as the admin opens Releases / a bell link. */
   const loadReleases = useCallback(async (): Promise<PlatformRelease[]> => {
+    const fetchId = ++releasesFetchIdRef.current
     try {
       const relRes = await platformApi.listReleases()
+      if (fetchId !== releasesFetchIdRef.current) return relRes.releases
       setReleases(relRes.releases)
       setNextReleaseVersion(relRes.next_version || '1.0.0')
       return relRes.releases
@@ -412,26 +420,22 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     if (!releaseIdFromInbox) return
     if (handledReleaseQueryRef.current === releaseIdFromInbox) return
-    const id = Number(releaseIdFromInbox)
+    const queryId = releaseIdFromInbox
+    const id = Number(queryId)
     if (!Number.isFinite(id)) {
-      handledReleaseQueryRef.current = releaseIdFromInbox
+      handledReleaseQueryRef.current = queryId
       clearReleaseIdParam()
       return
     }
 
-    let cancelled = false
     void (async () => {
-      // Always refetch — list may still be from before this deploy draft existed.
       const fresh = await loadReleases()
-      if (cancelled) return
-      handledReleaseQueryRef.current = releaseIdFromInbox
+      if (handledReleaseQueryRef.current === queryId) return
+      handledReleaseQueryRef.current = queryId
       clearReleaseIdParam()
       const row = fresh.find(r => r.id === id)
       if (row) openReleaseDetail(row)
     })()
-    return () => {
-      cancelled = true
-    }
   }, [releaseIdFromInbox, loadReleases, clearReleaseIdParam, openReleaseDetail])
 
   const closeReleaseModal = useCallback(() => {
@@ -474,9 +478,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     if (section !== 'releases') return
     void ackUnreadDeployReviews('review_release')
-    // Dedicated refresh — full `load()` waits on orgs + other registers first.
+    // Refresh on section enter and whenever a bell/inbox deep-link arrives.
     void loadReleases()
-  }, [section, loadReleases])
+  }, [section, releaseIdFromInbox, loadReleases])
 
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
@@ -947,8 +951,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const relColumns = useMemo(
     () =>
       releaseColumns({
-        onEdit: openReleaseEditor,
-        onPublish: row => void openReleasePublish(row),
         latestReleaseId,
       }),
     [latestReleaseId],
