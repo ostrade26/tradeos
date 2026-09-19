@@ -819,7 +819,9 @@ export function releaseColumns(handlers: {
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-mono text-[14px] tabular-nums">{r.version}</span>
           {handlers.latestReleaseId != null && handlers.latestReleaseId === r.id ? (
-            <Badge variant="accent">Latest</Badge>
+            <Badge variant="accent">
+              {r.status === 'published' ? 'Last update' : 'Latest'}
+            </Badge>
           ) : null}
         </div>
       ),

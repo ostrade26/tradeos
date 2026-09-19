@@ -21,9 +21,13 @@ export function deployReviewHref(item: Pick<UnifiedInboxItem, 'href' | 'notice'>
   if (fromNotice.startsWith('/platform-admin/')) return fromNotice
   const fromRow = String(item.href || '').trim()
   if (fromRow.startsWith('/platform-admin/')) return fromRow
-  return deployReviewCta(item) === 'review_release'
-    ? '/platform-admin/releases'
-    : '/platform-admin/add-ons'
+  if (deployReviewCta(item) === 'review_release') {
+    const releaseId = String(item.notice?.payload?.release_id || '').trim()
+    return releaseId
+      ? `/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`
+      : '/platform-admin/releases'
+  }
+  return '/platform-admin/add-ons'
 }
 
 export function deployReviewActionLabel(item: Pick<UnifiedInboxItem, 'href' | 'notice'>): string {

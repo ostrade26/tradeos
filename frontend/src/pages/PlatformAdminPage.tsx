@@ -47,6 +47,7 @@ import {
 } from '../components/platform/platformAdminRegisterColumns'
 import { PlatformOrganisationDetailDrawer } from '../components/platform/PlatformOrganisationDetailDrawer'
 import { PlatformReleaseDetailDrawer } from '../components/platform/PlatformReleaseDetailDrawer'
+import { PlatformPlanDetailDrawer } from '../components/platform/PlatformPlanDetailDrawer'
 import {
   PlatformCreateOrganisationModal,
   type OrganisationFormState,
@@ -195,6 +196,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [dashboard, setDashboard] = useState<PlatformDashboard | null>(null)
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
+  const [planDetailOpen, setPlanDetailOpen] = useState(false)
   const [savingPlan, setSavingPlan] = useState(false)
   const [deletePlanConfirmOpen, setDeletePlanConfirmOpen] = useState(false)
   const [deletingPlan, setDeletingPlan] = useState(false)
@@ -281,15 +284,34 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setSelectedReleaseId(null)
   }, [setDetailPanelOpen])
 
+  const closePlanDetail = useCallback(() => {
+    setDetailPanelOpen(false)
+    setPlanDetailOpen(false)
+    setSelectedPlanId(null)
+  }, [setDetailPanelOpen])
+
   const openReleaseDetail = useCallback((row: PlatformRelease) => {
     // Keep the dock slot open when switching rows — do not call closeOrgDetail()
     // (it sets detailPanelOpen false and hides the column until remount).
     setOrgDetailOpen(false)
     setOrgDetail(null)
     setSelectedOrgId(null)
+    setPlanDetailOpen(false)
+    setSelectedPlanId(null)
     setSelectedReleaseId(row.id)
     setReleaseDetailOpen(true)
     if (effectiveDocked) setDetailPanelOpen(true, 'lg')
+  }, [effectiveDocked, setDetailPanelOpen])
+
+  const openPlanDetail = useCallback((row: SubscriptionPlan) => {
+    setOrgDetailOpen(false)
+    setOrgDetail(null)
+    setSelectedOrgId(null)
+    setReleaseDetailOpen(false)
+    setSelectedReleaseId(null)
+    setSelectedPlanId(row.id)
+    setPlanDetailOpen(true)
+    if (effectiveDocked) setDetailPanelOpen(true, 'md')
   }, [effectiveDocked, setDetailPanelOpen])
 
   useEffect(() => {
@@ -299,7 +321,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     if (section !== 'releases') {
       closeReleaseDetail()
     }
-  }, [section, closeOrgDetail, closeReleaseDetail])
+    if (section !== 'plans') {
+      closePlanDetail()
+    }
+  }, [section, closeOrgDetail, closeReleaseDetail, closePlanDetail])
 
   const handleDockChange = useCallback((docked: boolean) => {
     if (!docked) setDetailPanelOpen(false)
@@ -352,6 +377,19 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }, [toast])
 
+  /** Fast path — deploy drafts must appear as soon as the admin opens Releases / a bell link. */
+  const loadReleases = useCallback(async (): Promise<PlatformRelease[]> => {
+    try {
+      const relRes = await platformApi.listReleases()
+      setReleases(relRes.releases)
+      setNextReleaseVersion(relRes.next_version || '1.0.0')
+      return relRes.releases
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load releases')
+      return []
+    }
+  }, [toast])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -372,17 +410,29 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }, [setSearchParams])
 
   useEffect(() => {
-    if (!releaseIdFromInbox || releases.length === 0) return
-    // Open at most once per query id — clearing URL alone races with load() after Save draft.
+    if (!releaseIdFromInbox) return
     if (handledReleaseQueryRef.current === releaseIdFromInbox) return
     const id = Number(releaseIdFromInbox)
-    handledReleaseQueryRef.current = releaseIdFromInbox
-    clearReleaseIdParam()
-    if (!Number.isFinite(id)) return
-    const row = releases.find(r => r.id === id)
-    if (!row) return
-    openReleaseDetail(row)
-  }, [releaseIdFromInbox, releases, clearReleaseIdParam, openReleaseDetail])
+    if (!Number.isFinite(id)) {
+      handledReleaseQueryRef.current = releaseIdFromInbox
+      clearReleaseIdParam()
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      // Always refetch — list may still be from before this deploy draft existed.
+      const fresh = await loadReleases()
+      if (cancelled) return
+      handledReleaseQueryRef.current = releaseIdFromInbox
+      clearReleaseIdParam()
+      const row = fresh.find(r => r.id === id)
+      if (row) openReleaseDetail(row)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [releaseIdFromInbox, loadReleases, clearReleaseIdParam, openReleaseDetail])
 
   const closeReleaseModal = useCallback(() => {
     if (savingRelease) return
@@ -424,7 +474,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   useEffect(() => {
     if (section !== 'releases') return
     void ackUnreadDeployReviews('review_release')
-  }, [section])
+    // Dedicated refresh — full `load()` waits on orgs + other registers first.
+    void loadReleases()
+  }, [section, loadReleases])
 
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
@@ -711,6 +763,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       setDeletePlanConfirmOpen(false)
       setPlanModalOpen(false)
       setEditingPlan(null)
+      closePlanDetail()
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not delete plan')
@@ -790,6 +843,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const selectedRelease = useMemo(
     () => (selectedReleaseId == null ? null : releases.find(r => r.id === selectedReleaseId) ?? null),
     [releases, selectedReleaseId],
+  )
+
+  const selectedPlan = useMemo(
+    () => (selectedPlanId == null ? null : plans.find(p => p.id === selectedPlanId) ?? null),
+    [plans, selectedPlanId],
   )
 
   const openReleasePublish = async (row: PlatformRelease) => {
@@ -1390,9 +1448,13 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={planSort.key}
             sortDirection={planSort.direction}
             onSortChange={handlePlanSortChange}
+            activeRowId={selectedPlanId != null ? String(selectedPlanId) : undefined}
             onRowClick={plan => {
-              setEditingPlan(plan)
-              setPlanModalOpen(true)
+              if (selectedPlanId === plan.id && planDetailOpen) {
+                closePlanDetail()
+                return
+              }
+              openPlanDetail(plan)
             }}
             defaultPageSize={25}
             emptyState={
@@ -1673,6 +1735,24 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onPublish={() => {
           if (!selectedRelease || selectedRelease.status !== 'draft') return
           void openReleasePublish(selectedRelease)
+        }}
+      />
+
+      <PlatformPlanDetailDrawer
+        open={planDetailOpen && section === 'plans'}
+        plan={selectedPlan}
+        docked={effectiveDocked}
+        onClose={closePlanDetail}
+        onDockChange={handleDockChange}
+        onEdit={() => {
+          if (!selectedPlan) return
+          setEditingPlan(selectedPlan)
+          setPlanModalOpen(true)
+        }}
+        onDelete={() => {
+          if (!selectedPlan || selectedPlan.status !== 'inactive') return
+          setEditingPlan(selectedPlan)
+          setDeletePlanConfirmOpen(true)
         }}
       />
 

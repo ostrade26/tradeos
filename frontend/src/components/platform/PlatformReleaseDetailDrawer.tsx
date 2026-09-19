@@ -96,7 +96,7 @@ export function PlatformReleaseDetailDrawer({
       ) : null}
       {isLatest ? (
         <Badge variant="accent" className="shrink-0">
-          Latest
+          {isPublished ? 'Last update' : 'Latest'}
         </Badge>
       ) : null}
     </>
