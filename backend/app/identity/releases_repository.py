@@ -512,6 +512,8 @@ def publish_release(
     from .notifications_repository import create_notifications_for_audience
 
     release = _get_release(conn, release_id)
+    if str(release.get("status") or "") == "published":
+        raise HTTPException(status_code=400, detail="Release is already published")
     items = release["items"]
     inform_items = [i for i in items if is_inform_release_category(str(i.get("category") or ""))]
     feature_items = [i for i in items if is_gated_release_category(str(i.get("category") or ""))]

@@ -872,13 +872,15 @@ export function releaseColumns(handlers: {
       render: r => (
         <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
           {r.status === 'draft' ? (
-            <Button type="button" variant="outline" size="sm" onClick={() => handlers.onEdit(r)}>
-              Edit
-            </Button>
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={() => handlers.onEdit(r)}>
+                Edit
+              </Button>
+              <Button type="button" size="sm" onClick={() => handlers.onPublish(r)}>
+                Publish
+              </Button>
+            </>
           ) : null}
-          <Button type="button" size="sm" onClick={() => handlers.onPublish(r)}>
-            Publish
-          </Button>
         </div>
       ),
     },

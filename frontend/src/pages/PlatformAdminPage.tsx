@@ -219,7 +219,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [addSeatModalOpen, setAddSeatModalOpen] = useState(false)
   const [editOrgOpen, setEditOrgOpen] = useState(false)
   const [savingOrg, setSavingOrg] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [orgDetailOpen, setOrgDetailOpen] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState<number | null>(null)
@@ -338,7 +338,32 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     if (!row) return
     setEditingRelease(row)
     setReleaseModalOpen(true)
-  }, [releaseIdFromInbox, releases])
+    // Drop ?releaseId= so Save draft / refresh does not reopen this modal.
+    setSearchParams(
+      prev => {
+        if (!prev.get('releaseId')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('releaseId')
+        return next
+      },
+      { replace: true },
+    )
+  }, [releaseIdFromInbox, releases, setSearchParams])
+
+  const closeReleaseModal = useCallback(() => {
+    if (savingRelease) return
+    setReleaseModalOpen(false)
+    setEditingRelease(null)
+    setSearchParams(
+      prev => {
+        if (!prev.get('releaseId')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('releaseId')
+        return next
+      },
+      { replace: true },
+    )
+  }, [savingRelease, setSearchParams])
 
   useEffect(() => {
     if (!session) return
@@ -732,6 +757,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }
 
   const openReleasePublish = async (row: PlatformRelease) => {
+    if (row.status !== 'draft') return
     setPublishingReleaseRow(row)
     try {
       const res = await platformApi.listUsers()
@@ -746,13 +772,22 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     try {
       if (editingRelease) {
         await platformApi.updateRelease(editingRelease.id, payload)
-        toast.success(`Saved ${payload.version}`)
+        toast.success(`Saved ${payload.version} — Publish when you want organisations notified`)
       } else {
         await platformApi.createRelease(payload)
-        toast.success(`Draft ${payload.version} created`)
+        toast.success(`Draft ${payload.version} created — Publish when you want organisations notified`)
       }
       setReleaseModalOpen(false)
       setEditingRelease(null)
+      setSearchParams(
+        prev => {
+          if (!prev.get('releaseId')) return prev
+          const next = new URLSearchParams(prev)
+          next.delete('releaseId')
+          return next
+        },
+        { replace: true },
+      )
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save release')
@@ -1464,7 +1499,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             onSortChange={handleReleaseSortChange}
             onRowClick={row => {
               if (row.status === 'draft') openReleaseEditor(row)
-              else void openReleasePublish(row)
             }}
             defaultPageSize={25}
             emptyState={
@@ -1573,7 +1607,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
       <PlatformReleaseModal
         open={releaseModalOpen}
-        onClose={() => !savingRelease && setReleaseModalOpen(false)}
+        onClose={closeReleaseModal}
         release={editingRelease}
         nextVersion={nextReleaseVersion}
         loading={savingRelease}
