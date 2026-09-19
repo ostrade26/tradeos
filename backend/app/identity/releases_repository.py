@@ -145,9 +145,23 @@ def _summary_from_items(items: list[dict[str, Any]], *, env: str, sha: str) -> s
         title = str(item.get("title") or "").strip()
         if title:
             lines.append(f"• {label}: {title}")
-    lines.append("")
-    lines.append("Review this draft, then publish to organisations when ready.")
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip()
+
+
+# Older deploy drafts appended this admin reminder; never send it to organisations.
+_ADMIN_DRAFT_FOOTER = "Review this draft, then publish to organisations when ready."
+
+
+def _org_notice_body(summary: Any, fallback_lines: list[str]) -> str:
+    text = str(summary or "").strip()
+    if text:
+        cleaned = [
+            line
+            for line in text.splitlines()
+            if line.strip() != _ADMIN_DRAFT_FOOTER
+        ]
+        text = "\n".join(cleaned).strip()
+    return text or "\n".join(fallback_lines)
 
 
 def get_release_by_deploy_commit(conn, commit_sha: str) -> dict[str, Any] | None:
@@ -641,7 +655,7 @@ def publish_release(
 
     lines = [f"{_category_label(i['category'])}: {i['title']}" for i in items]
     base_title = f"Tradeal {release['version']}"
-    default_body = release.get("summary") or "\n".join(lines)
+    default_body = _org_notice_body(release.get("summary"), lines)
     sent_total = 0
     skipped_amc = 0
     should_notify = bool(notify_organisations)
