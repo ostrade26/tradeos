@@ -6,6 +6,7 @@ import {
   Boxes,
   LineChart,
   MessageSquare,
+  Palette,
   Plug2,
   ShieldCheck,
   Sparkles,
@@ -25,6 +26,17 @@ export type AddOnVisualTheme = {
 }
 
 const KEY_RULES: { test: RegExp; theme: AddOnVisualTheme }[] = [
+  {
+    test: /brand|appearance|colour|color|theme|custom-branding/i,
+    theme: {
+      gradient: 'from-indigo-600 via-blue-600 to-sky-500 dark:from-indigo-700 dark:via-blue-700 dark:to-sky-700',
+      mesh: 'bg-[radial-gradient(circle_at_25%_25%,rgba(255,255,255,0.3)_0%,transparent_45%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.18)_0%,transparent_40%)]',
+      iconRing: 'bg-white/25 text-white ring-white/40',
+      icon: Palette,
+      illustration: 'spark',
+      accentText: 'text-white/90',
+    },
+  },
   {
     test: /chat|bot|assistant|ai|copilot|gpt/i,
     theme: {

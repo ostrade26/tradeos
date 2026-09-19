@@ -12,7 +12,11 @@ import { cn } from '../../lib/utils'
 import { appPath } from '../../lib/appShellMode'
 import { InboxKindGlyph } from '../inbox/InboxKindGlyph'
 
-export function NotificationsDropdown() {
+export function NotificationsDropdown({
+  triggerClassName,
+}: {
+  triggerClassName?: string
+} = {}) {
   const [open, setOpen] = useState(false)
   const { isPlatformAdmin } = useAuth()
   const mode = isPlatformAdmin ? 'platform' : 'org'
@@ -73,7 +77,7 @@ export function NotificationsDropdown() {
             ref={ref}
             variant="ghost"
             size="icon"
-            className="h-10 w-10 sm:h-11 sm:w-11 relative"
+            className={cn('h-10 w-10 sm:h-11 sm:w-11 relative', triggerClassName)}
             onClick={onClick}
             aria-label={badgeLabel}
             aria-expanded={expanded}

@@ -28,7 +28,7 @@ type StepId = 'profile' | 'appearance' | 'review'
 
 const STEPS: { id: StepId; label: string; description: string }[] = [
   { id: 'profile', label: 'Your profile', description: 'How you appear in the workspace' },
-  { id: 'appearance', label: 'Look & feel', description: 'Theme and brand colour' },
+  { id: 'appearance', label: 'Look & feel', description: 'Theme and display preferences' },
   { id: 'review', label: 'Review', description: 'Confirm and finish' },
 ]
 
@@ -103,7 +103,7 @@ function SetupStepper({
 
 export function AccountSetupWelcome({ open, session, onComplete }: Props) {
   const { applySession } = useAuth()
-  const { theme, setTheme, accentId, setAccentId, accentPreset, customHex } = useTheme()
+  const { theme, setTheme, accentId, setAccentId, accentPreset, customHex, brandingEnabled } = useTheme()
 
   const orgName = session.organisationName?.trim() || 'Your organisation'
   const account = accountTypeLabel(session.accountType)
@@ -155,11 +155,11 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
 
     bump('Applying theme…', 45)
     try {
-      const prefsMe = await authApi.updatePreferences({
-        theme,
-        accentId,
-        customHex,
-      })
+      const prefsMe = await authApi.updatePreferences(
+        brandingEnabled
+          ? { theme, accentId, customHex }
+          : { theme },
+      )
       if (session.token) {
         applySession(sessionFromApi(prefsMe, session.token))
       }
@@ -177,6 +177,7 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
   }, [
     accentId,
     applySession,
+    brandingEnabled,
     customHex,
     displayName,
     onComplete,
@@ -272,7 +273,9 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
                     <p className="text-xs font-semibold uppercase tracking-wider text-accent">Step 2</p>
                     <h1 className="text-2xl font-semibold text-heading mt-2 tracking-tight">Make Tradeal yours</h1>
                     <p className="text-sm text-muted mt-2 leading-relaxed">
-                      Choose a theme and primary colour — applied instantly across the app.
+                      {brandingEnabled
+                        ? 'Choose a theme and primary colour — applied instantly across the app.'
+                        : 'Choose light or dark mode. Primary colour and side navigation theme are available with Custom branding from Features.'}
                     </p>
                     <div className="mt-8 space-y-6">
                       <div>
@@ -312,27 +315,33 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
                           ))}
                         </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-heading mb-3">Primary colour</p>
-                        <div className="flex flex-wrap gap-2">
-                          {ACCENT_PRESETS.map(preset => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              title={preset.label}
-                              onClick={() => setAccentId(preset.id)}
-                              className={cn(
-                                'h-10 w-10 rounded-full border-2 transition-transform cursor-pointer attex-focus',
-                                accentId === preset.id
-                                  ? 'border-heading scale-110'
-                                  : 'border-transparent hover:scale-105',
-                              )}
-                              style={{ backgroundColor: preset.accent }}
-                            />
-                          ))}
+                      {brandingEnabled ? (
+                        <div>
+                          <p className="text-sm font-medium text-heading mb-3">Primary colour</p>
+                          <div className="flex flex-wrap gap-2">
+                            {ACCENT_PRESETS.map(preset => (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                title={preset.label}
+                                onClick={() => setAccentId(preset.id)}
+                                className={cn(
+                                  'h-10 w-10 rounded-full border-2 transition-transform cursor-pointer attex-focus',
+                                  accentId === preset.id
+                                    ? 'border-heading scale-110'
+                                    : 'border-transparent hover:scale-105',
+                                )}
+                                style={{ backgroundColor: preset.accent }}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted mt-2">Selected · {accentPreset.label}</p>
                         </div>
-                        <p className="text-xs text-muted mt-2">Selected · {accentPreset.label}</p>
-                      </div>
+                      ) : (
+                        <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-muted dark:border-gray-700 dark:bg-gray-800/40">
+                          Custom branding (primary colour and side navigation theme) is available from Features after setup.
+                        </p>
+                      )}
                     </div>
                   </>
                 ) : null}
@@ -348,7 +357,9 @@ export function AccountSetupWelcome({ open, session, onComplete }: Props) {
                       {[
                         { label: 'Profile', value: `${displayName.trim()}${phone.trim() ? ` · ${phone.trim()}` : ''}` },
                         { label: 'Organisation', value: `${orgName} · ${role}` },
-                        { label: 'Appearance', value: `${theme === 'dark' ? 'Dark' : 'Light'} theme · ${accentPreset.label}` },
+                        { label: 'Appearance', value: brandingEnabled
+                          ? `${theme === 'dark' ? 'Dark' : 'Light'} theme · ${accentPreset.label}`
+                          : `${theme === 'dark' ? 'Dark' : 'Light'} theme` },
                       ].map(row => (
                         <div key={row.label} className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                           <dt className="text-xs font-medium uppercase tracking-wide text-muted">{row.label}</dt>

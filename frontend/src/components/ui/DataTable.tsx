@@ -65,6 +65,8 @@ interface DataTablePaginationProps {
   pageSizeOptions: number[]
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
+  /** When true, draw a top rule (e.g. after qty note). Table cells already supply the table/footer split. */
+  withTopBorder?: boolean
 }
 
 function DataTablePagination({
@@ -74,6 +76,7 @@ function DataTablePagination({
   pageSizeOptions,
   onPageChange,
   onPageSizeChange,
+  withTopBorder = false,
 }: DataTablePaginationProps) {
   const { classes: density } = useTableDensity()
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
@@ -82,7 +85,8 @@ function DataTablePagination({
 
   return (
     <div className={cn(
-      'flex flex-col gap-2 border-t border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-700/10 sm:flex-row sm:items-center sm:justify-between',
+      'flex flex-col gap-2 bg-gray-50/50 dark:bg-gray-700/10 sm:flex-row sm:items-center sm:justify-between',
+      withTopBorder && 'border-t border-gray-200 dark:border-gray-700',
       density.footerNote,
     )}>
       <p className="text-[14px] text-muted tabular-nums">
@@ -154,8 +158,13 @@ const TABLE_STICKY_UNREAD =
   'bg-[color-mix(in_srgb,#f0f9ff_70%,var(--color-card)_30%)] dark:bg-[color-mix(in_srgb,#082f49_25%,var(--color-card)_75%)]'
 const TABLE_CELL_UNREAD_HOVER = 'group-hover:bg-sky-50 dark:group-hover:bg-sky-950/40'
 
-const TABLE_GRID_BORDER = 'border border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_BORDER_SELECTED = 'border border-accent/20'
+/** Right + bottom only — adjacent cells share one edge (avoids thicker left/bottom from full borders + sticky). */
+const TABLE_GRID_BORDER = 'border-b border-r border-gray-200 dark:border-gray-700/80'
+const TABLE_GRID_BORDER_SELECTED = 'border-b border-r border-accent/20'
+const TABLE_GRID_EDGE_TOP = 'border-t border-gray-200 dark:border-gray-700/80'
+const TABLE_GRID_EDGE_TOP_SELECTED = 'border-t border-accent/20'
+const TABLE_GRID_EDGE_LEFT = 'border-l border-gray-200 dark:border-gray-700/80'
+const TABLE_GRID_EDGE_LEFT_SELECTED = 'border-l border-accent/20'
 
 function gridCellClasses(
   selected: boolean,
@@ -180,6 +189,13 @@ function gridCellClasses(
     TABLE_GRID_BORDER,
     isHeader && 'bg-gray-50 dark:bg-gray-800',
     !isHeader && isSticky && 'bg-card group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
+  )
+}
+
+function gridOuterEdgeClasses(selected: boolean, opts: { top?: boolean; left?: boolean }) {
+  return cn(
+    opts.top && (selected ? TABLE_GRID_EDGE_TOP_SELECTED : TABLE_GRID_EDGE_TOP),
+    opts.left && (selected ? TABLE_GRID_EDGE_LEFT_SELECTED : TABLE_GRID_EDGE_LEFT),
   )
 }
 
@@ -291,7 +307,7 @@ export function DataTable<T extends { id?: string | number }>({
   }
 
   return (
-    <div className="rounded-md bg-card shadow-[var(--shadow-card)]">
+    <div className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)]">
       {mobileRender && (
         <div data-register-table className={cn('md:hidden divide-y divide-gray-200 dark:divide-gray-700', density.text)}>
           {visibleData.map((row, i) => {
@@ -307,7 +323,7 @@ export function DataTable<T extends { id?: string | number }>({
                   density.mobileRow,
                   onRowClick && 'cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50',
                   !highlighted && tone === 'unread' && 'bg-sky-50/70 dark:bg-sky-950/25',
-                  highlighted && cn(TABLE_CELL_SELECTED_BG, TABLE_GRID_BORDER_SELECTED),
+                  highlighted && cn(TABLE_CELL_SELECTED_BG, 'border border-accent/20'),
                   getRowClassName?.(row),
                 )}
               >
@@ -353,6 +369,7 @@ export function DataTable<T extends { id?: string | number }>({
                     CHECKBOX_COL_CLASS,
                     `${density.headerY} hidden md:table-cell`,
                     gridCellClasses(false, stickyFirstColumn, true),
+                    gridOuterEdgeClasses(false, { top: true, left: true }),
                     stickyFirstColumn && 'sticky left-0 z-30',
                   )}
                   scope="col"
@@ -374,6 +391,7 @@ export function DataTable<T extends { id?: string | number }>({
                 const isStickyFirst = stickyFirstColumn && colIndex === 0
                 const isStickyLast = stickActions && colIndex === lastColIndex
                 const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
+                const isFirstDataCol = colIndex === 0
                 return (
                 <th
                   key={col.key}
@@ -382,6 +400,8 @@ export function DataTable<T extends { id?: string | number }>({
                     isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.headerY} text-left`,
                     `${density.text} font-medium text-muted`,
                     gridCellClasses(false, isStickyFirst || isStickyLast, true),
+                    gridOuterEdgeClasses(false, { top: true, left: isFirstDataCol }),
+                    hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
                     col.sortable && onSortChange && 'cursor-pointer select-none group',
                     isStickyFirst && cn(
                       'sticky z-30 whitespace-nowrap',
@@ -394,7 +414,7 @@ export function DataTable<T extends { id?: string | number }>({
                       'sticky right-0 z-30',
                       STICKY_ACTIONS_SHADOW,
                       // Vertical edges come from inset shadow — avoid double weight with cell border.
-                      'border-l-0 border-r-0',
+                      'border-r-0',
                     ),
                     col.className,
                   )}
@@ -441,6 +461,7 @@ export function DataTable<T extends { id?: string | number }>({
                         CHECKBOX_COL_CLASS,
                         `${density.bodyY} hidden md:table-cell`,
                         gridCellClasses(highlighted, stickyFirstColumn, false, tone),
+                        gridOuterEdgeClasses(highlighted, { left: true }),
                         stickyFirstColumn && 'sticky left-0 z-20',
                         !highlighted && !tone && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                       )}
@@ -461,6 +482,7 @@ export function DataTable<T extends { id?: string | number }>({
                     const isStickyLast = stickActions && colIndex === lastColIndex
                     const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
                     const isStickyCol = isStickyFirst || isStickyLast
+                    const isFirstDataCol = colIndex === 0
                     return (
                     <td
                       key={col.key}
@@ -468,6 +490,8 @@ export function DataTable<T extends { id?: string | number }>({
                         isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
                         `${density.text} text-gray-700 dark:text-gray-300`,
                         gridCellClasses(highlighted, isStickyCol, false, tone),
+                        gridOuterEdgeClasses(highlighted, { left: isFirstDataCol }),
+                        hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
                         !highlighted && !tone && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                         isStickyFirst && cn(
                           'sticky z-20 whitespace-nowrap',
@@ -480,7 +504,7 @@ export function DataTable<T extends { id?: string | number }>({
                           'sticky right-0 z-20',
                           STICKY_ACTIONS_SHADOW,
                           // Vertical edges come from inset shadow — avoid double weight with cell border.
-                          'border-l-0 border-r-0',
+                          'border-r-0',
                         ),
                         col.className,
                       )}
@@ -498,7 +522,7 @@ export function DataTable<T extends { id?: string | number }>({
       </div>
 
       {(qtyNote || paginate) && (
-        <div className="border-t border-gray-200 dark:border-gray-700">
+        <div>
           {qtyNote && (
             <p className={cn(density.footerNote, density.text, 'text-muted')}>{TABLE_QTY_NOTE}</p>
           )}
@@ -510,6 +534,7 @@ export function DataTable<T extends { id?: string | number }>({
               pageSizeOptions={resolvedPageSizeOptions}
               onPageChange={setPage}
               onPageSizeChange={handlePageSizeChange}
+              withTopBorder={Boolean(qtyNote)}
             />
           )}
         </div>

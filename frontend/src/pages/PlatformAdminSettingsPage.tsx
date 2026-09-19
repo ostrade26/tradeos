@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, useOutletContext, useParams } from 'react-router-dom'
-import { ChevronRight, KeyRound, Moon, Palette, Rows3, Sun, UserPlus } from 'lucide-react'
+import { ChevronRight, KeyRound, Moon, Palette, PanelLeft, Rows3, Sun, UserPlus } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb } from '../components/ui/Tabs'
 import { Card, CardHeader } from '../components/ui/Card'
@@ -13,9 +13,11 @@ import { useAuth } from '../hooks/useAuth'
 import { useUser } from '../hooks/useUser'
 import { useToast } from '../hooks/useToast'
 import type { TableDensity } from '../lib/tableDensity'
+import type { SidebarStyle } from '../lib/sidebarStyle'
 import { cn } from '../lib/utils'
-import { CUSTOM_ACCENT_ID } from '../lib/accentColor'
 import { ChangePasswordModal } from '../components/settings/ChangePasswordForm'
+import { AccentColourPicker } from '../components/settings/AccentColourPicker'
+import { BrandingUpsellNote } from '../components/settings/BrandingUpsellNote'
 import { PlatformCreateAdminModal } from '../components/platform/PlatformCreateAdminModal'
 import {
   PlatformSignInCredentialsModal,
@@ -116,8 +118,19 @@ export function PlatformAdminSettingsHubPage() {
 }
 
 function AppearanceSection() {
-  const { theme, setTheme, accentId, accentPreset, accentPresets, customHex, setAccentId, setCustomAccent } =
-    useTheme()
+  const {
+    theme,
+    setTheme,
+    accentId,
+    accentPreset,
+    accentPresets,
+    customHex,
+    setAccentId,
+    setCustomAccent,
+    sidebarStyle,
+    setSidebarStyle,
+    brandingEnabled,
+  } = useTheme()
   const { density, setDensity } = useTableDensity()
 
   return (
@@ -171,62 +184,58 @@ function AppearanceSection() {
           }
         />
         <SettingRow
+          icon={PanelLeft}
+          title="Side navigation"
+          description={
+            brandingEnabled
+              ? 'Theme colour or default surface'
+              : 'Unlock Theme colour or Default surface'
+          }
+          action={
+            brandingEnabled ? (
+              <div className="flex rounded-md border border-gray-200 dark:border-gray-600 p-0.5">
+                {([
+                  { id: 'theme' as const, label: 'Theme' },
+                  { id: 'default' as const, label: 'Default' },
+                ] satisfies { id: SidebarStyle; label: string }[]).map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setSidebarStyle(option.id)}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded cursor-pointer transition-colors',
+                      sidebarStyle === option.id ? 'bg-accent text-white' : 'text-gray-500 hover:text-heading',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <BrandingUpsellNote />
+            )
+          }
+        />
+        <SettingRow
           icon={Palette}
           title="Primary colour"
-          description={`Accent · ${accentPreset.label}`}
+          description={
+            brandingEnabled
+              ? `Accent · ${accentPreset.label}`
+              : 'Choose accents that match your brand'
+          }
           action={
-            <div className="flex flex-wrap justify-end gap-2.5 max-w-[14rem]">
-              {accentPresets.map(preset => {
-                const selected = accentId === preset.id
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    title={preset.label}
-                    aria-label={preset.label}
-                    aria-pressed={selected}
-                    onClick={() => setAccentId(preset.id)}
-                    className={cn(
-                      'h-8 w-8 rounded-full cursor-pointer transition-all attex-focus border-2 border-transparent',
-                      selected
-                        ? 'ring-2 ring-offset-2 ring-heading dark:ring-offset-[var(--color-card)] scale-105'
-                        : 'hover:scale-105 opacity-90 hover:opacity-100',
-                    )}
-                    style={{ backgroundColor: preset.accent }}
-                  />
-                )
-              })}
-              <label
-                title="Custom colour"
-                className={cn(
-                  'relative h-8 w-8 rounded-full cursor-pointer overflow-hidden attex-focus border-2 border-transparent',
-                  accentId === CUSTOM_ACCENT_ID
-                    ? 'ring-2 ring-offset-2 ring-heading dark:ring-offset-[var(--color-card)] scale-105'
-                    : 'opacity-90 hover:opacity-100 hover:scale-105',
-                )}
-              >
-                <span
-                  aria-hidden
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    background:
-                      accentId === CUSTOM_ACCENT_ID
-                        ? customHex
-                        : 'conic-gradient(from 180deg, #ff3b30, #ff9500, #34c759, #007aff, #af52de, #ff2d55, #ff3b30)',
-                  }}
-                />
-                <input
-                  type="color"
-                  value={customHex}
-                  aria-label="Pick a custom primary colour"
-                  onChange={e => setCustomAccent(e.target.value)}
-                  onClick={() => {
-                    if (accentId !== CUSTOM_ACCENT_ID) setCustomAccent(customHex)
-                  }}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                />
-              </label>
-            </div>
+            brandingEnabled ? (
+              <AccentColourPicker
+                accentId={accentId}
+                accentPresets={accentPresets}
+                customHex={customHex}
+                onSelectPreset={setAccentId}
+                onSelectCustom={setCustomAccent}
+              />
+            ) : (
+              <BrandingUpsellNote />
+            )
           }
         />
       </div>

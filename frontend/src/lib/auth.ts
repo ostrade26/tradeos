@@ -13,6 +13,7 @@ export interface UserPreferences {
   accentId?: string
   customHex?: string
   tableDensity?: 'compact' | 'relaxed'
+  sidebarStyle?: 'theme' | 'default'
   lastSeenPlatformWhatsNew?: string
   completedOrgProductTour?: boolean
   completedOrgAccountWelcome?: boolean

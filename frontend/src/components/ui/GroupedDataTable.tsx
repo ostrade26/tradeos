@@ -48,15 +48,19 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
 
   return (
     <div className="overflow-x-auto rounded-md bg-card shadow-[var(--shadow-card)] dark:border-gray-700">
-      <table className={cn('w-full', density.text, density.leading)}>
+      <table className={cn('w-full border-collapse', density.text, density.leading)}>
         <thead>
-          <tr className="border-b border-gray-200/80 bg-gray-50/50 dark:border-gray-700 dark:bg-card/50">
-            {columns.map(col => (
+          <tr>
+            {columns.map((col, colIndex) => (
               <th
                 key={col.key}
                 className={cn(
                   density.groupHeaderCell,
                   `${density.text} font-medium text-muted whitespace-nowrap`,
+                  'border-b border-r border-gray-200/80 dark:border-gray-700',
+                  'border-t border-gray-200/80 dark:border-gray-700',
+                  colIndex === 0 && 'border-l border-gray-200/80 dark:border-gray-700',
+                  'bg-gray-50/50 dark:bg-card/50',
                   col.align === 'right' ? 'text-right' : 'text-left',
                   col.className
                 )}
@@ -74,16 +78,18 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                   key={row.id}
                   onClick={() => onRowClick?.(row)}
                   className={cn(
-                    'border-b border-gray-100 dark:border-gray-700/50 transition-colors',
+                    'transition-colors',
                     onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50'
                   )}
                 >
-                  {columns.map(col => (
+                  {columns.map((col, colIndex) => (
                     <td
                       key={col.key}
                       className={cn(
                         density.groupBodyCell,
                         `${density.text} text-gray-700 dark:text-gray-300 whitespace-nowrap`,
+                        'border-b border-r border-gray-100 dark:border-gray-700/50',
+                        colIndex === 0 && 'border-l border-gray-100 dark:border-gray-700/50',
                         col.align === 'right' && 'text-right tabular-nums',
                         col.className
                       )}
@@ -93,11 +99,18 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                   ))}
                 </tr>
               ))}
-              <tr className="bg-gray-50/80 dark:bg-gray-700/20 border-b-2 border-gray-200 dark:border-gray-600">
+              <tr className="bg-gray-50/80 dark:bg-gray-700/20">
                 {columns.map((col, i) => {
                   if (i === 0) {
                     return (
-                      <td key={col.key} className={cn(density.groupTotalCell, `${density.text} font-semibold text-danger`)}>
+                      <td
+                        key={col.key}
+                        className={cn(
+                          density.groupTotalCell,
+                          `${density.text} font-semibold text-danger`,
+                          'border-b border-r border-l border-gray-200 dark:border-gray-600',
+                        )}
+                      >
                         {groupName} Total
                       </td>
                     )
@@ -106,12 +119,28 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                   if (sumCol?.sumKey) {
                     const total = rows.reduce((s, r) => s + Number(r[sumCol.sumKey!] ?? 0), 0)
                     return (
-                      <td key={col.key} className={cn(density.groupTotalCell, `${density.text} font-semibold text-danger tabular-nums`, col.align === 'right' && 'text-right')}>
+                      <td
+                        key={col.key}
+                        className={cn(
+                          density.groupTotalCell,
+                          `${density.text} font-semibold text-danger tabular-nums`,
+                          'border-b border-r border-gray-200 dark:border-gray-600',
+                          col.align === 'right' && 'text-right',
+                        )}
+                      >
                         {sumCol.sumFormat ? sumCol.sumFormat(total) : formatMt(total)}
                       </td>
                     )
                   }
-                  return <td key={col.key} className={density.groupTotalCell} />
+                  return (
+                    <td
+                      key={col.key}
+                      className={cn(
+                        density.groupTotalCell,
+                        'border-b border-r border-gray-200 dark:border-gray-600',
+                      )}
+                    />
+                  )
                 })}
               </tr>
             </Fragment>

@@ -143,6 +143,7 @@ class PreferencesPatchBody(BaseModel):
     accentId: str | None = None
     customHex: str | None = None
     tableDensity: str | None = None
+    sidebarStyle: str | None = None
     lastSeenPlatformWhatsNew: str | None = None
     completedOrgProductTour: bool | None = None
     completedOrgAccountWelcome: bool | None = None
@@ -350,9 +351,21 @@ def auth_update_profile(body: ProfilePatchBody, request: Request) -> dict:
 @app.patch("/api/v1/auth/preferences", tags=["auth"], summary="Update appearance preferences")
 def auth_update_preferences(body: PreferencesPatchBody, request: Request) -> dict:
     session = _session(request)
+    from .identity.feature_offers_schema import CUSTOM_BRANDING_FEATURE_KEY
+    from .identity.notifications_repository import applied_feature_keys_for_user
     from .identity.repository import Session as AuthSessionModel, merge_user_preferences
 
     patch = body.model_dump(exclude_unset=True)
+    branding_keys = {"accentId", "customHex", "sidebarStyle"}
+    if branding_keys & set(patch.keys()) and session.user.role_slug != "platform_admin":
+        entitled = CUSTOM_BRANDING_FEATURE_KEY in applied_feature_keys_for_user(
+            session.user.id, session.user.organisation_id
+        )
+        if not entitled:
+            raise HTTPException(
+                status_code=403,
+                detail="Custom branding is required to change primary colour or side navigation.",
+            )
     user = merge_user_preferences(session.user.id, patch)
     return auth.session_to_dict(AuthSessionModel(token=session.token, user=user, created_at=session.created_at))
 

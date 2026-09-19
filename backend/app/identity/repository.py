@@ -618,6 +618,7 @@ def merge_user_preferences(user_id: int, patch: dict[str, Any]) -> AuthUser:
         "accentId",
         "customHex",
         "tableDensity",
+        "sidebarStyle",
         "lastSeenPlatformWhatsNew",
         "completedOrgProductTour",
         "completedOrgAccountWelcome",

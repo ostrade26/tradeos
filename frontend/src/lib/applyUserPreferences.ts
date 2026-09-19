@@ -1,6 +1,7 @@
 import type { AuthSession } from './auth'
 import { CUSTOM_ACCENT_ID, storeAccentId, storeCustomHex, normalizeHex, DEFAULT_CUSTOM_HEX } from './accentColor'
 import { storeTableDensity, type TableDensity } from './tableDensity'
+import { storeSidebarStyle, type SidebarStyle } from './sidebarStyle'
 import { writeScopedPref } from './userPreferences'
 import { preferenceUserKey } from './userPreferences'
 
@@ -9,6 +10,7 @@ export type StoredUserPreferences = {
   accentId?: string
   customHex?: string
   tableDensity?: TableDensity
+  sidebarStyle?: SidebarStyle
 }
 
 export function applyUserPreferences(
@@ -30,6 +32,9 @@ export function applyUserPreferences(
   }
   if (prefs.tableDensity === 'compact' || prefs.tableDensity === 'relaxed') {
     storeTableDensity(prefs.tableDensity, userKey)
+  }
+  if (prefs.sidebarStyle === 'theme' || prefs.sidebarStyle === 'default') {
+    storeSidebarStyle(prefs.sidebarStyle, userKey)
   }
 }
 

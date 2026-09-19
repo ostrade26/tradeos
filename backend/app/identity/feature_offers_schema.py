@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from ..db import _pg_connect, _sqlite_connect, uses_postgres
 
 TRADEAL_AI_FEATURE_KEY = "tradeal-ai"
+CUSTOM_BRANDING_FEATURE_KEY = "custom-branding"
 
 
 def init_feature_offers_schema() -> None:
@@ -15,12 +16,14 @@ def init_feature_offers_schema() -> None:
             _create_tables(conn)
             _ensure_card_tone_column(conn)
             _seed_tradeal_ai_offer(conn)
+            _seed_custom_branding_offer(conn)
             conn.commit()
         return
     with _sqlite_connect() as conn:
         _create_tables(conn)
         _ensure_card_tone_column(conn)
         _seed_tradeal_ai_offer(conn)
+        _seed_custom_branding_offer(conn)
         conn.commit()
 
 
@@ -111,4 +114,46 @@ def _seed_tradeal_ai_offer(conn) -> None:
         WHERE feature_key = {ph} AND pricing_type = {ph}
         """,
         ("paid", now, TRADEAL_AI_FEATURE_KEY, "free"),
+    )
+
+
+def _seed_custom_branding_offer(conn) -> None:
+    """List Custom branding — primary colour + side navigation theme."""
+    now = _now()
+    ph = "%s" if uses_postgres() else "?"
+    existing = conn.execute(
+        f"SELECT id, pricing_type FROM platform_feature_offers WHERE feature_key = {ph}",
+        (CUSTOM_BRANDING_FEATURE_KEY,),
+    ).fetchone()
+    if not existing:
+        conn.execute(
+            f"""
+            INSERT INTO platform_feature_offers (
+                feature_key, title, description, pricing_type, price_cents, currency,
+                catalog_status, sort_order, created_at, updated_at, listed_at, listed_by_user_id
+            ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, NULL)
+            """,
+            (
+                CUSTOM_BRANDING_FEATURE_KEY,
+                "Custom branding",
+                "Choose your primary colour and side navigation theme — Theme colour or Default surface.",
+                "paid",
+                0,
+                "INR",
+                "listed",
+                20,
+                now,
+                now,
+                now,
+            ),
+        )
+        return
+
+    conn.execute(
+        f"""
+        UPDATE platform_feature_offers
+        SET pricing_type = {ph}, updated_at = {ph}
+        WHERE feature_key = {ph} AND pricing_type = {ph}
+        """,
+        ("paid", now, CUSTOM_BRANDING_FEATURE_KEY, "free"),
     )

@@ -18,6 +18,7 @@ import {
   platformSettingsPath,
 } from '../../lib/platformSettingsSections'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
+import { useTheme } from '../../hooks/useTheme'
 import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestInbox'
 import { useUnifiedInbox } from '../../hooks/useUnifiedInbox'
 import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
@@ -107,14 +108,40 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
   const platformNav = platformNavBase.filter(item => !('featuresNav' in item && item.featuresNav) || showFeaturesNav)
   const showLabels = !collapsed || mobileOpen
   const iconOnly = collapsed && !mobileOpen
+  const { sidebarStyle } = useTheme()
+  const themed = sidebarStyle === 'theme'
+  const badgeRing = themed ? 'ring-accent' : 'ring-[var(--color-card)]'
 
   const navClass = ({ isActive }: { isActive: boolean }) => cn(
     'flex items-center rounded-lg text-[15px] transition-colors duration-150',
     iconOnly ? 'justify-center px-0 py-2.5 min-h-[44px]' : 'gap-2.5 px-2.5 py-2.5 min-h-[44px]',
-    isActive
-      ? 'text-accent font-medium'
-      : 'text-gray-600 hover:text-accent dark:text-muted dark:hover:text-accent',
+    themed
+      ? isActive
+        ? 'bg-white/15 text-white font-medium'
+        : 'text-white/75 hover:bg-white/10 hover:text-white'
+      : isActive
+        ? 'bg-accent-muted text-accent font-medium'
+        : 'text-muted hover:bg-gray-100 hover:text-heading dark:hover:bg-gray-700/40',
   )
+
+  const sectionLabelClass = themed
+    ? 'px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-white/50'
+    : 'px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted/70'
+
+  const groupLabelClass = themed
+    ? 'px-2.5 py-2 text-xs font-medium text-white/50'
+    : 'px-2.5 py-2 text-xs font-medium text-muted'
+
+  const iconBtnClass = themed
+    ? 'rounded-full p-1.5 text-white/70 hover:bg-white/15 hover:text-white cursor-pointer attex-focus'
+    : 'rounded-full p-1.5 text-muted hover:bg-gray-100 hover:text-heading dark:hover:bg-gray-700/40 cursor-pointer attex-focus'
+
+  const brandMarkClass = themed
+    ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/20 ring-1 ring-white/25'
+    : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-white'
+
+  const brandMarkStroke = themed ? 'white' : 'currentColor'
+  const dividerClass = themed ? 'border-white/15' : 'border-gray-200 dark:border-gray-700'
 
   return (
     <>
@@ -125,7 +152,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
       <aside
         data-overlay-dismiss="ignore"
         className={cn(
-          'app-menu flex flex-col overflow-hidden bg-white dark:bg-card border-r border-gray-200/80 dark:border-gray-700/50',
+          'app-menu flex flex-col overflow-hidden',
+          themed ? 'bg-accent' : 'bg-card border-r border-gray-200 dark:border-gray-700',
           'transition-all duration-300 ease-out shrink-0',
           'fixed inset-y-0 left-0 z-50 lg:static lg:z-auto',
           'h-viewport',
@@ -134,29 +162,32 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
         )}
       >
         <div className={cn(
-          'flex h-[70px] items-center shrink-0 border-b border-gray-200/80 dark:border-gray-700/50',
+          'flex h-[70px] items-center shrink-0 border-b',
+          dividerClass,
           iconOnly ? 'justify-center px-2' : 'justify-between px-4',
         )}>
           {showLabels ? (
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
+              <div className={brandMarkClass}>
                 <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
-                  <path d="M2 12L7 7L10 10L14 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="text-lg font-semibold text-heading truncate">Tradeal</span>
+              <span className={cn('text-lg font-semibold truncate', themed ? 'text-white' : 'text-heading')}>
+                Tradeal
+              </span>
             </div>
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
+            <div className={brandMarkClass}>
               <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
-                <path d="M2 12L7 7L10 10L14 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
           )}
           {!iconOnly && (
             <button
               onClick={() => mobileOpen ? onMobileClose?.() : onToggleCollapse()}
-              className="rounded-full p-1.5 text-muted hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700/50 cursor-pointer attex-focus"
+              className={iconBtnClass}
               aria-label={mobileOpen ? 'Close menu' : 'Collapse sidebar'}
             >
               {mobileOpen ? <X className="h-5 w-5" /> : (
@@ -169,7 +200,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
         {iconOnly && (
           <button
             onClick={onToggleCollapse}
-            className="mx-auto mt-2 rounded-full p-1.5 text-muted hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700/50 cursor-pointer attex-focus"
+            className={cn('mx-auto mt-2', iconBtnClass)}
             aria-label="Expand sidebar"
           >
             <ChevronLeft className="h-5 w-5 rotate-180" />
@@ -180,7 +211,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
           {settingsMode || platformSettingsMode ? (
             <>
               {showLabels && (
-                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
+                <p className={sectionLabelClass}>
                   Settings
                 </p>
               )}
@@ -201,7 +232,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                 </NavLink>
               </div>
               {showLabels && (
-                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">
+                <p className={sectionLabelClass}>
                   Categories
                 </p>
               )}
@@ -229,11 +260,11 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               {platformAdminNavGroups.map((group, groupIndex) => (
                 <div key={group.label}>
                   {showLabels ? (
-                    <p className="px-2.5 py-2 text-xs font-medium text-muted">
+                    <p className={groupLabelClass}>
                       {group.label}
                     </p>
                   ) : groupIndex > 0 ? (
-                    <div className="mx-2 mb-2 border-t border-gray-200 dark:border-gray-700" aria-hidden />
+                    <div className={cn('mx-2 mb-2 border-t', dividerClass)} aria-hidden />
                   ) : null}
                   <div className="space-y-0.5">
                     {group.items.map(item => {
@@ -257,7 +288,10 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                           <span className="relative shrink-0">
                             <item.icon className="h-5 w-5" />
                             {iconOnly && badgeCount > 0 && (
-                              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                              <span className={cn(
+                                'absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white ring-2',
+                                badgeRing,
+                              )}>
                                 {badgeCount > 9 ? '9+' : badgeCount}
                               </span>
                             )}
@@ -282,7 +316,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
           ) : (
             <>
               {showLabels && (
-                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Trading</p>
+                <p className={sectionLabelClass}>Trading</p>
               )}
               <div className="space-y-0.5 mb-3" data-tour="nav-trading">
                 {tradingNav.map(item => (
@@ -308,7 +342,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               </div>
 
               {showLabels && (
-                <p className="px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-muted opacity-90">Platform</p>
+                <p className={sectionLabelClass}>Platform</p>
               )}
               <div className="space-y-0.5">
                 {platformNav.map(item => {
@@ -325,7 +359,10 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                     <span className="relative shrink-0">
                       <item.icon className="h-5 w-5" />
                       {iconOnly && badgeCount > 0 && (
-                        <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white">
+                        <span className={cn(
+                          'absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-0.5 text-[9px] font-semibold text-white ring-2',
+                          badgeRing,
+                        )}>
                           {badgeCount > 9 ? '9+' : badgeCount}
                         </span>
                       )}

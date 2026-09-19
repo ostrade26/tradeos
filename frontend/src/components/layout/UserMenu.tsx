@@ -8,7 +8,7 @@ import { useUser } from '../../hooks/useUser'
 import { useLocation } from 'react-router-dom'
 import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
-export function UserMenu() {
+export function UserMenu({ onBrandBar = false }: { onBrandBar?: boolean } = {}) {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -39,15 +39,41 @@ export function UserMenu() {
           onClick={onClick}
           aria-expanded={expanded}
           aria-label="User menu"
-          className="flex min-h-10 sm:min-h-11 items-center gap-2.5 pl-0.5 sm:pl-1 min-w-0 rounded-lg px-0.5 sm:px-1 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors cursor-pointer attex-focus"
+          className={
+            onBrandBar
+              ? 'flex min-h-10 sm:min-h-11 items-center gap-2.5 pl-0.5 sm:pl-1 min-w-0 rounded-lg px-0.5 sm:px-1 py-1 hover:bg-white/15 transition-colors cursor-pointer attex-focus'
+              : 'flex min-h-10 sm:min-h-11 items-center gap-2.5 pl-0.5 sm:pl-1 min-w-0 rounded-lg px-0.5 sm:px-1 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors cursor-pointer attex-focus'
+          }
         >
-          <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-white">
+          <div
+            className={
+              onBrandBar
+                ? 'flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-semibold text-white ring-1 ring-white/30'
+                : 'flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-white'
+            }
+          >
             {initials}
           </div>
           <div className="hidden md:block min-w-0 text-left">
-            <p className="text-sm font-medium text-heading truncate leading-tight">{traderName}</p>
+            <p
+              className={
+                onBrandBar
+                  ? 'text-sm font-medium text-white truncate leading-tight'
+                  : 'text-sm font-medium text-heading truncate leading-tight'
+              }
+            >
+              {traderName}
+            </p>
             {shortRole && (
-              <p className="text-xs text-muted truncate leading-tight">{shortRole}</p>
+              <p
+                className={
+                  onBrandBar
+                    ? 'text-xs text-white/75 truncate leading-tight'
+                    : 'text-xs text-muted truncate leading-tight'
+                }
+              >
+                {shortRole}
+              </p>
             )}
           </div>
         </button>
