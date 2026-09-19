@@ -815,6 +815,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     recipient_user_id: number | null
     recipient_scope: 'org_admin' | 'all_users'
     exclude_expired_amc: boolean
+    notify_organisations: boolean
   }) => {
     if (!publishingReleaseRow) return
     setPublishingRelease(true)
@@ -824,7 +825,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       const skipped = res.release.skipped_expired_amc
         ? ` · ${res.release.skipped_expired_amc} skipped (expired AMC)`
         : ''
-      if (sent <= 0) {
+      if (!payload.notify_organisations) {
+        toast.success(`Published ${res.release.version} quietly — no inbox notice`)
+      } else if (sent <= 0) {
         toast.error(`Published ${res.release.version}, but no recipients were notified${skipped}`)
       } else {
         toast.success(

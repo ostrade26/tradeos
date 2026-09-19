@@ -108,9 +108,15 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
     for n in list_notifications_for_user(conn, user_id, limit=limit):
         if _is_review_interest_notice(n):
             continue
-        # Feature drafts are reviewed under Features & Access.
+        # Deploy drafts: Features & Access (gated) or Releases (inform).
         if str(n.get("kind") or "") == "deploy_review":
             unread = bool(n.get("unread"))
+            payload = n.get("payload") or {}
+            default_href = (
+                "/platform-admin/releases"
+                if str(payload.get("cta") or "") == "review_release"
+                else "/platform-admin/add-ons"
+            )
             out.append(
                 _inbox_item(
                     item_id=f"notice-{n['id']}",
@@ -118,12 +124,12 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
                     category="notice",
                     status="open" if unread else "done",
                     unread=unread,
-                    title=str(n.get("title") or "New feature from deploy"),
+                    title=str(n.get("title") or "Production deploy"),
                     subtitle=str(n.get("body") or "")[:160],
                     from_label="Tradeal",
                     date_iso=str(n.get("created_at") or ""),
                     actionable=True,
-                    href=str(n.get("href") or "/platform-admin/add-ons"),
+                    href=str(n.get("href") or default_href),
                     notice=n,
                 )
             )

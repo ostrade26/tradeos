@@ -44,7 +44,7 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'maintenance') return 'Maintenance'
   if (kind === 'announcement') return 'Announcement'
   if (kind === 'backup_reminder') return 'Backup'
-  if (kind === 'deploy_review') return 'New feature'
+  if (kind === 'deploy_review') return 'Deploy'
   if (kind === 'product_request') return 'Tradeal reply'
   if (kind === 'sent_request') return 'Your request'
   if (kind === 'seat_request') return 'Seat request'

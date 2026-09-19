@@ -136,7 +136,12 @@ export function useInboxItemActions({
     }
     if (row.notice) {
       if (row.notice.kind === 'deploy_review') {
-        navigate(row.notice.href || '/platform-admin/add-ons')
+        const href = row.notice.href || (
+          row.notice.payload?.cta === 'review_release'
+            ? '/platform-admin/releases'
+            : '/platform-admin/add-ons'
+        )
+        navigate(href)
         if (row.category === 'notice' && row.unread) void markRead(row.id)
         return
       }

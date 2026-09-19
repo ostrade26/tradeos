@@ -374,28 +374,44 @@ def create_deploy_draft_release(
     draft_keys = [str(o.get("feature_key") or "") for o in draft_offers if o.get("feature_key")]
 
     notified = 0
-    if notify_platform_admins and gated_items:
-        titles = [str(i.get("title") or "") for i in gated_items]
-        body_lines = [f"• {t}" for t in titles if t]
-        body = (
-            f"Production deploy {sha[:7]} included marketplace feature(s).\n\n"
-            + "\n".join(body_lines)
-            + "\n\nReview pricing and Publish from Features & Access when ready."
-        )
+    if notify_platform_admins:
+        inform_items = [i for i in cleaned if is_inform_release_category(str(i.get("category") or ""))]
+        titles = [str(i.get("title") or "") for i in cleaned if str(i.get("title") or "").strip()]
+        body_lines = [f"• {t}" for t in titles]
+        if gated_items:
+            href = "/platform-admin/add-ons"
+            title = f"New feature(s) from deploy · {sha[:7]}"
+            body = (
+                f"Production deploy {sha[:7]} included marketplace feature(s).\n\n"
+                + "\n".join(body_lines)
+                + "\n\nReview pricing and Publish from Features & Access when ready."
+            )
+            if inform_items:
+                body += "\nUI & fix notes are drafted under Releases — publish there to notify organisations."
+            cta = "review_features"
+        else:
+            href = f"/platform-admin/releases?releaseId={release_id}"
+            title = f"Release draft from deploy · {sha[:7]}"
+            body = (
+                f"Production deploy {sha[:7]} created draft {version}.\n\n"
+                + ("\n".join(body_lines) + "\n\n" if body_lines else "")
+                + "Review and Publish from Releases to notify organisations."
+            )
+            cta = "review_release"
         result = send_platform_admin_notices(
             conn,
             kind="deploy_review",
-            title=f"New feature(s) from deploy · {sha[:7]}",
+            title=title,
             body=body,
             payload={
-                "cta": "review_features",
+                "cta": cta,
                 "release_id": str(release_id),
                 "commit_sha": sha,
                 "version": version,
                 "draft_feature_keys": "\n".join(draft_keys),
-                "feature_titles": "\n".join(titles),
+                "feature_titles": "\n".join(str(i.get("title") or "") for i in gated_items),
             },
-            href="/platform-admin/add-ons",
+            href=href,
             actor_user_id=actor_user_id,
             source="deploy",
         )
@@ -533,6 +549,7 @@ def publish_release(
     recipient_scope: str,
     exclude_expired_amc: bool,
     actor_user_id: int,
+    notify_organisations: bool = True,
 ) -> dict[str, Any]:
     from .notifications_repository import create_notifications_for_audience
 
@@ -550,8 +567,9 @@ def publish_release(
     default_body = release.get("summary") or "\n".join(lines)
     sent_total = 0
     skipped_amc = 0
+    should_notify = bool(notify_organisations)
 
-    if inform_items:
+    if should_notify and inform_items:
         inform_body = default_body
         inform_lines = [f"{_category_label(i['category'])}: {i['title']}" for i in inform_items]
         if len(inform_items) < len(items):
@@ -583,7 +601,11 @@ def publish_release(
     # not via release publish. Keep them on the release record for deploy history only.
     _ = feature_items
 
-    result = {"sent": sent_total, "skipped_expired_amc": skipped_amc}
+    result = {
+        "sent": sent_total,
+        "skipped_expired_amc": skipped_amc,
+        "notified": should_notify,
+    }
     now = _now_iso()
     if uses_postgres():
         conn.execute(
@@ -613,8 +635,9 @@ def publish_release(
         entity_id=str(release_id),
         new_value={
             "version": release["version"],
-            "audience": audience,
+            "audience": audience if should_notify else None,
             "sent": result.get("sent"),
+            "notify_organisations": should_notify,
             "gated": bool(feature_items),
             "inform": bool(inform_items),
         },
@@ -622,6 +645,7 @@ def publish_release(
     updated = _get_release(conn, release_id)
     updated["sent"] = result.get("sent")
     updated["skipped_expired_amc"] = result.get("skipped_expired_amc")
+    updated["notified"] = should_notify
     return updated
 
 

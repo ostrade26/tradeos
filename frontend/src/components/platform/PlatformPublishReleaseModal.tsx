@@ -33,8 +33,10 @@ export function PlatformPublishReleaseModal({
     recipient_user_id: number | null
     recipient_scope: NotificationRecipientScope
     exclude_expired_amc: boolean
+    notify_organisations: boolean
   }) => void
 }) {
+  const [notifyOrgs, setNotifyOrgs] = useState(true)
   const [audience, setAudience] = useState<NotificationAudience>('active_licences')
   const [orgId, setOrgId] = useState('')
   const [recipientId, setRecipientId] = useState('')
@@ -43,6 +45,7 @@ export function PlatformPublishReleaseModal({
 
   useEffect(() => {
     if (!open) return
+    setNotifyOrgs(true)
     setAudience('active_licences')
     setOrgId('')
     setRecipientId('')
@@ -54,7 +57,7 @@ export function PlatformPublishReleaseModal({
     () => users.filter(u => u.organisation_id === Number(orgId) && u.status === 'active'),
     [users, orgId],
   )
-  const needsOrg = audience !== 'active_licences'
+  const needsOrg = notifyOrgs && audience !== 'active_licences'
   const canSend = Boolean(release && (!needsOrg || orgId))
   const gated = Boolean(release?.gated)
 
@@ -65,8 +68,8 @@ export function PlatformPublishReleaseModal({
       title={release ? `Publish ${release.version}` : 'Publish release'}
       subtitle={
         gated
-          ? 'UI & fix notes go out as an announcement. Marketplace features are published separately from Features & Access.'
-          : 'This is an announcement. The changes are already in the live app.'
+          ? 'UI & fix notes can go out as an announcement. Marketplace features are published separately from Features & Access.'
+          : 'Mark this version as published. Choose whether organisations get an inbox notice.'
       }
       size="lg"
       footer={
@@ -84,10 +87,11 @@ export function PlatformPublishReleaseModal({
                 recipient_user_id: audience === 'user' && recipientId ? Number(recipientId) : null,
                 recipient_scope: audience === 'user' ? 'org_admin' : scope,
                 exclude_expired_amc: excludeExpiredAmc,
+                notify_organisations: notifyOrgs,
               })
             }
           >
-            Publish
+            {notifyOrgs ? 'Publish & notify' : 'Publish quietly'}
           </Button>
         </div>
       }
@@ -96,70 +100,96 @@ export function PlatformPublishReleaseModal({
         <div className="space-y-4">
           <Select
             searchable={false}
-            label="Audience"
-            value={audience}
-            onChange={e => setAudience(e.target.value as NotificationAudience)}
+            label="Organisation notice"
+            value={notifyOrgs ? 'notify' : 'quiet'}
+            onChange={e => setNotifyOrgs(e.target.value === 'notify')}
             options={[
-              { value: 'user', label: 'One user' },
-              { value: 'org', label: 'One organisation' },
-              { value: 'active_licences', label: 'All active licences' },
+              {
+                value: 'notify',
+                label: 'Send inbox notice',
+                description: 'Bell and inbox — use when people should know what changed.',
+              },
+              {
+                value: 'quiet',
+                label: 'Publish quietly',
+                description: 'No inbox notice — best for small fixes and routine polish.',
+              },
             ]}
           />
-          {needsOrg ? (
-            <Select
-              label="Organisation"
-              value={orgId}
-              onChange={e => {
-                setOrgId(e.target.value)
-                setRecipientId('')
-              }}
-              options={organisations.map(o => ({
-                value: String(o.id),
-                label: o.name,
-                description: o.org_code ?? undefined,
-              }))}
-            />
+          {notifyOrgs ? (
+            <>
+              <Select
+                searchable={false}
+                label="Audience"
+                value={audience}
+                onChange={e => setAudience(e.target.value as NotificationAudience)}
+                options={[
+                  { value: 'user', label: 'One user' },
+                  { value: 'org', label: 'One organisation' },
+                  { value: 'active_licences', label: 'All active licences' },
+                ]}
+              />
+              {needsOrg ? (
+                <Select
+                  label="Organisation"
+                  value={orgId}
+                  onChange={e => {
+                    setOrgId(e.target.value)
+                    setRecipientId('')
+                  }}
+                  options={organisations.map(o => ({
+                    value: String(o.id),
+                    label: o.name,
+                    description: o.org_code ?? undefined,
+                  }))}
+                />
+              ) : (
+                <Select
+                  searchable={false}
+                  label="Organisation"
+                  value="all"
+                  disabled
+                  options={[{ value: 'all', label: 'All active licences' }]}
+                />
+              )}
+              {audience === 'user' ? (
+                <Select
+                  label="Recipient"
+                  value={recipientId}
+                  onChange={e => setRecipientId(e.target.value)}
+                  options={[
+                    { value: '', label: 'Organisation admin' },
+                    ...recipients.map(u => ({
+                      value: String(u.id),
+                      label: u.name || u.email || u.username,
+                      description: u.role_name,
+                    })),
+                  ]}
+                />
+              ) : (
+                <Select
+                  searchable={false}
+                  label="Who in the audience"
+                  value={scope}
+                  onChange={e => setScope(e.target.value as NotificationRecipientScope)}
+                  options={[
+                    { value: 'org_admin', label: 'Organisation admins' },
+                    { value: 'all_users', label: 'All licensed users' },
+                  ]}
+                />
+              )}
+              <Checkbox
+                tight
+                label="Exclude organisations with expired AMC"
+                checked={excludeExpiredAmc}
+                onChange={e => setExcludeExpiredAmc(e.target.checked)}
+              />
+            </>
           ) : (
-            <Select
-              searchable={false}
-              label="Organisation"
-              value="all"
-              disabled
-              options={[{ value: 'all', label: 'All active licences' }]}
-            />
+            <p className="text-sm text-muted leading-relaxed">
+              The release is marked published for your records. Organisations won’t get a bell or inbox notice.
+            </p>
           )}
-          {audience === 'user' ? (
-            <Select
-              label="Recipient"
-              value={recipientId}
-              onChange={e => setRecipientId(e.target.value)}
-              options={[
-                { value: '', label: 'Organisation admin' },
-                ...recipients.map(u => ({
-                  value: String(u.id),
-                  label: u.name || u.email || u.username,
-                  description: u.role_name,
-                })),
-              ]}
-            />
-          ) : (
-            <Select
-              searchable={false}
-              label="Who in the audience"
-              value={scope}
-              onChange={e => setScope(e.target.value as NotificationRecipientScope)}
-              options={[
-                { value: 'org_admin', label: 'Organisation admins' },
-                { value: 'all_users', label: 'All licensed users' },
-              ]}
-            />
-          )}
-          <Checkbox
-            tight
-            label="Exclude organisations with expired AMC"
-            checked={excludeExpiredAmc}
-            onChange={e => setExcludeExpiredAmc(e.target.checked)}
-          />
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">This version</p>

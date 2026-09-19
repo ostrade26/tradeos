@@ -1,7 +1,8 @@
 # After production deploy, auto-create a draft platform release from git commits (no manual typing).
 # Requires repo secrets: TRADEAL_API_URL, TRADEAL_API_TOKEN
 # (same token as Railway env TRADEAL_API_TOKEN / header x-tradeal-token).
-# Drafts appear under Platform Admin → Releases; publish there to notify organisations.
+# Drafts appear under Platform Admin → Releases; Tradeal admins are notified on register.
+# Publish the release (or Features catalog) from Platform Admin to notify organisations.
 name: Register production release
 
 on:

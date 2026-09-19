@@ -721,6 +721,7 @@ export const platformApi = {
       recipient_user_id?: number | null
       recipient_scope?: NotificationRecipientScope
       exclude_expired_amc?: boolean
+      notify_organisations?: boolean
     },
   ) =>
     apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}/publish`, {

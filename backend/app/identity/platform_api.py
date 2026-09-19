@@ -2184,6 +2184,7 @@ class PublishReleaseBody(BaseModel):
     recipient_user_id: int | None = None
     recipient_scope: str = "org_admin"
     exclude_expired_amc: bool = True
+    notify_organisations: bool = True
 
 
 class DeployReleaseItemBody(BaseModel):
@@ -2364,6 +2365,7 @@ def publish_platform_release(release_id: int, body: PublishReleaseBody, request:
         recipient_user_id=body.recipient_user_id,
         recipient_scope=body.recipient_scope,
         exclude_expired_amc=body.exclude_expired_amc,
+        notify_organisations=body.notify_organisations,
         actor_user_id=session.user.id,
     )
     if uses_postgres():
