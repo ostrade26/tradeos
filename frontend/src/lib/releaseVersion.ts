@@ -57,6 +57,17 @@ export function parseSemver(value: string): [number, number, number] {
   return nums
 }
 
+/** Ascending semver compare: negative if a < b, positive if a > b. */
+export function compareSemver(a: string, b: string): number {
+  const left = parseSemver(a)
+  const right = parseSemver(b)
+  for (let i = 0; i < 3; i += 1) {
+    const diff = left[i]! - right[i]!
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 export function suggestNextVersion(latest: string | null | undefined, categories: string[] = []): string {
   const gated = categories.some(isGatedReleaseCategory)
   if (!latest) return '1.0.0'

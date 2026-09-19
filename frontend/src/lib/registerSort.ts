@@ -1,4 +1,5 @@
 import { storageGet, storageSet } from './storage'
+import { compareSemver } from './releaseVersion'
 
 export type SortDirection = 'asc' | 'desc'
 
@@ -57,6 +58,9 @@ function compareSortValues(
   const bs = String(bv)
   if (key === 'ref' || key === 'poRef' || key === 'lotNumber' || key === 'liftRef') {
     return compareRefLabels(as, bs) * dir
+  }
+  if (key === 'version') {
+    return compareSemver(as, bs) * dir
   }
   return as.localeCompare(bs) * dir
 }
