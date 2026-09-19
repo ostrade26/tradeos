@@ -1,8 +1,9 @@
-# After production deploy, auto-create a draft platform release from git commits (no manual typing).
+# After push to main, register a production deploy draft and notify Tradeal admins.
 # Requires repo secrets: TRADEAL_API_URL, TRADEAL_API_TOKEN
-# (same token as Railway env TRADEAL_API_TOKEN / header x-tradeal-token).
-# Drafts appear under Platform Admin → Releases; Tradeal admins are notified on register.
-# Publish the release (or Features catalog) from Platform Admin to notify organisations.
+# (same token as Railway TRADEAL_API_TOKEN / header x-tradeal-token).
+#
+# Waits for the API to be healthy so Railway can finish deploying new code first.
+# Publish from Platform Admin → Releases (or Features) to notify organisations.
 name: Register production release
 
 on:
@@ -26,12 +27,58 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           TRADEAL_DEPLOY_ENV: production
         run: |
+          set -euo pipefail
           if [[ -z "${TRADEAL_API_URL}" || -z "${TRADEAL_API_TOKEN}" ]]; then
-            echo "::warning::Skipping deploy notify — set repository secrets TRADEAL_API_URL and TRADEAL_API_TOKEN."
+            echo "::error::Missing repository secrets TRADEAL_API_URL and/or TRADEAL_API_TOKEN."
             echo "TRADEAL_API_URL = production API origin (e.g. https://your-api.up.railway.app)"
             echo "TRADEAL_API_TOKEN = same value as Railway TRADEAL_API_TOKEN (sent as x-tradeal-token)."
-            echo "Once set, pushes to main create a Releases draft (publish from Platform Admin to notify orgs)."
-            exit 0
+            exit 1
           fi
+
+          API_URL="${TRADEAL_API_URL%/}"
+          echo "Waiting for API health at ${API_URL} …"
+          ready=0
+          for i in $(seq 1 36); do
+            code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "${API_URL}/api/v1/health" || true)"
+            if [[ "${code}" == "200" ]]; then
+              ready=1
+              echo "API healthy (attempt ${i})"
+              break
+            fi
+            echo "  attempt ${i}/36 — HTTP ${code:-000}, retry in 10s"
+            sleep 10
+          done
+          if [[ "${ready}" != "1" ]]; then
+            echo "::error::API did not become healthy in time. Deploy may still be rolling out."
+            exit 1
+          fi
+
+          # Give Railway a short buffer after health so the new revision is serving traffic.
+          sleep 20
+
           chmod +x scripts/register-production-deploy.sh
-          ./scripts/register-production-deploy.sh
+          ok=0
+          for i in 1 2 3 4 5; do
+            if ./scripts/register-production-deploy.sh; then
+              ok=1
+              break
+            fi
+            echo "Register failed (attempt ${i}/5); retry in 20s…"
+            sleep 20
+          done
+          if [[ "${ok}" != "1" ]]; then
+            echo "::error::Could not register deploy draft after retries."
+            exit 1
+          fi
+
+          if [[ -f /tmp/tradeal-deploy-register.json ]]; then
+            echo "Register response:"
+            cat /tmp/tradeal-deploy-register.json
+            echo ""
+            notified="$(python3 -c "import json; print(json.load(open('/tmp/tradeal-deploy-register.json')).get('notified', 0))")"
+            created="$(python3 -c "import json; print(json.load(open('/tmp/tradeal-deploy-register.json')).get('created', False))")"
+            echo "created=${created} notified=${notified}"
+            if [[ "${notified}" == "0" ]]; then
+              echo "::warning::No new admin notifications were sent (already notified for this commit, or no platform admin users)."
+            fi
+          fi

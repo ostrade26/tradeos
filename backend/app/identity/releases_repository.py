@@ -292,6 +292,95 @@ def _assert_unique_version(conn, version: str, exclude_id: int | None = None) ->
         raise HTTPException(status_code=400, detail=f"Version {version} already exists")
 
 
+def _deploy_admin_notice_exists(conn, release_id: int) -> bool:
+    key = str(int(release_id))
+    if uses_postgres():
+        row = conn.execute(
+            """
+            SELECT 1 FROM user_notifications
+            WHERE kind = 'deploy_review'
+              AND payload_json::jsonb ->> 'release_id' = %s
+            LIMIT 1
+            """,
+            (key,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT 1 FROM user_notifications
+            WHERE kind = 'deploy_review'
+              AND json_extract(payload_json, '$.release_id') = ?
+            LIMIT 1
+            """,
+            (key,),
+        ).fetchone()
+    return row is not None
+
+
+def _notify_admins_of_deploy_draft(
+    conn,
+    *,
+    release: dict[str, Any],
+    items: list[dict[str, Any]],
+    draft_feature_keys: list[str],
+    actor_user_id: int,
+) -> int:
+    """Ping Tradeal admins about a deploy draft (Features and/or Releases)."""
+    from .notifications_repository import notify_platform_admins as send_platform_admin_notices
+
+    release_id = int(release["id"])
+    if _deploy_admin_notice_exists(conn, release_id):
+        return 0
+
+    sha = str(release.get("deploy_commit_sha") or "")[:40]
+    version = str(release.get("version") or "")
+    gated_items = [i for i in items if is_gated_release_category(str(i.get("category") or ""))]
+    inform_items = [i for i in items if is_inform_release_category(str(i.get("category") or ""))]
+    titles = [str(i.get("title") or "") for i in items if str(i.get("title") or "").strip()]
+    body_lines = [f"• {t}" for t in titles]
+    short = sha[:7] if sha else version or "deploy"
+
+    if gated_items:
+        href = "/platform-admin/add-ons"
+        title = f"New feature(s) from deploy · {short}"
+        body = (
+            f"Production deploy {short} included marketplace feature(s).\n\n"
+            + "\n".join(body_lines)
+            + "\n\nReview pricing and Publish from Features & Access when ready."
+        )
+        if inform_items:
+            body += "\nUI & fix notes are drafted under Releases — publish there to notify organisations."
+        cta = "review_features"
+    else:
+        href = f"/platform-admin/releases?releaseId={release_id}"
+        title = f"Release draft from deploy · {short}"
+        body = (
+            f"Production deploy {short} created draft {version}.\n\n"
+            + ("\n".join(body_lines) + "\n\n" if body_lines else "")
+            + "Review and Publish from Releases to notify organisations."
+        )
+        cta = "review_release"
+
+    result = send_platform_admin_notices(
+        conn,
+        kind="deploy_review",
+        title=title,
+        body=body,
+        payload={
+            "cta": cta,
+            "release_id": str(release_id),
+            "commit_sha": sha,
+            "version": version,
+            "draft_feature_keys": "\n".join(draft_feature_keys),
+            "feature_titles": "\n".join(str(i.get("title") or "") for i in gated_items),
+        },
+        href=href,
+        actor_user_id=actor_user_id,
+        source="deploy",
+    )
+    return int(result.get("sent") or 0)
+
+
 def create_deploy_draft_release(
     conn,
     *,
@@ -301,12 +390,35 @@ def create_deploy_draft_release(
     summary: str,
     items: list[dict[str, Any]],
     actor_user_id: int,
-    notify_platform_admins: bool = False,
+    notify_platform_admins: bool = True,
 ) -> dict[str, Any]:
     sha = _normalize_commit_sha(commit_sha)
     existing = get_release_by_deploy_commit(conn, sha)
     if existing:
-        return {"release": existing, "created": False, "notified": 0, "draft_features": []}
+        notified = 0
+        if notify_platform_admins:
+            existing_items = list(existing.get("items") or [])
+            notified = _notify_admins_of_deploy_draft(
+                conn,
+                release=existing,
+                items=existing_items,
+                draft_feature_keys=[
+                    str(i.get("feature_key") or "")
+                    for i in existing_items
+                    if is_gated_release_category(str(i.get("category") or "")) and i.get("feature_key")
+                ],
+                actor_user_id=actor_user_id,
+            )
+        return {
+            "release": existing,
+            "created": False,
+            "notified": notified,
+            "draft_features": [
+                str(i.get("feature_key") or "")
+                for i in (existing.get("items") or [])
+                if is_gated_release_category(str(i.get("category") or "")) and i.get("feature_key")
+            ],
+        }
 
     env = (environment or "production").strip() or "production"
     latest = latest_published_version(conn)
@@ -362,7 +474,6 @@ def create_deploy_draft_release(
     )
 
     from .feature_offers_repository import ensure_draft_offers_from_deploy_items
-    from .notifications_repository import notify_platform_admins as send_platform_admin_notices
 
     gated_items = [i for i in cleaned if is_gated_release_category(str(i.get("category") or ""))]
     draft_offers = ensure_draft_offers_from_deploy_items(
@@ -373,51 +484,17 @@ def create_deploy_draft_release(
     )
     draft_keys = [str(o.get("feature_key") or "") for o in draft_offers if o.get("feature_key")]
 
+    release = _get_release(conn, release_id)
     notified = 0
     if notify_platform_admins:
-        inform_items = [i for i in cleaned if is_inform_release_category(str(i.get("category") or ""))]
-        titles = [str(i.get("title") or "") for i in cleaned if str(i.get("title") or "").strip()]
-        body_lines = [f"• {t}" for t in titles]
-        if gated_items:
-            href = "/platform-admin/add-ons"
-            title = f"New feature(s) from deploy · {sha[:7]}"
-            body = (
-                f"Production deploy {sha[:7]} included marketplace feature(s).\n\n"
-                + "\n".join(body_lines)
-                + "\n\nReview pricing and Publish from Features & Access when ready."
-            )
-            if inform_items:
-                body += "\nUI & fix notes are drafted under Releases — publish there to notify organisations."
-            cta = "review_features"
-        else:
-            href = f"/platform-admin/releases?releaseId={release_id}"
-            title = f"Release draft from deploy · {sha[:7]}"
-            body = (
-                f"Production deploy {sha[:7]} created draft {version}.\n\n"
-                + ("\n".join(body_lines) + "\n\n" if body_lines else "")
-                + "Review and Publish from Releases to notify organisations."
-            )
-            cta = "review_release"
-        result = send_platform_admin_notices(
+        notified = _notify_admins_of_deploy_draft(
             conn,
-            kind="deploy_review",
-            title=title,
-            body=body,
-            payload={
-                "cta": cta,
-                "release_id": str(release_id),
-                "commit_sha": sha,
-                "version": version,
-                "draft_feature_keys": "\n".join(draft_keys),
-                "feature_titles": "\n".join(str(i.get("title") or "") for i in gated_items),
-            },
-            href=href,
+            release=release,
+            items=cleaned,
+            draft_feature_keys=draft_keys,
             actor_user_id=actor_user_id,
-            source="deploy",
         )
-        notified = int(result.get("sent") or 0)
 
-    release = _get_release(conn, release_id)
     return {
         "release": release,
         "created": True,

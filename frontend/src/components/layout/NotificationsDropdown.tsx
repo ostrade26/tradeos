@@ -30,9 +30,17 @@ export function NotificationsDropdown() {
   })
 
   const preview = useMemo(() => {
-    if (platformConsole) return openItems.slice(0, 8)
-    // Org FYI notices (feature launch, updates, …) stay status=done while unread —
-    // match the inbox Open filter: unread notices, not workflow status.
+    if (platformConsole) {
+      // Platform: open work + unread notices (deploy drafts, etc.)
+      const unreadNotices = items.filter(row => row.category === 'notice' && row.unread)
+      const seen = new Set(openItems.map(r => r.id))
+      const merged = [...openItems]
+      for (const row of unreadNotices) {
+        if (!seen.has(row.id)) merged.push(row)
+      }
+      return merged.slice(0, 8)
+    }
+    // Org FYI notices stay status=done while unread — match inbox Open filter.
     return items
       .filter(row => row.category === 'notice' && row.unread)
       .slice(0, 8)

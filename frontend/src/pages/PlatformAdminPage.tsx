@@ -828,7 +828,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
       if (!payload.notify_organisations) {
         toast.success(`Published ${res.release.version} quietly — no inbox notice`)
       } else if (sent <= 0) {
-        toast.error(`Published ${res.release.version}, but no recipients were notified${skipped}`)
+        toast.error(
+          `Published ${res.release.version}, but nobody was notified. Check active licences (test orgs are skipped) and audience.`,
+        )
       } else {
         toast.success(
           `Published ${res.release.version} — notified ${sent} ${sent === 1 ? 'person' : 'people'}${skipped}`,

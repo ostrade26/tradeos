@@ -164,10 +164,15 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
             status = "open" if _seat_open(str(linked_seat.get("status") or "")) else "done"
         elif kind == "seat_request" and str(payload.get("decision") or "") in ("approved", "rejected"):
             status = "done"
-        elif kind == "feature_launch" or kind in WORKFLOW_NOTICE_KINDS:
+        elif kind in (
+            "feature_launch",
+            "release_notes",
+            "product_update",
+            "announcement",
+        ) or kind in WORKFLOW_NOTICE_KINDS:
             status = "open" if unread else "done"
         else:
-            # FYI (product update, maintenance, backup, announcement, …) — no workflow status.
+            # Other FYI kinds — no workflow status.
             status = "done"
         out.append(
             _inbox_item(
