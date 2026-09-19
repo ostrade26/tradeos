@@ -12,6 +12,7 @@ import {
 } from '../features/FeatureOfferCatalogCard'
 import {
   ADDON_CARD_TONE_OPTIONS,
+  resolveAddOnCardTone,
   type AddOnIllustrationKind,
 } from '../../lib/featureOfferVisuals'
 
@@ -23,6 +24,7 @@ export type FeatureOfferFormPayload = {
   price_cents: number
   currency: string
   sort_order: number
+  card_tone: AddOnIllustrationKind
 }
 
 const CARD_TONES = ADDON_CARD_TONE_OPTIONS.map(option => option.id)
@@ -41,6 +43,7 @@ function emptyForm(): FeatureOfferFormPayload {
     price_cents: 0,
     currency: 'INR',
     sort_order: 0,
+    card_tone: 'neutral',
   }
 }
 
@@ -53,6 +56,7 @@ function formFromOffer(offer: PlatformFeatureOffer): FeatureOfferFormPayload {
     price_cents: offer.price_cents ?? 0,
     currency: offer.currency ?? 'INR',
     sort_order: offer.sort_order ?? 0,
+    card_tone: resolveAddOnCardTone(offer.feature_key, offer.title, offer.card_tone),
   }
 }
 
@@ -83,14 +87,21 @@ export function PlatformFeatureOfferModal({
 
   useEffect(() => {
     if (!open) return
-    setCardTone('neutral')
     if (offer) {
       const f = formFromOffer(offer)
       setForm(f)
+      setCardTone(f.card_tone)
       setPriceRupees(f.price_cents > 0 ? String(f.price_cents / 100) : '')
     } else {
       const base = emptyForm()
-      setForm({ ...base, ...initial })
+      const merged = { ...base, ...initial }
+      const tone = resolveAddOnCardTone(
+        merged.feature_key,
+        merged.title,
+        merged.card_tone,
+      )
+      setForm({ ...merged, card_tone: tone })
+      setCardTone(tone)
       setPriceRupees('')
     }
   }, [open, offer, initial])
@@ -109,7 +120,7 @@ export function PlatformFeatureOfferModal({
 
   const submit = () => {
     const price_cents = form.pricing_type === 'paid' ? centsFromRupees(priceRupees) : 0
-    void onSave({ ...form, price_cents })
+    void onSave({ ...form, price_cents, card_tone: cardTone })
   }
 
   return (
@@ -117,7 +128,7 @@ export function PlatformFeatureOfferModal({
       open={open}
       onClose={onClose}
       title={offer ? 'Edit feature' : 'New Feature'}
-      subtitle="Listed features appear for organisations under Features."
+      subtitle="Listed features appear for organisations under Features. Preview shows the org card."
       size="xl"
       bodyClassName="split-pane !p-0 min-h-0 flex-1 overflow-hidden"
       footer={

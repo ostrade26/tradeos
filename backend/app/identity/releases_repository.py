@@ -303,12 +303,10 @@ def create_deploy_draft_release(
     actor_user_id: int,
     notify_platform_admins: bool = False,
 ) -> dict[str, Any]:
-    # notify_platform_admins kept for API compat; deploy drafts are reviewed in Releases, not inbox.
-    _ = notify_platform_admins
     sha = _normalize_commit_sha(commit_sha)
     existing = get_release_by_deploy_commit(conn, sha)
     if existing:
-        return {"release": existing, "created": False, "notified": 0}
+        return {"release": existing, "created": False, "notified": 0, "draft_features": []}
 
     env = (environment or "production").strip() or "production"
     latest = latest_published_version(conn)
@@ -362,11 +360,54 @@ def create_deploy_draft_release(
         entity_id=str(release_id),
         new_value={"version": version, "commit_sha": sha, "environment": env},
     )
-    release = _get_release(conn, release_id)
+
+    from .feature_offers_repository import ensure_draft_offers_from_deploy_items
+    from .notifications_repository import notify_platform_admins as send_platform_admin_notices
+
+    gated_items = [i for i in cleaned if is_gated_release_category(str(i.get("category") or ""))]
+    draft_offers = ensure_draft_offers_from_deploy_items(
+        conn,
+        items=gated_items,
+        deploy_sha=sha,
+        actor_user_id=actor_user_id,
+    )
+    draft_keys = [str(o.get("feature_key") or "") for o in draft_offers if o.get("feature_key")]
+
     notified = 0
-    # Deploy drafts live under Platform Admin → Releases. Do not push Tradeal admins
-    # into inbox — they review/publish from the Releases register.
-    return {"release": release, "created": True, "notified": notified}
+    if notify_platform_admins and gated_items:
+        titles = [str(i.get("title") or "") for i in gated_items]
+        body_lines = [f"• {t}" for t in titles if t]
+        body = (
+            f"Production deploy {sha[:7]} included marketplace feature(s).\n\n"
+            + "\n".join(body_lines)
+            + "\n\nReview pricing and Publish from Features & Access when ready."
+        )
+        result = send_platform_admin_notices(
+            conn,
+            kind="deploy_review",
+            title=f"New feature(s) from deploy · {sha[:7]}",
+            body=body,
+            payload={
+                "cta": "review_features",
+                "release_id": str(release_id),
+                "commit_sha": sha,
+                "version": version,
+                "draft_feature_keys": "\n".join(draft_keys),
+                "feature_titles": "\n".join(titles),
+            },
+            href="/platform-admin/add-ons",
+            actor_user_id=actor_user_id,
+            source="deploy",
+        )
+        notified = int(result.get("sent") or 0)
+
+    release = _get_release(conn, release_id)
+    return {
+        "release": release,
+        "created": True,
+        "notified": notified,
+        "draft_features": draft_keys,
+    }
 
 
 def create_release(
@@ -505,7 +546,6 @@ def publish_release(
         raise HTTPException(status_code=400, detail="Release has no publishable items")
 
     lines = [f"{_category_label(i['category'])}: {i['title']}" for i in items]
-    apply_scope = "user" if audience == "user" else "org"
     base_title = f"Tradeal {release['version']}"
     default_body = release.get("summary") or "\n".join(lines)
     sent_total = 0
@@ -539,37 +579,9 @@ def publish_release(
         sent_total += int(inform_result.get("sent") or 0)
         skipped_amc = max(skipped_amc, int(inform_result.get("skipped_expired_amc") or 0))
 
-    if feature_items:
-        feature_keys = [i["feature_key"] for i in feature_items if i.get("feature_key")]
-        feature_lines = [f"{i['title']}" for i in feature_items]
-        feature_body = "\n".join(f"• {line}" for line in feature_lines)
-        if release.get("summary") and not inform_items:
-            feature_body = f"{release['summary'].strip()}\n\n{feature_body}"
-        feature_result = create_notifications_for_audience(
-            conn,
-            audience=audience,
-            organisation_id=organisation_id,
-            recipient_user_id=recipient_user_id,
-            recipient_scope=recipient_scope if audience != "user" else "org_admin",
-            exclude_expired_amc=exclude_expired_amc,
-            kind="feature_launch",
-            title=f"{base_title} · Enhancements",
-            body=feature_body,
-            payload={
-                "cta": "interest",
-                "feature_key": feature_keys[0] if feature_keys else f"release-{release['version']}",
-                "feature_keys": "\n".join(feature_keys),
-                "items": "\n".join(feature_lines),
-                "changelog": _changelog_payload(feature_items),
-                "release_id": str(release_id),
-                "version": release["version"],
-                "apply_scope": apply_scope,
-            },
-            href="",
-            actor_user_id=actor_user_id,
-        )
-        sent_total += int(feature_result.get("sent") or 0)
-        skipped_amc = max(skipped_amc, int(feature_result.get("skipped_expired_amc") or 0))
+    # Gated marketplace features are published from Features & Access (catalog list),
+    # not via release publish. Keep them on the release record for deploy history only.
+    _ = feature_items
 
     result = {"sent": sent_total, "skipped_expired_amc": skipped_amc}
     now = _now_iso()

@@ -21,6 +21,7 @@ import { sessionFromApi } from '../lib/authSession'
 import { saveAuthSession } from '../lib/auth'
 import { appPath } from '../lib/appShellMode'
 import {
+  isFeatureBrowseNotice,
   isFeatureDecisionNotice,
   isFeatureEnhancementNotice,
   isFeatureInterestNotice,
@@ -135,8 +136,12 @@ export function useInboxItemActions({
     }
     if (row.notice) {
       if (row.notice.kind === 'deploy_review') {
-        // Legacy notices — drafts are reviewed under Releases, not inbox.
-        navigate('/platform-admin/releases')
+        navigate(row.notice.href || '/platform-admin/add-ons')
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
+      if (isFeatureBrowseNotice(row.notice)) {
+        navigate(row.notice.href || appPath('/features'))
         if (row.category === 'notice' && row.unread) void markRead(row.id)
         return
       }

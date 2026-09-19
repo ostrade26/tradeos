@@ -1582,24 +1582,11 @@ class FeatureOfferBody(BaseModel):
     price_cents: int = 0
     currency: str = "INR"
     sort_order: int = 0
+    card_tone: str = ""
 
 
 class FeatureOfferStatusBody(BaseModel):
     catalog_status: str
-
-
-@router.get("/production-updates", summary="Latest deploy and catalog gaps")
-def platform_production_updates(request: Request) -> dict[str, Any]:
-    session = _session(request)
-    auth.require_platform(session)
-    auth.require_permission(session, "organisations.edit")
-    from .feature_offers_repository import production_updates_summary
-
-    if uses_postgres():
-        with _pg_connect() as conn:
-            return production_updates_summary(conn)
-    with _sqlite_connect() as conn:
-        return production_updates_summary(conn)
 
 
 @router.get("/feature-offers", summary="Add-ons catalog")
@@ -1635,6 +1622,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
                 price_cents=body.price_cents,
                 currency=body.currency,
                 sort_order=body.sort_order,
+                card_tone=body.card_tone,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1650,6 +1638,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
             price_cents=body.price_cents,
             currency=body.currency,
             sort_order=body.sort_order,
+            card_tone=body.card_tone,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1675,6 +1664,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
                 price_cents=body.price_cents,
                 currency=body.currency,
                 sort_order=body.sort_order,
+                card_tone=body.card_tone,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1690,6 +1680,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
             price_cents=body.price_cents,
             currency=body.currency,
             sort_order=body.sort_order,
+            card_tone=body.card_tone,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1712,6 +1703,20 @@ def delete_platform_feature_offer(offer_id: int, request: Request) -> dict[str, 
         offer = delete_offer(conn, offer_id, actor_user_id=session.user.id)
         conn.commit()
         return {"ok": True, "offer": offer}
+
+
+@router.get("/feature-offers/{offer_id}/usage", summary="Organisations using a feature offer")
+def get_platform_feature_offer_usage(offer_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import get_offer_usage
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return get_offer_usage(conn, offer_id)
+    with _sqlite_connect() as conn:
+        return get_offer_usage(conn, offer_id)
 
 
 @router.post("/feature-offers/{offer_id}/catalog-status", summary="List, retire, or draft an offer")

@@ -3,23 +3,22 @@ import { useSearchParams } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
-import { Card, CardHeader } from '../ui/Card'
 import { DataTable, TableSkeleton } from '../ui/DataTable'
 import { EmptyState } from '../ui/Tabs'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { DetailPanelMenu } from '../ui/DetailPanelMenu'
+import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { ApiError } from '../../api/client'
-import {
-  platformApi,
-  type PlatformFeatureOffer,
-  type ProductionUpdatesSummary,
-} from '../../api/platformApi'
+import { platformApi, type PlatformFeatureOffer } from '../../api/platformApi'
 import { useToast } from '../../hooks/useToast'
+import { useLargeScreen } from '../../hooks/useMediaQuery'
+import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
 import { formatDateTime } from '../../lib/utils'
 import {
   PlatformFeatureOfferModal,
   type FeatureOfferFormPayload,
 } from './PlatformFeatureOfferModal'
+import { PlatformFeatureOfferUsageDrawer } from './PlatformFeatureOfferUsageDrawer'
 
 function statusBadge(status: string) {
   if (status === 'listed') return <Badge variant="success">Published</Badge>
@@ -44,15 +43,33 @@ export const PlatformFeatureCatalogPanel = forwardRef<
 >(function PlatformFeatureCatalogPanel(_props, ref) {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
+  const isLargeScreen = useLargeScreen()
+  const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
+  const effectiveDocked = panelDocked && isLargeScreen
   const [loading, setLoading] = useState(true)
   const [offers, setOffers] = useState<PlatformFeatureOffer[]>([])
-  const [summary, setSummary] = useState<ProductionUpdatesSummary | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<PlatformFeatureOffer | null>(null)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<PlatformFeatureOffer | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [usageOffer, setUsageOffer] = useState<PlatformFeatureOffer | null>(null)
+
+  const closeUsage = useCallback(() => {
+    setDetailPanelOpen(false)
+    setUsageOffer(null)
+  }, [setDetailPanelOpen])
+
+  const handleDockChange = useCallback(
+    (docked: boolean) => {
+      if (!docked) setDetailPanelOpen(false)
+      setPanelDocked(docked)
+      saveOrderPanelDocked(docked)
+    },
+    [setDetailPanelOpen],
+  )
 
   const createPrefill = useMemo(() => {
     const key = searchParams.get('createKey')?.trim()
@@ -71,12 +88,8 @@ export const PlatformFeatureCatalogPanel = forwardRef<
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [offersRes, summaryRes] = await Promise.all([
-        platformApi.listFeatureOffers(),
-        platformApi.productionUpdates(),
-      ])
+      const offersRes = await platformApi.listFeatureOffers()
       setOffers(offersRes.offers)
-      setSummary(summaryRes)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not load features catalog')
     } finally {
@@ -104,15 +117,15 @@ export const PlatformFeatureCatalogPanel = forwardRef<
   const saveOffer = async (payload: FeatureOfferFormPayload) => {
     setSaving(true)
     try {
-      if (editing) {
-        await platformApi.updateFeatureOffer(editing.id, payload)
-        toast.success('Feature updated')
-      } else {
-        await platformApi.createFeatureOffer(payload)
-        toast.success('Feature created as draft')
-      }
+      const res = editing
+        ? await platformApi.updateFeatureOffer(editing.id, payload)
+        : await platformApi.createFeatureOffer(payload)
+      toast.success(editing ? 'Feature updated' : 'Feature created as draft')
       closeModal()
       await load()
+      if (usageOffer && res.offer.id === usageOffer.id) {
+        setUsageOffer(res.offer)
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save offer')
     } finally {
@@ -124,7 +137,11 @@ export const PlatformFeatureCatalogPanel = forwardRef<
     setBusyId(offerId)
     try {
       await platformApi.setFeatureOfferCatalogStatus(offerId, catalog_status)
-      toast.success(catalog_status === 'listed' ? 'Published to Features' : 'Unpublished from Features')
+      toast.success(
+        catalog_status === 'listed'
+          ? 'Published to Features · organisations notified'
+          : 'Unpublished from Features',
+      )
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update status')
@@ -135,6 +152,11 @@ export const PlatformFeatureCatalogPanel = forwardRef<
 
   const confirmDelete = async () => {
     if (!deleting) return
+    if (deleting.catalog_status === 'listed') {
+      toast.error('Unpublish this feature before deleting it')
+      setDeleting(null)
+      return
+    }
     setDeleteBusy(true)
     try {
       await platformApi.deleteFeatureOffer(deleting.id)
@@ -149,85 +171,8 @@ export const PlatformFeatureCatalogPanel = forwardRef<
     }
   }
 
-  const hasProductionUpdates =
-    (summary?.ui_items?.length ?? 0) > 0 || (summary?.feature_items?.length ?? 0) > 0
-  const releaseSubtitle = summary?.release
-    ? `${summary.release.version ?? 'Draft'} · ${summary.release.title ?? 'Deploy'}`
-    : undefined
-
   return (
     <div className="space-y-4">
-      {hasProductionUpdates ? (
-        <Card padding={false}>
-          <div className="px-6 pt-6">
-            <CardHeader title="Production updates" subtitle={releaseSubtitle} />
-          </div>
-          <div className="px-6 pb-6 space-y-4">
-            {summary?.ui_items?.length ? (
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">Shipped (UI & fixes)</p>
-                <ul className="mt-2 text-sm text-heading list-disc pl-5 space-y-1">
-                  {summary.ui_items.map((item, i) => (
-                    <li key={`${item.title}-${i}`}>{item.title}</li>
-                  ))}
-                </ul>
-                <p className="text-xs text-muted mt-2">Publish these via Releases → bell notifications only.</p>
-              </div>
-            ) : null}
-            {summary?.feature_items?.length ? (
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">Feature enhancements</p>
-                <ul className="mt-2 space-y-2">
-                  {summary.feature_items.map(item => (
-                    <li
-                      key={`${item.feature_key}-${item.title}`}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-heading">{item.title}</p>
-                        <p className="text-xs text-muted font-mono">{item.feature_key || '—'}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {item.catalog_status === 'listed' ? (
-                          <Badge variant="success">Published</Badge>
-                        ) : item.catalog_offer_id ? (
-                          <Badge variant="info">
-                            {item.catalog_status === 'retired' ? 'Unpublished' : 'Draft'}
-                          </Badge>
-                        ) : (
-                          <Badge variant="warning">No feature</Badge>
-                        )}
-                        {!item.catalog_offer_id && item.feature_key ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditing(null)
-                              setModalOpen(true)
-                              setSearchParams(
-                                prev => {
-                                  const next = new URLSearchParams(prev)
-                                  next.set('createKey', item.feature_key!)
-                                  next.set('createTitle', String(item.title ?? item.feature_key))
-                                  return next
-                                },
-                                { replace: true },
-                              )
-                            }}
-                          >
-                            New Feature
-                          </Button>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        </Card>
-      ) : null}
-
       <div className="flex justify-end">
         <Button
           size="sm"
@@ -246,6 +191,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
       ) : (
         <DataTable
           data={offers}
+          onRowClick={r => setUsageOffer(r)}
           columns={[
             {
               key: 'title',
@@ -293,7 +239,10 @@ export const PlatformFeatureCatalogPanel = forwardRef<
                     variant="outline"
                     className="w-[6.75rem]"
                     loading={busyId === r.id}
-                    onClick={() => void setStatus(r.id, 'retired')}
+                    onClick={e => {
+                      e.stopPropagation()
+                      void setStatus(r.id, 'retired')
+                    }}
                   >
                     Unpublish
                   </Button>
@@ -303,7 +252,10 @@ export const PlatformFeatureCatalogPanel = forwardRef<
                     size="sm"
                     className="w-[6.75rem]"
                     loading={busyId === r.id}
-                    onClick={() => void setStatus(r.id, 'listed')}
+                    onClick={e => {
+                      e.stopPropagation()
+                      void setStatus(r.id, 'listed')
+                    }}
                   >
                     Publish
                   </Button>
@@ -314,28 +266,34 @@ export const PlatformFeatureCatalogPanel = forwardRef<
               header: '',
               className: 'text-center !px-1',
               render: r => (
-                <DetailPanelMenu
-                  align="end"
-                  tableTrigger="h-7 w-7"
-                  items={[
-                    {
-                      type: 'button',
-                      label: 'Edit',
-                      icon: Pencil,
-                      onClick: () => {
-                        setEditing(r)
-                        setModalOpen(true)
+                <div onClick={e => e.stopPropagation()}>
+                  <DetailPanelMenu
+                    align="end"
+                    tableTrigger="h-7 w-7"
+                    items={[
+                      {
+                        type: 'button',
+                        label: 'Edit',
+                        icon: Pencil,
+                        onClick: () => {
+                          setEditing(r)
+                          setModalOpen(true)
+                        },
                       },
-                    },
-                    {
-                      type: 'button',
-                      label: 'Delete',
-                      icon: Trash2,
-                      tone: 'danger',
-                      onClick: () => setDeleting(r),
-                    },
-                  ]}
-                />
+                      ...(r.catalog_status === 'listed'
+                        ? []
+                        : [
+                            {
+                              type: 'button' as const,
+                              label: 'Delete',
+                              icon: Trash2,
+                              tone: 'danger' as const,
+                              onClick: () => setDeleting(r),
+                            },
+                          ]),
+                    ]}
+                  />
+                </div>
               ),
             },
           ]}
@@ -349,6 +307,14 @@ export const PlatformFeatureCatalogPanel = forwardRef<
           }
         />
       )}
+
+      <PlatformFeatureOfferUsageDrawer
+        offer={usageOffer}
+        open={usageOffer != null}
+        onClose={closeUsage}
+        docked={effectiveDocked}
+        onDockChange={handleDockChange}
+      />
 
       <PlatformFeatureOfferModal
         open={modalOpen}
@@ -380,11 +346,15 @@ export const PlatformFeatureCatalogPanel = forwardRef<
           from the catalog. Orgs will no longer see this card in Features.
         </p>
         {(deleting?.active_orgs ?? 0) > 0 || (deleting?.pending_requests ?? 0) > 0 ? (
-          <p className="text-sm text-warning mt-3">
-            This feature has {deleting?.active_orgs ?? 0} active org
-            {(deleting?.active_orgs ?? 0) === 1 ? '' : 's'} and {deleting?.pending_requests ?? 0} pending
-            request{(deleting?.pending_requests ?? 0) === 1 ? '' : 's'}. Unpublish or resolve those first —
-            delete will be blocked.
+          <p className="text-sm text-muted mt-3">
+            {deleting?.active_orgs ?? 0} organisation
+            {(deleting?.active_orgs ?? 0) === 1 ? '' : 's'} already have access
+            {(deleting?.pending_requests ?? 0) > 0
+              ? ` and ${deleting?.pending_requests} pending request${
+                  (deleting?.pending_requests ?? 0) === 1 ? '' : 's'
+                }`
+              : ''}
+            . Deleting removes the catalog card only — existing access is unchanged.
           </p>
         ) : null}
       </ConfirmDialog>

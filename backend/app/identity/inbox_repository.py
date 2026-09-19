@@ -108,8 +108,25 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
     for n in list_notifications_for_user(conn, user_id, limit=limit):
         if _is_review_interest_notice(n):
             continue
-        # Deploy drafts are reviewed under Releases, not inbox.
+        # Feature drafts are reviewed under Features & Access.
         if str(n.get("kind") or "") == "deploy_review":
+            unread = bool(n.get("unread"))
+            out.append(
+                _inbox_item(
+                    item_id=f"notice-{n['id']}",
+                    kind="deploy_review",
+                    category="notice",
+                    status="open" if unread else "done",
+                    unread=unread,
+                    title=str(n.get("title") or "New feature from deploy"),
+                    subtitle=str(n.get("body") or "")[:160],
+                    from_label="Tradeal",
+                    date_iso=str(n.get("created_at") or ""),
+                    actionable=True,
+                    href=str(n.get("href") or "/platform-admin/add-ons"),
+                    notice=n,
+                )
+            )
             continue
         unread = bool(n.get("unread"))
         linked_request: dict[str, Any] | None = None
@@ -141,7 +158,7 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
             status = "open" if _seat_open(str(linked_seat.get("status") or "")) else "done"
         elif kind == "seat_request" and str(payload.get("decision") or "") in ("approved", "rejected"):
             status = "done"
-        elif kind in WORKFLOW_NOTICE_KINDS:
+        elif kind == "feature_launch" or kind in WORKFLOW_NOTICE_KINDS:
             status = "open" if unread else "done"
         else:
             # FYI (product update, maintenance, backup, announcement, …) — no workflow status.
@@ -408,7 +425,6 @@ def inbox_notice_unread(conn, user_id: int) -> int:
         for n in list_notifications_for_user(conn, user_id, limit=200)
         if n.get("unread")
         and not _is_review_interest_notice(n)
-        and str(n.get("kind") or "") != "deploy_review"
     )
 
 

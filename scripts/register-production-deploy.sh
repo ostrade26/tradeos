@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 API_URL="${TRADEAL_API_URL:-${TRADEAL_PRODUCTION_API_URL:-}}"
 TOKEN="${TRADEAL_API_TOKEN:-${TRADEOS_API_TOKEN:-}}"
-COMMIT_SHA="${RAILWAY_GIT_COMMIT_SHA:-${GITHUB_SHA:-$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || true)}}"
+COMMIT_SHA="${COMMIT_SHA:-${RAILWAY_GIT_COMMIT_SHA:-${GITHUB_SHA:-$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || true)}}}"
 ENVIRONMENT="${TRADEAL_DEPLOY_ENV:-production}"
 
 if [[ -z "${API_URL}" ]]; then

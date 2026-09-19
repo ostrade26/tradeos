@@ -12,19 +12,19 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
-import { platformAccessIcon, platformFeatureIcon, platformReleaseIcon } from './platformProductIcons'
+import { platformAccessIcon, platformFeaturesAccessNavIcon, platformReleaseIcon } from './platformProductIcons'
 import { formatDateTime } from './utils'
 import type { UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from './unifiedInbox'
 
-export type InboxIconTone = 'success' | 'danger' | 'warning' | 'accent' | 'muted'
+export type InboxIconTone = 'success' | 'danger' | 'warning' | 'accent' | 'violet' | 'orange' | 'teal' | 'muted'
 
 export const notificationKindIcon: Record<string, LucideIcon> = {
   seat_request: UserPlus,
   credentials: KeyRound,
   payment_reminder: Wallet,
   product_update: Megaphone,
-  feature_launch: platformFeatureIcon,
+  feature_launch: platformFeaturesAccessNavIcon,
   release_notes: platformReleaseIcon,
   maintenance: Wrench,
   announcement: Megaphone,
@@ -44,7 +44,7 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'maintenance') return 'Maintenance'
   if (kind === 'announcement') return 'Announcement'
   if (kind === 'backup_reminder') return 'Backup'
-  if (kind === 'deploy_review') return 'Deploy review'
+  if (kind === 'deploy_review') return 'New feature'
   if (kind === 'product_request') return 'Tradeal reply'
   if (kind === 'sent_request') return 'Your request'
   if (kind === 'seat_request') return 'Seat request'
@@ -87,6 +87,10 @@ export function isFeatureInterestNotice(item: UserNotification): boolean {
   return item.kind === 'feature_launch' && item.payload?.cta === 'interest'
 }
 
+export function isFeatureBrowseNotice(item: UserNotification): boolean {
+  return item.kind === 'feature_launch' && item.payload?.cta === 'browse'
+}
+
 export function isFeatureDecisionNotice(item: UserNotification): boolean {
   return item.payload?.cta === 'decision'
 }
@@ -98,7 +102,7 @@ export function isFeatureEnhancementNotice(item: UserNotification): boolean {
 
 export function isProductUpdateNotice(item: UserNotification): boolean {
   const cta = item.payload?.cta
-  if (cta === 'choose' || cta === 'acknowledge') return false
+  if (cta === 'choose' || cta === 'acknowledge' || cta === 'interest' || cta === 'browse') return false
   return cta === 'update' || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))
 }
 
@@ -143,12 +147,22 @@ export function inboxItemVisual(item: Pick<UnifiedInboxItem, 'kind' | 'notice' |
   if (item.kind === 'credentials') return { Icon: KeyRound, tone: 'accent' }
   if (item.kind === 'deploy_review') return { Icon: ClipboardCheck, tone: 'warning' }
   if (item.kind === 'feature_interest') return { Icon: platformAccessIcon, tone: 'accent' }
+  if (item.kind === 'product_update' || item.kind === 'release_notes') {
+    return { Icon: notificationIcon(item.kind, payload), tone: 'orange' }
+  }
+  if (item.kind === 'announcement') {
+    return { Icon: Megaphone, tone: 'teal' }
+  }
 
   if (payload?.decision === 'approved') {
     return { Icon: BadgeCheck, tone: 'success' }
   }
   if (payload?.decision === 'rejected') {
     return { Icon: XCircle, tone: 'danger' }
+  }
+
+  if (item.kind === 'feature_launch') {
+    return { Icon: platformFeaturesAccessNavIcon, tone: 'violet' }
   }
 
   return { Icon: notificationIcon(item.kind, payload), tone: 'muted' }
@@ -164,6 +178,12 @@ export function inboxIconToneClass(tone: InboxIconTone): string {
       return 'bg-warning-muted text-warning'
     case 'accent':
       return 'bg-accent/10 text-accent dark:bg-accent/20'
+    case 'violet':
+      return 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
+    case 'orange':
+      return 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+    case 'teal':
+      return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
     case 'muted':
     default:
       return 'bg-gray-100 text-muted dark:bg-zinc-800'

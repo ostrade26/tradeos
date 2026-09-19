@@ -15,6 +15,11 @@ from typing import Any
 MAX_ITEMS = 40
 SKIP_PREFIXES = ("chore(", "chore:", "docs(", "docs:", "ci(", "ci:", "test(", "test:")
 MERGE_RE = re.compile(r"^merge(\s|$)", re.I)
+# Explicit marketplace feature tags — plain `feat:` stays an inform/system update.
+FEATURE_TAG_RE = re.compile(
+    r"\[(?:feature|marketplace|enhancement)(?::([a-z0-9][a-z0-9-]{0,78}))?\]",
+    re.I,
+)
 
 
 def infer_category(subject: str) -> str:
@@ -24,11 +29,22 @@ def infer_category(subject: str) -> str:
         return "ui_and_fixes"
     if lower.startswith("fix") or lower.startswith("bugfix") or lower.startswith("ui:") or lower.startswith("style"):
         return "ui_and_fixes"
-    if "[feature]" in lower or lower.startswith("feat") or "[enhancement]" in lower:
+    if FEATURE_TAG_RE.search(text):
         return "feature_enhancement"
     if lower.startswith("chore") or lower.startswith("docs") or lower.startswith("ci") or lower.startswith("test"):
         return "ui_and_fixes"
+    # Conventional `feat:` without [feature] is treated as a shipped improvement (Releases),
+    # not a paid/gated marketplace feature.
+    if lower.startswith("feat"):
+        return "improvement"
     return "ui_and_fixes"
+
+
+def extract_feature_key(subject: str) -> str:
+    m = FEATURE_TAG_RE.search(subject or "")
+    if m and m.group(1):
+        return m.group(1).lower()
+    return ""
 
 
 def should_skip_subject(subject: str, *, include_chores: bool) -> bool:
@@ -104,13 +120,16 @@ def build_items(commits: list[tuple[str, str, str]], *, include_chores: bool) ->
         seen.add(key)
         title = subject[:200]
         detail = (body or subject).strip()[:2000]
-        items.append(
-            {
-                "category": infer_category(subject),
-                "title": title,
-                "detail": detail or title,
-            }
-        )
+        category = infer_category(subject)
+        item: dict[str, Any] = {
+            "category": category,
+            "title": title,
+            "detail": detail or title,
+        }
+        feature_key = extract_feature_key(subject)
+        if feature_key:
+            item["feature_key"] = feature_key
+        items.append(item)
         if len(items) >= MAX_ITEMS:
             break
     return items
@@ -158,7 +177,8 @@ def main() -> None:
         "title": "",
         "summary": "",
         "items": items,
-        "notify_platform_admins": False,
+        # Notify Tradeal admins when gated [feature] items land as draft Features offers.
+        "notify_platform_admins": True,
     }
     json.dump(payload, sys.stdout)
     sys.stdout.write("\n")

@@ -7,12 +7,12 @@ const PATTERN_CYCLE: AddOnGeometricPatternKind[] = ['dots', 'grid', 'lines', 'di
 
 /** Tint matched to category wash — kept very light so pattern stays subtle. */
 const PATTERN_INK: Record<AddOnIllustrationKind, string> = {
-  neutral: 'rgba(100, 116, 139, 0.06)',
-  ai: 'rgba(56, 189, 248, 0.07)',
-  analytics: 'rgba(236, 72, 153, 0.06)',
-  connect: 'rgba(249, 115, 22, 0.06)',
-  ops: 'rgba(16, 185, 129, 0.06)',
-  spark: 'rgba(6, 182, 212, 0.06)',
+  neutral: 'rgba(100, 116, 139, 0.035)',
+  ai: 'rgba(56, 189, 248, 0.04)',
+  analytics: 'rgba(236, 72, 153, 0.035)',
+  connect: 'rgba(249, 115, 22, 0.035)',
+  ops: 'rgba(16, 185, 129, 0.035)',
+  spark: 'rgba(6, 182, 212, 0.035)',
 }
 
 const PATTERN_INK_DARK: Record<AddOnIllustrationKind, string> = {

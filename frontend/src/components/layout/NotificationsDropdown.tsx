@@ -29,10 +29,14 @@ export function NotificationsDropdown() {
     refreshPlatform,
   })
 
-  const preview = useMemo(
-    () => (platformConsole ? openItems : openItems.filter(row => row.category === 'notice')).slice(0, 8),
-    [openItems, platformConsole],
-  )
+  const preview = useMemo(() => {
+    if (platformConsole) return openItems.slice(0, 8)
+    // Org FYI notices (feature launch, updates, …) stay status=done while unread —
+    // match the inbox Open filter: unread notices, not workflow status.
+    return items
+      .filter(row => row.category === 'notice' && row.unread)
+      .slice(0, 8)
+  }, [items, openItems, platformConsole])
 
   const handleOpen = (next: boolean) => {
     setOpen(next)
@@ -102,8 +106,8 @@ export function NotificationsDropdown() {
           </p>
         </div>
         ) : (
-          <div className="max-h-80 overflow-y-auto py-1">
-            {preview.map(row => (
+          <div className="max-h-80 overflow-y-auto">
+            {preview.map((row, index) => (
               <button
                 key={row.id}
                 type="button"
@@ -111,6 +115,7 @@ export function NotificationsDropdown() {
                 className={cn(
                   'flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer',
                   row.unread && 'bg-accent/5 dark:bg-accent/10',
+                  index < preview.length - 1 && 'border-b border-gray-200 dark:border-gray-700',
                 )}
               >
                 <InboxKindGlyph item={row} size="sm" className="mt-0.5" />
@@ -119,12 +124,12 @@ export function NotificationsDropdown() {
                   <p className="text-xs text-muted mt-0.5 leading-snug truncate">
                     {row.from} · {row.subtitle}
                   </p>
+                  {row.dateIso ? (
+                    <p className="text-[11px] tabular-nums mt-1 text-gray-400 dark:text-gray-500">
+                      {formatInboxDate(row.dateIso)}
+                    </p>
+                  ) : null}
                 </div>
-                {row.dateIso ? (
-                  <span className="shrink-0 text-[11px] text-muted tabular-nums">
-                    {formatInboxDate(row.dateIso)}
-                  </span>
-                ) : null}
               </button>
             ))}
           </div>

@@ -13,15 +13,22 @@ from .repository import append_audit_log
 
 PRICING_TYPES = frozenset({"free", "paid", "contact"})
 CATALOG_STATUSES = frozenset({"draft", "listed", "retired"})
+CARD_TONES = frozenset({"neutral", "ai", "analytics", "connect", "ops", "spark"})
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_card_tone(raw: str | None) -> str:
+    tone = (raw or "").strip().lower()
+    return tone if tone in CARD_TONES else ""
+
+
 def _offer_row(row: Any) -> dict[str, Any]:
     data = dict(row_dict(row))
     data["id"] = int(data["id"])
+    data["card_tone"] = _normalize_card_tone(str(data.get("card_tone") or ""))
     return data
 
 
@@ -94,6 +101,65 @@ def get_offer(conn, offer_id: int) -> dict[str, Any]:
     return _offer_row(row)
 
 
+def get_offer_usage(conn, offer_id: int) -> dict[str, Any]:
+    """Offer details plus organisations with access and open purchase requests."""
+    offer = get_offer(conn, offer_id)
+    offer.update(_counts_for_offer(conn, str(offer["feature_key"])))
+    key = str(offer["feature_key"])
+    ph = "%s" if uses_postgres() else "?"
+    active_rows = conn.execute(
+        f"""
+        SELECT o.id AS organisation_id, o.name AS organisation_name, o.org_code,
+               a.applied_at, a.version
+        FROM organisation_applied_updates a
+        JOIN organisations o ON o.id = a.organisation_id
+        WHERE a.feature_key = {ph}
+        ORDER BY a.applied_at DESC, o.name
+        """,
+        (key,),
+    ).fetchall()
+    pending_rows = conn.execute(
+        f"""
+        SELECT i.id AS interest_id, o.id AS organisation_id, o.name AS organisation_name,
+               o.org_code, i.created_at, i.status,
+               COALESCE(u.name, u.username, '') AS requested_by_name
+        FROM feature_launch_interests i
+        JOIN organisations o ON o.id = i.organisation_id
+        LEFT JOIN users u ON u.id = i.requested_by_user_id
+        WHERE i.feature_key = {ph} AND i.status = 'interested'
+        ORDER BY i.created_at DESC, o.name
+        """,
+        (key,),
+    ).fetchall()
+    organisations = []
+    for row in active_rows:
+        data = dict(row_dict(row))
+        organisations.append(
+            {
+                "organisation_id": int(data["organisation_id"]),
+                "organisation_name": str(data.get("organisation_name") or ""),
+                "org_code": str(data.get("org_code") or ""),
+                "applied_at": str(data.get("applied_at") or ""),
+                "version": str(data.get("version") or ""),
+            }
+        )
+    pending = []
+    for row in pending_rows:
+        data = dict(row_dict(row))
+        pending.append(
+            {
+                "interest_id": int(data["interest_id"]),
+                "organisation_id": int(data["organisation_id"]),
+                "organisation_name": str(data.get("organisation_name") or ""),
+                "org_code": str(data.get("org_code") or ""),
+                "created_at": str(data.get("created_at") or ""),
+                "status": str(data.get("status") or "interested"),
+                "requested_by_name": str(data.get("requested_by_name") or ""),
+            }
+        )
+    return {"offer": offer, "organisations": organisations, "pending_requests": pending}
+
+
 def get_offer_by_key(conn, feature_key: str) -> dict[str, Any] | None:
     key = normalize_feature_key(feature_key, feature_key)
     if uses_postgres():
@@ -117,6 +183,7 @@ def upsert_offer(
     currency: str,
     sort_order: int,
     actor_user_id: int,
+    card_tone: str = "",
 ) -> dict[str, Any]:
     key = normalize_feature_key(feature_key, title)
     title = title.strip()
@@ -125,6 +192,7 @@ def upsert_offer(
     pricing = (pricing_type or "free").strip().lower()
     if pricing not in PRICING_TYPES:
         raise HTTPException(status_code=400, detail="Invalid pricing type")
+    tone = _normalize_card_tone(card_tone)
     now = _now()
     if offer_id:
         current = get_offer(conn, offer_id)
@@ -137,20 +205,20 @@ def upsert_offer(
                 """
                 UPDATE platform_feature_offers
                 SET feature_key = %s, title = %s, description = %s, pricing_type = %s,
-                    price_cents = %s, currency = %s, sort_order = %s, updated_at = %s
+                    price_cents = %s, currency = %s, sort_order = %s, card_tone = %s, updated_at = %s
                 WHERE id = %s
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, now, offer_id),
+                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, offer_id),
             )
         else:
             conn.execute(
                 """
                 UPDATE platform_feature_offers
                 SET feature_key = ?, title = ?, description = ?, pricing_type = ?,
-                    price_cents = ?, currency = ?, sort_order = ?, updated_at = ?
+                    price_cents = ?, currency = ?, sort_order = ?, card_tone = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, now, offer_id),
+                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, offer_id),
             )
         offer = get_offer(conn, offer_id)
     else:
@@ -161,11 +229,11 @@ def upsert_offer(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s)
+                 catalog_status, sort_order, card_tone, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s)
                 RETURNING *
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, now, now),
+                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, now),
             ).fetchone()
             offer = _offer_row(row)
         else:
@@ -173,10 +241,10 @@ def upsert_offer(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)
+                 catalog_status, sort_order, card_tone, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, now, now),
+                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, now),
             )
             offer = get_offer(conn, int(cur.lastrowid))
     append_audit_log(
@@ -185,21 +253,18 @@ def upsert_offer(
         action="feature_offer.upserted",
         entity_type="platform_feature_offer",
         entity_id=str(offer["id"]),
-        new_value={"feature_key": key, "pricing_type": pricing},
+        new_value={"feature_key": key, "pricing_type": pricing, "card_tone": tone},
     )
     return offer
 
 
 def delete_offer(conn, offer_id: int, *, actor_user_id: int) -> dict[str, Any]:
     offer = get_offer(conn, offer_id)
-    counts = _counts_for_offer(conn, str(offer["feature_key"]))
-    if counts["active_orgs"] > 0 or counts["pending_requests"] > 0:
+    status = str(offer.get("catalog_status") or "")
+    if status == "listed":
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Cannot delete while organisations have this feature or open requests. "
-                "Retire the offer or resolve access first."
-            ),
+            detail="Unpublish this feature before deleting it from the catalog.",
         )
     if uses_postgres():
         conn.execute("DELETE FROM platform_feature_offers WHERE id = %s", (offer_id,))
@@ -211,7 +276,7 @@ def delete_offer(conn, offer_id: int, *, actor_user_id: int) -> dict[str, Any]:
         action="feature_offer.deleted",
         entity_type="platform_feature_offer",
         entity_id=str(offer_id),
-        new_value={"feature_key": offer.get("feature_key"), "title": offer.get("title")},
+        new_value={"feature_key": offer.get("feature_key"), "title": offer.get("title"), "was_status": status},
     )
     return offer
 
@@ -227,6 +292,7 @@ def set_catalog_status(
     if status not in CATALOG_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid catalog status")
     offer = get_offer(conn, offer_id)
+    previous = str(offer.get("catalog_status") or "")
     now = _now()
     listed_at = offer.get("listed_at")
     listed_by = offer.get("listed_by_user_id")
@@ -263,7 +329,143 @@ def set_catalog_status(
         entity_id=str(offer_id),
         new_value={"catalog_status": status},
     )
-    return get_offer(conn, offer_id)
+    updated = get_offer(conn, offer_id)
+    notified = 0
+    if status == "listed" and previous != "listed":
+        notified = _notify_orgs_feature_published(conn, offer=updated, actor_user_id=actor_user_id)
+    updated["orgs_notified"] = notified
+    return updated
+
+
+def _notify_orgs_feature_published(conn, *, offer: dict[str, Any], actor_user_id: int) -> int:
+    """Broadcast to licensed orgs when a feature is published to the Features page."""
+    from .notifications_repository import create_notifications_for_audience
+
+    title = str(offer.get("title") or "New feature").strip()
+    description = str(offer.get("description") or "").strip()
+    key = str(offer.get("feature_key") or "")
+    pricing = str(offer.get("pricing_type") or "free")
+    body = description or f"{title} is now available on Features. Open Features to enable or request access."
+    try:
+        result = create_notifications_for_audience(
+            conn,
+            audience="active_licences",
+            organisation_id=None,
+            recipient_user_id=None,
+            recipient_scope="all_users",
+            exclude_expired_amc=True,
+            kind="feature_launch",
+            title=f"New on Features · {title}",
+            body=body,
+            payload={
+                "cta": "browse",
+                "feature_key": key,
+                "feature_title": title,
+                "pricing_type": pricing,
+                "source": "feature_catalog",
+            },
+            href="/app/features",
+            actor_user_id=actor_user_id,
+            source="feature_catalog",
+        )
+        return int(result.get("sent") or 0)
+    except HTTPException as exc:
+        # Empty tenant set should not block publish.
+        if exc.status_code == 400:
+            return 0
+        raise
+
+
+def ensure_draft_offers_from_deploy_items(
+    conn,
+    *,
+    items: list[dict[str, Any]],
+    deploy_sha: str,
+    actor_user_id: int,
+) -> list[dict[str, Any]]:
+    """
+    Upsert draft catalog offers for gated deploy items.
+    Never lists offers and never overwrites listed/retired rows.
+    """
+    touched: list[dict[str, Any]] = []
+    now = _now()
+    sha = (deploy_sha or "").strip()[:40]
+    for raw in items or []:
+        key = str(raw.get("feature_key") or "").strip()
+        title = str(raw.get("title") or "").strip()
+        if not key or not title:
+            continue
+        key = normalize_feature_key(key, title)
+        detail = str(raw.get("detail") or "").strip()
+        existing = get_offer_by_key(conn, key)
+        if existing:
+            status = str(existing.get("catalog_status") or "")
+            if status in ("listed", "retired"):
+                touched.append(existing)
+                continue
+            if uses_postgres():
+                conn.execute(
+                    """
+                    UPDATE platform_feature_offers
+                    SET title = %s, description = %s, updated_at = %s
+                    WHERE id = %s AND catalog_status = 'draft'
+                    """,
+                    (title, detail or str(existing.get("description") or ""), now, int(existing["id"])),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE platform_feature_offers
+                    SET title = ?, description = ?, updated_at = ?
+                    WHERE id = ? AND catalog_status = 'draft'
+                    """,
+                    (title, detail or str(existing.get("description") or ""), now, int(existing["id"])),
+                )
+            offer = get_offer(conn, int(existing["id"]))
+            append_audit_log(
+                organisation_id=None,
+                actor_user_id=actor_user_id,
+                action="feature_offer.deploy_draft_updated",
+                entity_type="platform_feature_offer",
+                entity_id=str(offer["id"]),
+                new_value={"feature_key": key, "deploy_sha": sha},
+            )
+            touched.append(offer)
+            continue
+
+        if uses_postgres():
+            row = conn.execute(
+                """
+                INSERT INTO platform_feature_offers
+                (feature_key, title, description, pricing_type, price_cents, currency,
+                 catalog_status, sort_order, created_at, updated_at)
+                VALUES (%s, %s, %s, 'paid', 0, 'INR', 'draft', 100, %s, %s)
+                RETURNING *
+                """,
+                (key, title, detail, now, now),
+            ).fetchone()
+            offer = _offer_row(row)
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO platform_feature_offers
+                (feature_key, title, description, pricing_type, price_cents, currency,
+                 catalog_status, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, 'paid', 0, 'INR', 'draft', 100, ?, ?)
+                """,
+                (key, title, detail, now, now),
+            )
+            offer = get_offer(conn, int(cur.lastrowid))
+        append_audit_log(
+            organisation_id=None,
+            actor_user_id=actor_user_id,
+            action="feature_offer.deploy_draft_created",
+            entity_type="platform_feature_offer",
+            entity_id=str(offer["id"]),
+            new_value={"feature_key": key, "deploy_sha": sha},
+        )
+        touched.append(offer)
+    return touched
 
 
 def _org_has_feature(conn, organisation_id: int, feature_key: str) -> bool:
@@ -420,79 +622,3 @@ def request_paid_for_org(
         new_value={"feature_key": key, "interest_id": interest_id},
     )
     return {"offer": offer, "interest_id": interest_id}
-
-
-def production_updates_summary(conn) -> dict[str, Any]:
-    from .releases_repository import GATED_CATEGORIES, is_gated_release_category
-
-    release = None
-    items: list[dict[str, Any]] = []
-    if uses_postgres():
-        row = conn.execute(
-            """
-            SELECT * FROM platform_releases
-            WHERE source = 'deploy' OR status = 'draft'
-            ORDER BY id DESC LIMIT 1
-            """
-        ).fetchone()
-    else:
-        row = conn.execute(
-            """
-            SELECT * FROM platform_releases
-            WHERE source = 'deploy' OR status = 'draft'
-            ORDER BY id DESC LIMIT 1
-            """
-        ).fetchone()
-    if row:
-        release = dict(row_dict(row))
-        rid = int(release["id"])
-        if uses_postgres():
-            irows = conn.execute(
-                "SELECT * FROM platform_release_items WHERE release_id = %s ORDER BY sort_order, id",
-                (rid,),
-            ).fetchall()
-        else:
-            irows = conn.execute(
-                "SELECT * FROM platform_release_items WHERE release_id = ? ORDER BY sort_order, id",
-                (rid,),
-            ).fetchall()
-        for ir in irows:
-            item = dict(row_dict(ir))
-            cat = str(item.get("category") or "")
-            fk = str(item.get("feature_key") or "").strip()
-            if cat in GATED_CATEGORIES or is_gated_release_category(cat):
-                catalog = get_offer_by_key(conn, fk) if fk else None
-                items.append(
-                    {
-                        "category": cat,
-                        "title": item.get("title"),
-                        "detail": item.get("detail"),
-                        "feature_key": fk,
-                        "catalog_status": catalog.get("catalog_status") if catalog else None,
-                        "catalog_offer_id": catalog.get("id") if catalog else None,
-                    }
-                )
-    ui_items: list[dict[str, Any]] = []
-    if release:
-        rid = int(release["id"])
-        if uses_postgres():
-            irows = conn.execute(
-                "SELECT category, title FROM platform_release_items WHERE release_id = %s ORDER BY sort_order, id",
-                (rid,),
-            ).fetchall()
-        else:
-            irows = conn.execute(
-                "SELECT category, title FROM platform_release_items WHERE release_id = ? ORDER BY sort_order, id",
-                (rid,),
-            ).fetchall()
-        from .releases_repository import is_inform_release_category
-
-        for ir in irows:
-            item = dict(row_dict(ir))
-            if is_inform_release_category(str(item.get("category") or "")):
-                ui_items.append({"title": item.get("title")})
-    return {
-        "release": release,
-        "feature_items": items,
-        "ui_items": ui_items,
-    }

@@ -4,8 +4,8 @@ import { Badge } from '../ui/Badge'
 import {
   addOnCardSurface,
   addOnCategoryLabel,
-  addOnIllustrationForOffer,
-  visualThemeForFeatureKey,
+  iconForAddOnTone,
+  resolveAddOnCardTone,
   type AddOnIllustrationKind,
 } from '../../lib/featureOfferVisuals'
 import {
@@ -32,6 +32,7 @@ export function FeatureOfferCatalogCard({
   interactive = true,
   elevated = false,
   tone,
+  cardTone,
   className,
 }: {
   featureKey: string
@@ -45,13 +46,13 @@ export function FeatureOfferCatalogCard({
   elevated?: boolean
   /** Override card accent surface (create/edit preview). */
   tone?: AddOnIllustrationKind
+  /** Persisted accent from the feature offer. */
+  cardTone?: string | null
   className?: string
 }) {
-  const illustration = addOnIllustrationForOffer(featureKey, title)
-  const surfaceKind = tone ?? illustration
-  const theme = visualThemeForFeatureKey(featureKey, title)
-  const Icon = theme.icon
-  const category = addOnCategoryLabel(illustration)
+  const surfaceKind = tone ?? resolveAddOnCardTone(featureKey, title, cardTone)
+  const Icon = iconForAddOnTone(surfaceKind)
+  const category = addOnCategoryLabel(surfaceKind)
   const surface = addOnCardSurface(surfaceKind)
   const pattern = addOnCardGeometricPattern(featureKey, surfaceKind)
   const showFooter = priceLabel != null || footer != null
@@ -79,8 +80,8 @@ export function FeatureOfferCatalogCard({
           style={pattern.styleDark}
         />
         <div className={cn('absolute inset-0', surface.wash)} />
-        <div className="absolute inset-0 bg-gradient-to-bl from-white/20 via-white/5 to-transparent dark:from-card/25 dark:via-card/5" />
-        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-white/70 via-white/25 to-transparent dark:from-card/70 dark:via-card/25" />
+        <div className="absolute inset-0 bg-gradient-to-bl from-white/55 via-white/25 to-transparent dark:from-card/25 dark:via-card/5" />
+        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-white/85 via-white/40 to-transparent dark:from-card/70 dark:via-card/25" />
       </div>
 
       <div className="relative flex flex-1 flex-col min-h-0 p-6">

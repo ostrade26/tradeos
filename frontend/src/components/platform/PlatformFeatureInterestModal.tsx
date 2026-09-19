@@ -18,6 +18,9 @@ export type FeatureInterestRow = {
   feature_key: string
   feature_title: string
   feature_detail?: string
+  card_tone?: string
+  pricing_type?: string
+  price_cents?: number
   status: string
   platform_note?: string
   created_at: string
@@ -65,6 +68,15 @@ export function PlatformFeatureInterestModal({
       setPriceLabel(null)
       return
     }
+    if (interest.pricing_type) {
+      setPriceLabel(
+        featureOfferPriceLabel(
+          interest.pricing_type,
+          interest.price_cents ?? 0,
+        ),
+      )
+      return
+    }
     let cancelled = false
     void platformApi
       .listFeatureOffers()
@@ -81,7 +93,7 @@ export function PlatformFeatureInterestModal({
     return () => {
       cancelled = true
     }
-  }, [open, interest?.feature_key])
+  }, [open, interest])
 
   if (!interest) return null
 
@@ -143,6 +155,7 @@ export function PlatformFeatureInterestModal({
           featureKey={interest.feature_key}
           title={interest.feature_title}
           description={interest.feature_detail}
+          cardTone={interest.card_tone}
           priceLabel={priceLabel}
         />
         {interest.platform_note?.trim() ? (

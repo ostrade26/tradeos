@@ -1,0 +1,24 @@
+---
+description: Icon and illustration sources for UI work
+alwaysApply: true
+---
+
+# Icons & illustrations
+
+## Icons
+
+Use **[Lucide](https://lucide.dev/icons/)** only (`lucide-react` in the frontend).
+
+- Prefer existing imports already used in the codebase.
+- Match size/stroke to nearby icons (`h-4 w-4`, `h-5 w-5`, etc.).
+- Do not introduce other icon packs (Font Awesome, Heroicons, Material, etc.) unless the user explicitly asks.
+
+## Illustrations
+
+When the user asks to **add illustrations**, use **[Storyset — Pana](https://storyset.com/pana)** style.
+
+- Prefer Pana illustrations that fit empty states, onboarding, success/error, or marketing-adjacent in-app moments.
+- Download/export SVG (or PNG if SVG is unavailable) and store under a clear assets path (e.g. `frontend/src/assets/illustrations/`).
+- Attribute/credit Storyset if their license requires it for the chosen asset.
+- Do not invent heavy custom illustration art when a Storyset Pana asset will do.
+- Do not default to stock photo collages or other illustration libraries unless the user specifies otherwise.

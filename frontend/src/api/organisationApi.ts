@@ -38,6 +38,7 @@ export interface OrgFeatureOffer {
   price_cents: number
   currency: string
   catalog_status: string
+  card_tone?: string
   entitlement_status: 'available' | 'pending' | 'active'
 }
 

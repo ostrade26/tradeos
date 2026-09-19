@@ -81,6 +81,7 @@ function AddOnOfferCard({
         featureKey={offer.feature_key}
         title={offer.title}
         description={offer.description}
+        cardTone={offer.card_tone}
         priceLabel={price}
         footer={action}
       />

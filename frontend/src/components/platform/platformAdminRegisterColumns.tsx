@@ -852,7 +852,7 @@ export function releaseColumns(handlers: {
       sortValue: r => (r.gated ? 1 : 0),
       render: r => (
         <span className="text-[14px] text-muted">
-          {r.gated ? 'Opt-in enhancements' : 'Notify only'}
+          {r.gated ? 'Features → catalog' : 'Notify only'}
         </span>
       ),
     },

@@ -47,6 +47,21 @@ def _enrich(conn, item: dict[str, Any]) -> dict[str, Any]:
         u = dict(row_dict(user))
         item["requested_by_name"] = str(u.get("name") or "")
         item["requested_by_username"] = str(u.get("username") or "")
+    from .feature_offers_repository import get_offer_by_key
+
+    offer = get_offer_by_key(conn, str(item.get("feature_key") or ""))
+    if offer:
+        title = str(offer.get("title") or "").strip()
+        detail = str(offer.get("description") or "").strip()
+        if title:
+            item["feature_title"] = title
+        if detail:
+            item["feature_detail"] = detail
+        item["card_tone"] = str(offer.get("card_tone") or "")
+        item["pricing_type"] = str(offer.get("pricing_type") or "")
+        item["price_cents"] = int(offer.get("price_cents") or 0)
+    else:
+        item["card_tone"] = ""
     return item
 
 

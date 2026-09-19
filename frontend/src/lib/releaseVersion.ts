@@ -12,12 +12,12 @@ export const RELEASE_CATEGORIES: { value: ReleaseCategory; label: string; hint: 
   {
     value: 'ui_and_fixes',
     label: 'Bug fix & UI uplift',
-    hint: 'Notify users what changed. No opt-in — ships with production.',
+    hint: 'Notify users what changed. Ships with production — publish from Releases.',
   },
   {
     value: 'feature_enhancement',
-    label: 'Feature enhancement',
-    hint: 'Users choose which enhancements to enable on their account (sell / opt-in).',
+    label: 'Marketplace feature',
+    hint: 'Creates a draft on Features & Access. Tradeal sets free/paid and publishes to orgs from there.',
   },
 ]
 

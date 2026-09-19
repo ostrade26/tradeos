@@ -470,7 +470,8 @@ def create_notifications_for_audience(
     payload = dict(payload or {})
     if kind in UPDATE_KINDS:
         feature_key = normalize_feature_key(str(payload.get("feature_key") or ""), title)
-        if payload.get("cta") not in ("choose", "update"):
+        allowed_cta = ("choose", "update", "interest", "browse", "acknowledge")
+        if payload.get("cta") not in allowed_cta:
             payload["cta"] = "update"
         payload["feature_key"] = feature_key
 

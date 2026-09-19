@@ -24,7 +24,8 @@ function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (isSeatRequestDecisionItem(item)) return 'Review request'
   if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
-    if (item.notice.kind === 'deploy_review') return 'Open release'
+    if (item.notice.kind === 'deploy_review') return 'Open Features'
+    if (item.notice.payload?.cta === 'browse') return 'Open Features'
     if (item.notice.payload?.cta === 'review_interest') return 'Review request'
     if (isFeatureInterestNotice(item.notice)) return 'Express interest'
     if (

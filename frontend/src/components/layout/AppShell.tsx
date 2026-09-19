@@ -20,7 +20,8 @@ import { ApiServiceIssueWatch } from './ApiServiceIssueWatch'
 import { initOverlayScrollbars } from '../../lib/overlayScrollbars'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
-import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
+import { useAssistantEnabled } from '../../lib/assistant/useAssistantEnabled'
+import { setAssistantOpen } from '../../lib/assistant/session'
 import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 import { ProductTourProvider } from '../../contexts/ProductTourContext'
 
@@ -34,8 +35,8 @@ function isTypingTarget(target: EventTarget | null) {
 export function AppShell() {
   const { hasPermission } = usePermissions()
   const { session, applySession, isPlatformAdmin } = useAuth()
+  const assistantEnabled = useAssistantEnabled()
   const [commandOpen, setCommandOpen] = useState(false)
-  const [assistantOpen, setAssistantOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [productTourOpen, setProductTourOpen] = useState(false)
@@ -182,7 +183,7 @@ export function AppShell() {
         e.preventDefault()
         setCommandOpen(true)
       }
-      if (ASSISTANT_ENABLED && (e.metaKey || e.ctrlKey) && e.key === 'j') {
+      if (assistantEnabled && (e.metaKey || e.ctrlKey) && e.key === 'j') {
         e.preventDefault()
         setAssistantOpen(true)
       }
@@ -193,7 +194,7 @@ export function AppShell() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [hasPermission, navigate])
+  }, [assistantEnabled, hasPermission, navigate])
 
   return (
     <DetailPanelSlotProvider>
@@ -234,12 +235,7 @@ export function AppShell() {
           onClose={() => setCommandOpen(false)}
           onOpenAssistant={() => { setCommandOpen(false); setAssistantOpen(true) }}
         />
-        {ASSISTANT_ENABLED ? (
-          <AssistantPanel
-            open={assistantOpen}
-            onClose={() => setAssistantOpen(false)}
-          />
-        ) : null}
+        {assistantEnabled ? <AssistantPanel /> : null}
         <FloatingCreateCta />
         {session && !isPlatformAdmin ? (
           <AccountSetupWelcome

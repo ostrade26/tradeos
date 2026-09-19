@@ -6,7 +6,7 @@ import { useTradeStore } from '../../store/TradeStore'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { useLocation } from 'react-router-dom'
 import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
-import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
+import { useAssistantEnabled } from '../../lib/assistant/useAssistantEnabled'
 
 interface GlobalCommandPaletteProps {
   open: boolean
@@ -20,6 +20,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
   const location = useLocation()
   const { isPlatformAdmin } = useAuth()
   const { hasPermission } = usePermissions()
+  const assistantEnabled = useAssistantEnabled()
   const platformAdminMode = isPlatformAdmin && isPlatformAdminPath(location.pathname)
 
   const items = useMemo(() => {
@@ -50,7 +51,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         { id: 'settings', label: 'Settings', group: 'Account', action: () => navigate('/platform-admin/settings') },
       ]
       return [
-        ...(ASSISTANT_ENABLED
+        ...(assistantEnabled
           ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
           : []),
         {
@@ -89,7 +90,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       ...(hasPermission('contracts.create')
         ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate(appPath('/contracts/new')) }]
         : []),
-      ...(ASSISTANT_ENABLED
+      ...(assistantEnabled
         ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
         : []),
       { id: 'send-tradeal', label: 'Send request', group: 'Actions', action: () => navigate(appPath('/notifications?compose=1')) },
@@ -104,7 +105,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     }))
 
     return [...nav, ...searchHits]
-  }, [hasPermission, store, navigate, onOpenAssistant, platformAdminMode, isPlatformAdmin])
+  }, [assistantEnabled, hasPermission, store, navigate, onOpenAssistant, platformAdminMode, isPlatformAdmin])
 
   return <CommandPalette open={open} onClose={onClose} items={items} />
 }

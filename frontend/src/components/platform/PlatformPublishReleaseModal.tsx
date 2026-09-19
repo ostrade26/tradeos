@@ -65,7 +65,7 @@ export function PlatformPublishReleaseModal({
       title={release ? `Publish ${release.version}` : 'Publish release'}
       subtitle={
         gated
-          ? 'New features stay off until an organisation admin clicks Update.'
+          ? 'UI & fix notes go out as an announcement. Marketplace features are published separately from Features & Access.'
           : 'This is an announcement. The changes are already in the live app.'
       }
       size="lg"
@@ -169,7 +169,7 @@ export function PlatformPublishReleaseModal({
                 <p className="text-sm font-medium text-heading">{item.title}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {releaseCategoryLabel(item.category)}
-                  {item.gated ? ' · Update required' : ''}
+                  {item.gated ? ' · Publish from Features' : ''}
                 </p>
               </li>
             ))}

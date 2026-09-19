@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { NotificationsDropdown } from './NotificationsDropdown'
 import { UserMenu } from './UserMenu'
 import { cn } from '../../lib/utils'
-import { ASSISTANT_ENABLED } from '../../lib/assistant/flags'
+import { useAssistantEnabled } from '../../lib/assistant/useAssistantEnabled'
 import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 interface HeaderProps {
@@ -21,6 +21,7 @@ export function Header({
   onOpenMobileNav,
 }: HeaderProps) {
   const location = useLocation()
+  const assistantEnabled = useAssistantEnabled()
   const platformAdminMode = isPlatformAdminPath(location.pathname)
   const settingsPath = platformAdminMode ? '/platform-admin/settings' : appPath('/settings')
 
@@ -53,7 +54,7 @@ export function Header({
       </button>
 
       <div className="flex items-center gap-0 sm:gap-1.5 shrink-0 ml-auto">
-        {ASSISTANT_ENABLED ? (
+        {assistantEnabled ? (
           <Button
             variant="ghost"
             size="icon"

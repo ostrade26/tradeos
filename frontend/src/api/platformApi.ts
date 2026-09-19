@@ -422,6 +422,9 @@ export interface FeatureInterest {
   feature_key: string
   feature_title: string
   feature_detail?: string
+  card_tone?: string
+  pricing_type?: string
+  price_cents?: number
   status: string
   platform_note?: string
   created_at: string
@@ -438,6 +441,7 @@ export interface PlatformFeatureOffer {
   currency: string
   catalog_status: 'draft' | 'listed' | 'retired'
   sort_order: number
+  card_tone?: string
   created_at: string
   updated_at: string
   listed_at?: string | null
@@ -446,17 +450,28 @@ export interface PlatformFeatureOffer {
   pending_requests?: number
 }
 
-export interface ProductionUpdatesSummary {
-  release: PlatformRelease | null
-  feature_items: Array<{
-    category: string
-    title: string
-    detail?: string
-    feature_key: string
-    catalog_status?: string | null
-    catalog_offer_id?: number | null
-  }>
-  ui_items: Array<{ title: string }>
+export interface PlatformFeatureOfferOrgUsage {
+  organisation_id: number
+  organisation_name: string
+  org_code: string
+  applied_at: string
+  version?: string
+}
+
+export interface PlatformFeatureOfferPendingRequest {
+  interest_id: number
+  organisation_id: number
+  organisation_name: string
+  org_code: string
+  created_at: string
+  status: string
+  requested_by_name?: string
+}
+
+export interface PlatformFeatureOfferUsage {
+  offer: PlatformFeatureOffer
+  organisations: PlatformFeatureOfferOrgUsage[]
+  pending_requests: PlatformFeatureOfferPendingRequest[]
 }
 
 export const platformApi = {
@@ -730,9 +745,10 @@ export const platformApi = {
       body: JSON.stringify({ note }),
     }),
 
-  productionUpdates: () => apiFetch<ProductionUpdatesSummary>('/platform/production-updates'),
-
   listFeatureOffers: () => apiFetch<{ offers: PlatformFeatureOffer[] }>('/platform/feature-offers'),
+
+  getFeatureOfferUsage: (offerId: number) =>
+    apiFetch<PlatformFeatureOfferUsage>(`/platform/feature-offers/${offerId}/usage`),
 
   createFeatureOffer: (body: {
     feature_key: string
@@ -742,6 +758,7 @@ export const platformApi = {
     price_cents?: number
     currency?: string
     sort_order?: number
+    card_tone?: string
   }) =>
     apiFetch<{ offer: PlatformFeatureOffer }>('/platform/feature-offers', {
       method: 'POST',
@@ -758,6 +775,7 @@ export const platformApi = {
       price_cents?: number
       currency?: string
       sort_order?: number
+      card_tone?: string
     },
   ) =>
     apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {
