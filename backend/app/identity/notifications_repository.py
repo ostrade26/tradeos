@@ -355,16 +355,24 @@ def _users_in_org(conn, organisation_id: int, *, admins_only: bool) -> list[int]
     return [int(row_dict(r)["id"]) for r in rows]
 
 
-def _active_licence_org_ids(conn) -> list[int]:
-    rows = conn.execute(
+def _active_licence_org_ids(conn, *, include_test: bool = False) -> list[int]:
+    if include_test:
+        q = """
+            SELECT DISTINCT l.organisation_id
+            FROM organisation_licenses l
+            JOIN organisations o ON o.id = l.organisation_id
+            WHERE l.status = 'active'
+            ORDER BY l.organisation_id
         """
-        SELECT DISTINCT l.organisation_id
-        FROM organisation_licenses l
-        JOIN organisations o ON o.id = l.organisation_id
-        WHERE l.status = 'active' AND COALESCE(o.is_test, 0) = 0
-        ORDER BY l.organisation_id
+    else:
+        q = """
+            SELECT DISTINCT l.organisation_id
+            FROM organisation_licenses l
+            JOIN organisations o ON o.id = l.organisation_id
+            WHERE l.status = 'active' AND COALESCE(o.is_test, 0) = 0
+            ORDER BY l.organisation_id
         """
-    ).fetchall()
+    rows = conn.execute(q).fetchall()
     return [int(row_dict(r)["organisation_id"]) for r in rows]
 
 
@@ -395,7 +403,8 @@ def resolve_audience_recipients(
             raise HTTPException(status_code=400, detail="Organisation is required")
         org_ids = [organisation_id]
     elif audience == "active_licences":
-        org_ids = _active_licence_org_ids(conn)
+        # Include test/QA orgs so Tradeal can verify inbox notices end-to-end.
+        org_ids = _active_licence_org_ids(conn, include_test=True)
     else:
         raise HTTPException(status_code=400, detail="Invalid audience")
 

@@ -806,6 +806,8 @@ export function mapAuditLogs(logs: Record<string, unknown>[]): AuditLogRow[] {
 export function releaseColumns(handlers: {
   onEdit: (row: PlatformRelease) => void
   onPublish: (row: PlatformRelease) => void
+  /** Newest release (usually the latest deploy draft). */
+  latestReleaseId?: number | null
 }): Column<PlatformRelease>[] {
   return [
     {
@@ -813,7 +815,14 @@ export function releaseColumns(handlers: {
       header: 'Version',
       sortable: true,
       sortValue: r => r.version,
-      render: r => <span className="font-mono text-[14px] tabular-nums">{r.version}</span>,
+      render: r => (
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-[14px] tabular-nums">{r.version}</span>
+          {handlers.latestReleaseId != null && handlers.latestReleaseId === r.id ? (
+            <Badge variant="accent">Latest</Badge>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: 'title',

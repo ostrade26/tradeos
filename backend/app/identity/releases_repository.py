@@ -646,11 +646,14 @@ def publish_release(
     skipped_amc = 0
     should_notify = bool(notify_organisations)
 
-    if should_notify and inform_items:
+    # When notifying, prefer UI/fix (inform) items; if the draft only has marketplace
+    # rows, still send a release notice so Publish & notify never silently skips orgs.
+    notice_items = inform_items if inform_items else (items if should_notify else [])
+    if should_notify and notice_items:
         inform_body = default_body
-        inform_lines = [f"{_category_label(i['category'])}: {i['title']}" for i in inform_items]
-        if len(inform_items) < len(items):
-            inform_body = "\n".join(inform_lines)
+        inform_lines = [f"{_category_label(i['category'])}: {i['title']}" for i in notice_items]
+        if len(notice_items) < len(items) or not inform_items:
+            inform_body = "\n".join(inform_lines) if inform_lines else default_body
         inform_result = create_notifications_for_audience(
             conn,
             audience=audience,
@@ -663,8 +666,8 @@ def publish_release(
             body=inform_body,
             payload={
                 "cta": "acknowledge",
-                "items": "\n".join(i["title"] for i in inform_items),
-                "changelog": _changelog_payload(inform_items),
+                "items": "\n".join(i["title"] for i in notice_items),
+                "changelog": _changelog_payload(notice_items),
                 "release_id": str(release_id),
                 "version": release["version"],
             },
@@ -673,9 +676,14 @@ def publish_release(
         )
         sent_total += int(inform_result.get("sent") or 0)
         skipped_amc = max(skipped_amc, int(inform_result.get("skipped_expired_amc") or 0))
+    elif should_notify and not notice_items:
+        raise HTTPException(
+            status_code=400,
+            detail="This release has no items to announce. Add changelog items or publish quietly.",
+        )
 
-    # Gated marketplace features are published from Features & Access (catalog list),
-    # not via release publish. Keep them on the release record for deploy history only.
+    # Gated marketplace features are also listed from Features & Access; release
+    # publish still records them on the version for deploy history.
     _ = feature_items
 
     result = {

@@ -829,7 +829,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         toast.success(`Published ${res.release.version} quietly — no inbox notice`)
       } else if (sent <= 0) {
         toast.error(
-          `Published ${res.release.version}, but nobody was notified. Check active licences (test orgs are skipped) and audience.`,
+          `Published ${res.release.version}, but nobody was notified. Pick a specific organisation, or check the org has an active licence.`,
         )
       } else {
         toast.success(
@@ -845,9 +845,19 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }
 
+  const latestReleaseId = useMemo(() => {
+    if (releases.length === 0) return null
+    return releases.reduce((best, row) => (row.id > best.id ? row : best), releases[0]).id
+  }, [releases])
+
   const relColumns = useMemo(
-    () => releaseColumns({ onEdit: openReleaseEditor, onPublish: row => void openReleasePublish(row) }),
-    [],
+    () =>
+      releaseColumns({
+        onEdit: openReleaseEditor,
+        onPublish: row => void openReleasePublish(row),
+        latestReleaseId,
+      }),
+    [latestReleaseId],
   )
   const sortedReleases = useMemo(
     () => sortPlatformRows(releases, releaseSort, relColumns),
