@@ -46,6 +46,7 @@ import {
   subscriptionPlanColumns,
 } from '../components/platform/platformAdminRegisterColumns'
 import { PlatformOrganisationDetailDrawer } from '../components/platform/PlatformOrganisationDetailDrawer'
+import { PlatformReleaseDetailDrawer } from '../components/platform/PlatformReleaseDetailDrawer'
 import {
   PlatformCreateOrganisationModal,
   type OrganisationFormState,
@@ -209,6 +210,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [savingRelease, setSavingRelease] = useState(false)
   const [publishingReleaseRow, setPublishingReleaseRow] = useState<PlatformRelease | null>(null)
   const [publishingRelease, setPublishingRelease] = useState(false)
+  const [selectedReleaseId, setSelectedReleaseId] = useState<number | null>(null)
+  const [releaseDetailOpen, setReleaseDetailOpen] = useState(false)
   const [orgUsers, setOrgUsers] = useState<PlatformUser[]>([])
   const [busyLicenceId, setBusyLicenceId] = useState<number | null>(null)
   const [suspendLicenceConfirm, setSuspendLicenceConfirm] = useState<OrganisationLicence | null>(null)
@@ -224,6 +227,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
   const [orgDetailOpen, setOrgDetailOpen] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState<number | null>(null)
+  /** Highlight the specific register row that opened the org panel (not every row for that org). */
+  const [selectedLinkedRowId, setSelectedLinkedRowId] = useState<string | null>(null)
   const [orgDetail, setOrgDetail] = useState<OrganisationDetailResponse | null>(null)
   const [signInCredentials, setSignInCredentials] = useState<SignInCredentialsPayload | null>(null)
   const [resettingPrimarySignIn, setResettingPrimarySignIn] = useState(false)
@@ -267,13 +272,34 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setOrgDetailOpen(false)
     setOrgDetail(null)
     setSelectedOrgId(null)
+    setSelectedLinkedRowId(null)
   }, [setDetailPanelOpen])
+
+  const closeReleaseDetail = useCallback(() => {
+    setDetailPanelOpen(false)
+    setReleaseDetailOpen(false)
+    setSelectedReleaseId(null)
+  }, [setDetailPanelOpen])
+
+  const openReleaseDetail = useCallback((row: PlatformRelease) => {
+    // Keep the dock slot open when switching rows — do not call closeOrgDetail()
+    // (it sets detailPanelOpen false and hides the column until remount).
+    setOrgDetailOpen(false)
+    setOrgDetail(null)
+    setSelectedOrgId(null)
+    setSelectedReleaseId(row.id)
+    setReleaseDetailOpen(true)
+    if (effectiveDocked) setDetailPanelOpen(true, 'lg')
+  }, [effectiveDocked, setDetailPanelOpen])
 
   useEffect(() => {
     if (section === 'plans' || section === 'releases' || section === 'audit') {
       closeOrgDetail()
     }
-  }, [section, closeOrgDetail])
+    if (section !== 'releases') {
+      closeReleaseDetail()
+    }
+  }, [section, closeOrgDetail, closeReleaseDetail])
 
   const handleDockChange = useCallback((docked: boolean) => {
     if (!docked) setDetailPanelOpen(false)
@@ -354,10 +380,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     clearReleaseIdParam()
     if (!Number.isFinite(id)) return
     const row = releases.find(r => r.id === id)
-    if (!row || row.status !== 'draft') return
-    setEditingRelease(row)
-    setReleaseModalOpen(true)
-  }, [releaseIdFromInbox, releases, clearReleaseIdParam])
+    if (!row) return
+    openReleaseDetail(row)
+  }, [releaseIdFromInbox, releases, clearReleaseIdParam, openReleaseDetail])
 
   const closeReleaseModal = useCallback(() => {
     if (savingRelease) return
@@ -762,6 +787,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setReleaseModalOpen(true)
   }
 
+  const selectedRelease = useMemo(
+    () => (selectedReleaseId == null ? null : releases.find(r => r.id === selectedReleaseId) ?? null),
+    [releases, selectedReleaseId],
+  )
+
   const openReleasePublish = async (row: PlatformRelease) => {
     if (row.status !== 'draft') return
     setPublishingReleaseRow(row)
@@ -878,8 +908,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     })
   }, [])
 
-  const loadOrgDetail = useCallback(async (orgId: number) => {
+  const loadOrgDetail = useCallback(async (orgId: number, linkedRowId?: string) => {
     setSelectedOrgId(orgId)
+    setSelectedLinkedRowId(linkedRowId ?? null)
     setOrgDetailOpen(true)
     setLoadingDetail(true)
     try {
@@ -1117,9 +1148,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     }
   }
 
-  const selectedOrgRowActive = orgDetailOpen && selectedOrgId != null
-  const isSelectedOrgRow = (row: { organisation_id: number }) =>
-    selectedOrgRowActive && row.organisation_id === selectedOrgId
+  const linkedRowActiveId =
+    orgDetailOpen && selectedLinkedRowId != null ? selectedLinkedRowId : undefined
+  const openOrgFromLinkedRow = (organisationId: number, rowId: string | number) => {
+    void loadOrgDetail(organisationId, String(rowId))
+  }
 
   const pageActions =
     section === 'organisations' ? (
@@ -1325,8 +1358,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={seatSort.key}
             sortDirection={seatSort.direction}
             onSortChange={handleSeatSortChange}
-            onRowClick={seat => void loadOrgDetail(seat.organisation_id)}
-            isRowActive={isSelectedOrgRow}
+            onRowClick={seat => openOrgFromLinkedRow(seat.organisation_id, seat.id)}
+            activeRowId={linkedRowActiveId}
             defaultPageSize={25}
             emptyState={
               <EmptyState
@@ -1383,8 +1416,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={licenceSort.key}
             sortDirection={licenceSort.direction}
             onSortChange={handleLicenceSortChange}
-            onRowClick={row => void loadOrgDetail(row.organisation_id)}
-            isRowActive={isSelectedOrgRow}
+            onRowClick={row => openOrgFromLinkedRow(row.organisation_id, row.id)}
+            activeRowId={linkedRowActiveId}
             defaultPageSize={25}
             emptyState={
               <EmptyState title="No licences" description="Issued when an organisation is created." />
@@ -1404,8 +1437,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={amcSort.key}
             sortDirection={amcSort.direction}
             onSortChange={handleAmcSortChange}
-            onRowClick={row => void loadOrgDetail(row.organisation_id)}
-            isRowActive={isSelectedOrgRow}
+            onRowClick={row => openOrgFromLinkedRow(row.organisation_id, row.id)}
+            activeRowId={linkedRowActiveId}
             defaultPageSize={25}
             emptyState={<EmptyState title="No AMC records" description="Created with each licence." />}
           />
@@ -1423,8 +1456,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={paymentSort.key}
             sortDirection={paymentSort.direction}
             onSortChange={handlePaymentSortChange}
-            onRowClick={row => void loadOrgDetail(row.organisation_id)}
-            isRowActive={isSelectedOrgRow}
+            onRowClick={row => openOrgFromLinkedRow(row.organisation_id, row.id)}
+            activeRowId={linkedRowActiveId}
             defaultPageSize={25}
             emptyState={
               <EmptyState
@@ -1456,7 +1489,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={seatRequestSort.key}
             sortDirection={seatRequestSort.direction}
             onSortChange={handleSeatRequestSortChange}
-            isRowActive={isSelectedOrgRow}
             defaultPageSize={25}
             emptyState={
               <EmptyState
@@ -1538,8 +1570,13 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             sortKey={releaseSort.key}
             sortDirection={releaseSort.direction}
             onSortChange={handleReleaseSortChange}
+            activeRowId={selectedReleaseId != null ? String(selectedReleaseId) : undefined}
             onRowClick={row => {
-              if (row.status === 'draft') openReleaseEditor(row)
+              if (selectedReleaseId === row.id && releaseDetailOpen) {
+                closeReleaseDetail()
+                return
+              }
+              openReleaseDetail(row)
             }}
             defaultPageSize={25}
             emptyState={
@@ -1620,6 +1657,23 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onDelete={() => setDeleteTestConfirmOpen(true)}
         onResetPrimaryAdminSignIn={openResetPrimaryAdminSignIn}
         onNotify={() => void openNotify('org')}
+      />
+
+      <PlatformReleaseDetailDrawer
+        open={releaseDetailOpen && section === 'releases'}
+        release={selectedRelease}
+        docked={effectiveDocked}
+        onClose={closeReleaseDetail}
+        onDockChange={handleDockChange}
+        isLatest={latestReleaseId != null && selectedRelease?.id === latestReleaseId}
+        onEdit={() => {
+          if (!selectedRelease || selectedRelease.status !== 'draft') return
+          openReleaseEditor(selectedRelease)
+        }}
+        onPublish={() => {
+          if (!selectedRelease || selectedRelease.status !== 'draft') return
+          void openReleasePublish(selectedRelease)
+        }}
       />
 
       <PlatformSignInCredentialsModal

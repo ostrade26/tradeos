@@ -1,7 +1,7 @@
 import { cn } from '../../lib/utils'
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X, type LucideIcon } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
@@ -23,6 +23,8 @@ interface DetailPanelShellProps {
   subtitle?: string
   /** Status chips etc. — shown on the subtitle row (e.g. org active). */
   headerBadges?: ReactNode
+  /** Optional leading icon beside the title block. */
+  headerIcon?: LucideIcon
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
@@ -36,6 +38,7 @@ export function DetailPanelShell({
   title,
   subtitle,
   headerBadges,
+  headerIcon: HeaderIcon,
   children,
   footer,
   onClose,
@@ -47,23 +50,30 @@ export function DetailPanelShell({
   return (
     <div className={cn('flex h-full min-h-0 flex-col bg-white dark:bg-card', className)}>
       <div className="flex h-14 sm:h-[70px] shrink-0 items-center justify-between border-b border-gray-200/80 dark:border-gray-700/50 px-4 sm:px-5">
-        <div className="min-w-0 pr-3 flex-1">
-          <h2 id="drawer-title" className="text-base font-semibold text-heading truncate leading-snug">{title}</h2>
-          {(subtitle || headerBadges) && (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 min-w-0">
-              {subtitle ? (
-                <p className="text-[14px] text-muted tabular-nums truncate leading-snug">{subtitle}</p>
-              ) : null}
-              {headerBadges}
+        <div className="min-w-0 pr-3 flex-1 flex items-center gap-3">
+          {HeaderIcon ? (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
+              <HeaderIcon className="h-[18px] w-[18px]" aria-hidden />
             </div>
-          )}
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <h2 id="drawer-title" className="text-base font-semibold text-heading truncate leading-snug">{title}</h2>
+            {(subtitle || headerBadges) && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 min-w-0">
+                {subtitle ? (
+                  <p className="text-[14px] text-muted font-mono tabular-nums truncate leading-snug">{subtitle}</p>
+                ) : null}
+                {headerBadges}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {headerActions}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-zinc-800 cursor-pointer attex-focus"
+            className="rounded-lg p-1.5 text-muted hover:bg-gray-100 hover:text-heading dark:hover:bg-zinc-800 cursor-pointer attex-focus"
             aria-label="Close panel"
           >
             <X className="h-4 w-4" />
@@ -94,6 +104,7 @@ interface DrawerProps {
   title: string
   subtitle?: string
   headerBadges?: ReactNode
+  headerIcon?: LucideIcon
   children: ReactNode
   footer?: ReactNode
   width?: 'sm' | 'md' | 'lg'
@@ -108,6 +119,7 @@ export function Drawer({
   title,
   subtitle,
   headerBadges,
+  headerIcon,
   children,
   footer,
   width = 'md',
@@ -140,6 +152,7 @@ export function Drawer({
       title={title}
       subtitle={subtitle}
       headerBadges={headerBadges}
+      headerIcon={headerIcon}
       footer={footer}
       onClose={onClose}
       headerActions={headerActions}
@@ -183,6 +196,7 @@ interface DockedPanelProps {
   title: string
   subtitle?: string
   headerBadges?: ReactNode
+  headerIcon?: LucideIcon
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
@@ -195,6 +209,7 @@ export function DockedPanel({
   title,
   subtitle,
   headerBadges,
+  headerIcon,
   children,
   footer,
   onClose,
@@ -218,6 +233,7 @@ export function DockedPanel({
         title={title}
         subtitle={subtitle}
         headerBadges={headerBadges}
+        headerIcon={headerIcon}
         footer={footer}
         onClose={onClose}
         headerActions={headerActions}

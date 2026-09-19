@@ -160,11 +160,8 @@ const TABLE_CELL_UNREAD_HOVER = 'group-hover:bg-sky-50 dark:group-hover:bg-sky-9
 
 /** Right + bottom only — adjacent cells share one edge (avoids thicker left/bottom from full borders + sticky). */
 const TABLE_GRID_BORDER = 'border-b border-r border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_BORDER_SELECTED = 'border-b border-r border-accent/20'
 const TABLE_GRID_EDGE_TOP = 'border-t border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_EDGE_TOP_SELECTED = 'border-t border-accent/20'
 const TABLE_GRID_EDGE_LEFT = 'border-l border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_EDGE_LEFT_SELECTED = 'border-l border-accent/20'
 
 function gridCellClasses(
   selected: boolean,
@@ -175,7 +172,7 @@ function gridCellClasses(
   if (selected) {
     return cn(
       isSticky ? TABLE_STICKY_SELECTED : TABLE_CELL_SELECTED_BG,
-      TABLE_GRID_BORDER_SELECTED,
+      TABLE_GRID_BORDER,
     )
   }
   if (tone === 'unread' && !isHeader) {
@@ -192,10 +189,10 @@ function gridCellClasses(
   )
 }
 
-function gridOuterEdgeClasses(selected: boolean, opts: { top?: boolean; left?: boolean }) {
+function gridOuterEdgeClasses(opts: { top?: boolean; left?: boolean }) {
   return cn(
-    opts.top && (selected ? TABLE_GRID_EDGE_TOP_SELECTED : TABLE_GRID_EDGE_TOP),
-    opts.left && (selected ? TABLE_GRID_EDGE_LEFT_SELECTED : TABLE_GRID_EDGE_LEFT),
+    opts.top && TABLE_GRID_EDGE_TOP,
+    opts.left && TABLE_GRID_EDGE_LEFT,
   )
 }
 
@@ -323,7 +320,7 @@ export function DataTable<T extends { id?: string | number }>({
                   density.mobileRow,
                   onRowClick && 'cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50',
                   !highlighted && tone === 'unread' && 'bg-sky-50/70 dark:bg-sky-950/25',
-                  highlighted && cn(TABLE_CELL_SELECTED_BG, 'border border-accent/20'),
+                  highlighted && TABLE_CELL_SELECTED_BG,
                   getRowClassName?.(row),
                 )}
               >
@@ -369,7 +366,7 @@ export function DataTable<T extends { id?: string | number }>({
                     CHECKBOX_COL_CLASS,
                     `${density.headerY} hidden md:table-cell`,
                     gridCellClasses(false, stickyFirstColumn, true),
-                    gridOuterEdgeClasses(false, { top: true, left: true }),
+                    gridOuterEdgeClasses({ top: true, left: true }),
                     stickyFirstColumn && 'sticky left-0 z-30',
                   )}
                   scope="col"
@@ -400,7 +397,7 @@ export function DataTable<T extends { id?: string | number }>({
                     isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.headerY} text-left`,
                     `${density.text} font-medium text-muted`,
                     gridCellClasses(false, isStickyFirst || isStickyLast, true),
-                    gridOuterEdgeClasses(false, { top: true, left: isFirstDataCol }),
+                    gridOuterEdgeClasses({ top: true, left: isFirstDataCol }),
                     hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
                     col.sortable && onSortChange && 'cursor-pointer select-none group',
                     isStickyFirst && cn(
@@ -461,7 +458,7 @@ export function DataTable<T extends { id?: string | number }>({
                         CHECKBOX_COL_CLASS,
                         `${density.bodyY} hidden md:table-cell`,
                         gridCellClasses(highlighted, stickyFirstColumn, false, tone),
-                        gridOuterEdgeClasses(highlighted, { left: true }),
+                        gridOuterEdgeClasses({ left: true }),
                         stickyFirstColumn && 'sticky left-0 z-20',
                         !highlighted && !tone && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                       )}
@@ -490,7 +487,7 @@ export function DataTable<T extends { id?: string | number }>({
                         isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
                         `${density.text} text-gray-700 dark:text-gray-300`,
                         gridCellClasses(highlighted, isStickyCol, false, tone),
-                        gridOuterEdgeClasses(highlighted, { left: isFirstDataCol }),
+                        gridOuterEdgeClasses({ left: isFirstDataCol }),
                         hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
                         !highlighted && !tone && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                         isStickyFirst && cn(
