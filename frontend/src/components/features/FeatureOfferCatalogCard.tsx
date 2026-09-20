@@ -61,7 +61,7 @@ export function FeatureOfferCatalogCard({
   return (
     <article
       className={cn(
-        'relative flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1',
+        'relative flex h-full flex-col overflow-hidden rounded-md bg-white ring-1',
         elevated
           ? 'shadow-[0_18px_40px_-16px_rgba(15,23,42,0.22),0_8px_16px_-8px_rgba(15,23,42,0.1)] dark:shadow-[0_18px_40px_-16px_rgba(0,0,0,0.55),0_8px_16px_-8px_rgba(0,0,0,0.35)]'
           : 'shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.25)]',
@@ -106,7 +106,7 @@ export function FeatureOfferCatalogCard({
           </span>
           <span
             className={cn(
-              'absolute right-0 top-0 flex h-12 w-12 items-center justify-center rounded-xl',
+              'absolute right-0 top-0 flex h-12 w-12 items-center justify-center rounded-md',
               surface.iconBox,
             )}
           >
