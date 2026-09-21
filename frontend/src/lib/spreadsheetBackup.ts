@@ -36,6 +36,7 @@ import { isGroupedPoRawRows, tryParseGroupedPoRawRows } from './groupedPoImport'
 import { buildSeedData } from '../data/seedData'
 import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts, normalizeLiftOrderRefs } from './inferImportLinks'
 import { ensureDirectoryFromOrders } from './ensureDirectoryFromOrders'
+import { normalizeDateToIso } from './utils'
 
 const PO_EXPORT_HEADERS = [
   'Purchase Ref#',
@@ -728,7 +729,7 @@ function appendRawSheetRows(
   )
 }
 
-/** Excel date serial / Date cells → use displayed text so DD/MM stays consistent. */
+/** Excel date serial / Date cells (locale-independent). */
 function cellLooksLikeExcelDate(cell: import('xlsx').CellObject): boolean {
   if (cell.t === 'd') return true
   if (cell.t !== 'n' || typeof cell.v !== 'number') return false
@@ -737,6 +738,25 @@ function cellLooksLikeExcelDate(cell: import('xlsx').CellObject): boolean {
   if (/[dy]|mm?[/.-]dd?|dd?[/.-]mm?/i.test(z)) return true
   const w = typeof cell.w === 'string' ? cell.w.trim() : ''
   return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(w)
+}
+
+/**
+ * Convert an Excel date cell to YYYY-MM-DD from the serial / Date value.
+ * Never use locale-formatted `cell.w` (MM/DD on Windows vs DD/MM on India) — that swaps day/month.
+ */
+function excelDateCellToIso(cell: import('xlsx').CellObject): string {
+  if (typeof cell.v === 'number' && Number.isFinite(cell.v)) {
+    return normalizeDateToIso(cell.v)
+  }
+  if (cell.t === 'd' && cell.v instanceof Date && !Number.isNaN(cell.v.getTime())) {
+    // SheetJS Date values are UTC midnight for the calendar day — use UTC parts.
+    const y = cell.v.getUTCFullYear()
+    const m = cell.v.getUTCMonth() + 1
+    const d = cell.v.getUTCDate()
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+  const display = typeof cell.w === 'string' ? cell.w.trim() : ''
+  return display ? normalizeDateToIso(display) : ''
 }
 
 function sheetToJsonPreferDateText(
@@ -766,8 +786,8 @@ function sheetToJsonPreferDateText(
       if (!header) continue
       const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
       if (!cell || !cellLooksLikeExcelDate(cell)) continue
-      const display = typeof cell.w === 'string' ? cell.w.trim() : ''
-      if (display) next[header] = display
+      const iso = excelDateCellToIso(cell)
+      if (iso) next[header] = iso
     }
     return next
   })
@@ -788,8 +808,8 @@ function sheetToAoAPreferDateText(
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
       if (!cell || !cellLooksLikeExcelDate(cell)) continue
-      const display = typeof cell.w === 'string' ? cell.w.trim() : ''
-      if (display) next[c - range.s.c] = display
+      const iso = excelDateCellToIso(cell)
+      if (iso) next[c - range.s.c] = iso
     }
     return next
   })
