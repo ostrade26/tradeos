@@ -264,7 +264,7 @@ export function LiftAllocationsForm({
                   )}
                   {so && row.poRef && isCrossPoAllocation(so, row.poRef) && (
                     <p className="text-xs text-warning mt-1.5 leading-relaxed">
-                      Booked on {formatPoRef(so.poRef)} · dispatching from {formatPoRef(row.poRef)} (buyer-first delivery)
+                      Booked on {formatPoRef(so.poRef ?? '')} · dispatching from {formatPoRef(row.poRef)} (buyer-first delivery)
                     </p>
                   )}
                 </div>

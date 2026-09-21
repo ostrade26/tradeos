@@ -48,12 +48,12 @@ export function sanitizePdfField(value: string, maxChars = PDF_IMPORT_MAX_FIELD_
     .slice(0, maxChars)
 }
 
-export function sanitizeParsedContractStrings<T extends Record<string, unknown>>(parsed: T): T {
-  const out: Record<string, unknown> = { ...parsed }
+export function sanitizeParsedContractStrings<T extends object>(parsed: T): T {
+  const out = { ...parsed } as T & Record<string, unknown>
   for (const [key, val] of Object.entries(out)) {
     if (typeof val !== 'string') continue
     const max = key === 'remarks' ? PDF_IMPORT_MAX_REMARKS_CHARS : PDF_IMPORT_MAX_FIELD_CHARS
-    out[key] = sanitizePdfField(val, max)
+    ;(out as Record<string, unknown>)[key] = sanitizePdfField(val, max)
   }
-  return out as T
+  return out
 }

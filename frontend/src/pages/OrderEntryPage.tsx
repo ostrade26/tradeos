@@ -853,7 +853,7 @@ function SOEntryForm({
           sellFromLot
             ? <>{sellFromLot.lotNumber} · {sellFromLot.commodity} · {formatQty(sellFromLot.available)} available<span className="hidden md:inline"> · ⌘S to save</span></>
             : isEdit
-              ? `Update ${formatOrderRef(form.ref, side)}`
+              ? `Update ${formatOrderRef(form.ref, 'sale')}`
               : linkedPoRef
                 ? <>Selling against {linkedPoRef}<span className="hidden md:inline"> · ⌘S to save</span></>
                 : <>Create a sales order<span className="hidden md:inline"> · ⌘S to save</span></>
@@ -1025,7 +1025,7 @@ function OrderFormFields({
   partyOptions,
   spots,
   brokers,
-  isEdit = false,
+  isEdit: _isEdit = false,
   fieldErrors = {},
   onFieldEdit,
   quantityAvailability,
