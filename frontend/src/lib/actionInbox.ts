@@ -90,16 +90,16 @@ export function buildActionInbox(store: TradeStoreValue): InboxAction[] {
     actions.push({
       id: `del-${order.id}`,
       kind: 'deletion',
-      title: `${order.ref} scheduled for deletion`,
-      subtitle: `Deletes on ${formatDeletionDate(order.deleteScheduledAt)}`,
+      title: `${order.ref} in Deleted`,
+      subtitle: `Permanently removes on ${formatDeletionDate(order.deleteScheduledAt)} unless restored`,
       href: order.side === 'purchase'
-        ? appPath(`/purchase-orders/${encodeURIComponent(order.ref)}/edit`)
-        : appPath(`/sales-orders/${encodeURIComponent(order.ref)}/edit`),
+        ? appPath(`/purchase-orders?view=deleted&ref=${encodeURIComponent(order.ref)}`)
+        : appPath(`/sales-orders?view=deleted&ref=${encodeURIComponent(order.ref)}`),
       urgency: 'high',
     })
   }
 
-  for (const lift of store.lifts.filter(l => l.status === 'pending')) {
+  for (const lift of store.lifts.filter(l => l.status === 'pending' && !l.deletedAt)) {
     actions.push({
       id: `lift-${lift.id}`,
       kind: 'delivery',

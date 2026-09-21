@@ -101,8 +101,8 @@ export function partyFormToInput(form: PartyFormValues): AddProducerInput {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-3">
-      <h3 className="text-base font-semibold text-heading tracking-tight">{title}</h3>
+    <section className="space-y-3 border-t border-gray-200 pt-8 first:border-t-0 first:pt-0 dark:border-gray-700">
+      <h3 className="text-[16px] font-semibold text-heading tracking-tight">{title}</h3>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
     </section>
   )
@@ -182,7 +182,7 @@ export function PartyFormModal({
         </>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-8">
         <Section title="Party">
           <Input
             label="Name"
@@ -239,19 +239,24 @@ export function PartyFormModal({
             value={form.phone}
             onChange={e => setField('phone', e.target.value)}
           />
-          <div className="space-y-2">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="party-whatsapp" className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                WhatsApp No
+              </label>
+              <Checkbox
+                tight
+                label="Same as phone"
+                checked={form.whatsappSameAsPhone}
+                onChange={e => setField('whatsappSameAsPhone', e.target.checked)}
+              />
+            </div>
             <Input
-              label="WhatsApp No"
+              id="party-whatsapp"
               placeholder="+91 ..."
               value={form.whatsappSameAsPhone ? form.phone : form.whatsapp}
               disabled={form.whatsappSameAsPhone}
               onChange={e => setField('whatsapp', e.target.value)}
-            />
-            <Checkbox
-              tight
-              label="Same as phone"
-              checked={form.whatsappSameAsPhone}
-              onChange={e => setField('whatsappSameAsPhone', e.target.checked)}
             />
           </div>
         </Section>

@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CheckCircle2, Plus, Scale, X } from 'lucide-react'
+import { CheckCircle2, Plus, Scale, Trash2, Undo2, X } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
@@ -8,9 +8,10 @@ import { DataTable } from '../components/ui/DataTable'
 import { VerifiedPeriod } from '../components/ui/GroupedDataTable'
 import { Badge } from '../components/ui/Badge'
 import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDeliveredModal'
+import { BlockedDeleteModal, ConfirmDeleteModal } from '../components/ui/DeleteActions'
 import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
 import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
-import { cn, formatDate, formatDeliveryPeriodRange, formatMt, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
+import { cn, formatDate, formatDeliveryPeriodRange, formatMt, formatQty, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
 import { REGISTER_TABLE_LAYER_Z } from '../components/ui/Drawer'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
 import { formatLiftRef } from '../lib/tradeRefs'
@@ -27,8 +28,10 @@ import {
   liftFilterOptions,
   type LiftFilterState,
 } from '../lib/liftFilters'
+import { applyRowSelection, type RowSelectMeta } from '../lib/tableSelection'
 import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
+import { usePermissions } from '../hooks/useAuth'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../lib/orderPanelDock'
 import { loadRegisterDetailRef, saveRegisterDetailRef } from '../lib/registerDetailRef'
@@ -36,16 +39,24 @@ import { useDetailPanelSlot } from '../components/layout/DetailPanelSlot'
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../lib/registerSort'
 import { LiftRowActions } from '../components/registers/LiftRowActions'
 
-export type LiftListMode = 'pending' | 'completed'
+export type LiftListMode = 'pending' | 'completed' | 'deleted'
 
 function parseMode(view: string | null): LiftListMode {
   if (view === 'completed' || view === 'register') return 'completed'
+  if (view === 'deleted') return 'deleted'
   return 'pending'
+}
+
+function viewParam(mode: LiftListMode): string | null {
+  if (mode === 'completed') return 'completed'
+  if (mode === 'deleted') return 'deleted'
+  return null
 }
 
 export function LiftRegisterPage() {
   const store = useTradeStore()
   const toast = useToast()
+  const { canDeleteLifts } = usePermissions()
   const [searchParams, setSearchParams] = useSearchParams()
   const mode = parseMode(searchParams.get('view'))
   const registerId = `lift-${mode}`
@@ -57,16 +68,24 @@ export function LiftRegisterPage() {
   const effectiveDocked = panelDocked && isLargeScreen
   const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
   const [checkedLiftIds, setCheckedLiftIds] = useState<string[]>([])
+  const selectionAnchorRef = useRef<string | null>(null)
   const [bulkDeliverOpen, setBulkDeliverOpen] = useState(false)
+  const [deleteTargets, setDeleteTargets] = useState<Lift[]>([])
+  const [permanentDeleteTargets, setPermanentDeleteTargets] = useState<Lift[]>([])
+  const [deleteError, setDeleteError] = useState('')
+  const [permanentDeleteError, setPermanentDeleteError] = useState('')
+  const [blockedDelete, setBlockedDelete] = useState<{ name: string; reason: string } | null>(null)
 
   const setMode = useCallback((next: LiftListMode) => {
-    if (next !== 'pending') setCheckedLiftIds([])
+    setCheckedLiftIds([])
+    selectionAnchorRef.current = null
     setSearchParams(prev => {
       const current = parseMode(prev.get('view'))
       if (current === next) return prev
       const params = new URLSearchParams(prev)
       params.delete('ref')
-      if (next === 'completed') params.set('view', 'completed')
+      const view = viewParam(next)
+      if (view) params.set('view', view)
       else params.delete('view')
       return params
     }, { replace: true })
@@ -215,6 +234,7 @@ export function LiftRegisterPage() {
 
   const baseData = useMemo(() => {
     if (mode === 'pending') return store.getLiftsPending()
+    if (mode === 'deleted') return store.getLiftsDeleted()
     return store.getLiftsDelivered()
   }, [mode, store])
 
@@ -245,6 +265,7 @@ export function LiftRegisterPage() {
   const totalQty = filtered.reduce((s, l) => s + l.liftedQty, 0)
   const pendingCount = store.getLiftsPending().length
   const completedCount = store.getLiftsDelivered().length
+  const deletedCount = store.getLiftsDeleted().length
 
   const handleExport = () => {
     exportToCSV(
@@ -295,8 +316,12 @@ export function LiftRegisterPage() {
     [filtered, checkedLiftIds],
   )
 
-  const toggleCheckedLift = useCallback((id: string) => {
-    setCheckedLiftIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  const toggleCheckedLift = useCallback((id: string, meta?: RowSelectMeta) => {
+    setCheckedLiftIds(prev => {
+      const result = applyRowSelection(prev, id, meta, selectionAnchorRef.current)
+      selectionAnchorRef.current = result.anchorId
+      return result.selected
+    })
   }, [])
 
   const handleSelectAllVisible = useCallback((select: boolean, visibleIds: string[]) => {
@@ -305,7 +330,80 @@ export function LiftRegisterPage() {
         ? [...new Set([...prev, ...visibleIds])]
         : prev.filter(id => !visibleIds.includes(id))
     ))
+    if (select && visibleIds.length > 0) {
+      selectionAnchorRef.current = visibleIds[visibleIds.length - 1] ?? null
+    }
   }, [])
+
+  const openDeleteForLifts = useCallback((lifts: Lift[]) => {
+    const deletable: Lift[] = []
+    let blocked: { name: string; reason: string } | null = null
+    for (const lift of lifts) {
+      const check = store.canDeleteLift(lift.id)
+      if (check.ok) deletable.push(lift)
+      else if (!blocked) blocked = { name: formatLiftRef(lift.liftRef), reason: check.reason ?? 'Cannot delete' }
+    }
+    if (deletable.length === 0) {
+      setBlockedDelete(blocked ?? { name: 'Lift', reason: 'None of the selected lifts can be deleted.' })
+      return
+    }
+    setDeleteError('')
+    setDeleteTargets(deletable)
+  }, [store])
+
+  const openPermanentDeleteForLifts = useCallback((lifts: Lift[]) => {
+    if (lifts.length === 0) return
+    setPermanentDeleteError('')
+    setPermanentDeleteTargets(lifts)
+  }, [])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (deleteTargets.length === 0) return
+    const targets = deleteTargets
+    try {
+      for (const lift of targets) {
+        await store.deleteLift(lift.id)
+      }
+      const count = targets.length
+      if (count === 1) {
+        toast.info(`${formatLiftRef(targets[0].liftRef)} moved to Deleted`)
+      } else {
+        toast.info(`${count} lifts moved to Deleted`)
+      }
+      setCheckedLiftIds(prev => prev.filter(id => !targets.some(l => l.id === id)))
+      setDeleteTargets([])
+      setDeleteError('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not move to Deleted'
+      setDeleteError(message)
+      toast.error('Could not move to Deleted', { description: message })
+      throw err
+    }
+  }, [deleteTargets, store, toast])
+
+  const handleConfirmPermanentDelete = useCallback(async () => {
+    if (permanentDeleteTargets.length === 0) return
+    const targets = permanentDeleteTargets
+    try {
+      for (const lift of targets) {
+        await store.permanentlyDeleteLift(lift.id)
+      }
+      const count = targets.length
+      if (count === 1) {
+        toast.success(`${formatLiftRef(targets[0].liftRef)} permanently deleted`)
+      } else {
+        toast.success(`${count} lifts permanently deleted`)
+      }
+      setCheckedLiftIds(prev => prev.filter(id => !targets.some(l => l.id === id)))
+      setPermanentDeleteTargets([])
+      setPermanentDeleteError('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not permanently delete'
+      setPermanentDeleteError(message)
+      toast.error('Could not permanently delete', { description: message })
+      throw err
+    }
+  }, [permanentDeleteTargets, store, toast])
 
   const handleBulkDelivered = useCallback((delivered: Lift[]) => {
     setCheckedLiftIds(prev => prev.filter(id => !delivered.some(l => l.id === id)))
@@ -423,9 +521,27 @@ export function LiftRegisterPage() {
       key: 'actions',
       header: '',
       className: 'w-10',
-      render: (r: Lift) => <LiftRowActions lift={r} />,
+      render: (r: Lift) => (
+        <LiftRowActions
+          lift={r}
+          canDelete={store.canDeleteLift(r.id)}
+          deletedTab={mode === 'deleted'}
+          onDelete={() => openDeleteForLifts([r])}
+          onRestore={async () => {
+            try {
+              await store.restoreLift(r.id)
+              toast.success(`${formatLiftRef(r.liftRef)} restored`)
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Could not restore'
+              toast.error('Could not restore', { description: message })
+            }
+          }}
+          onPermanentlyDelete={() => openPermanentDeleteForLifts([r])}
+          onBlockedDelete={reason => setBlockedDelete({ name: formatLiftRef(r.liftRef), reason })}
+        />
+      ),
     },
-  ], [mode, store.tradeOrders])
+  ], [mode, openDeleteForLifts, openPermanentDeleteForLifts, store, toast])
 
   return (
     <>
@@ -435,7 +551,9 @@ export function LiftRegisterPage() {
         subtitle={
           mode === 'pending'
             ? `${filtered.length} in transit · ${formatMt(totalQty)} planned`
-            : `${filtered.length} delivered · ${formatMt(totalQty)} actual`
+            : mode === 'deleted'
+              ? `${filtered.length} deleted lift${filtered.length === 1 ? '' : 's'}`
+              : `${filtered.length} delivered · ${formatMt(totalQty)} actual`
         }
         breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Lift Register' }]} />}
         actions={
@@ -454,6 +572,7 @@ export function LiftRegisterPage() {
         tabs={[
           { id: 'pending', label: 'In transit', count: pendingCount },
           { id: 'completed', label: 'Completed', count: completedCount },
+          { id: 'deleted', label: 'Deleted', count: deletedCount },
         ]}
         active={mode}
         onChange={id => setMode(id as LiftListMode)}
@@ -471,19 +590,79 @@ export function LiftRegisterPage() {
         onExport={handleExport}
       />
 
-      {mode === 'pending' && checkedLiftIds.length > 0 && (
+      {mode === 'deleted' && (
+        <p className="mb-4 text-sm text-muted">
+          Deleted lifts stay here until you restore them or delete permanently. Permanent delete cannot be undone.
+        </p>
+      )}
+
+      {checkedLiftIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-4 py-3">
           <span className="text-sm font-medium text-heading tabular-nums">
             {checkedLiftIds.length} selected
           </span>
-          <Button size="sm" onClick={() => setBulkDeliverOpen(true)}>
-            <CheckCircle2 className="h-4 w-4" />
-            Mark as delivered
-          </Button>
+          {mode === 'pending' && (
+            <Button size="sm" onClick={() => setBulkDeliverOpen(true)}>
+              <CheckCircle2 className="h-4 w-4" />
+              Mark as delivered
+            </Button>
+          )}
+          {canDeleteLifts && mode === 'deleted' && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  for (const lift of checkedLifts) {
+                    try {
+                      await store.restoreLift(lift.id)
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Could not restore'
+                      toast.error('Could not restore', { description: message })
+                      return
+                    }
+                  }
+                  toast.success(
+                    checkedLifts.length === 1
+                      ? `${formatLiftRef(checkedLifts[0].liftRef)} restored`
+                      : `${checkedLifts.length} lifts restored`,
+                  )
+                  setCheckedLiftIds([])
+                  selectionAnchorRef.current = null
+                }}
+              >
+                <Undo2 className="h-4 w-4" />
+                Restore
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-danger border-danger/30 hover:bg-red-50 dark:hover:bg-red-950/30"
+                onClick={() => openPermanentDeleteForLifts(checkedLifts)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete permanently
+              </Button>
+            </>
+          )}
+          {canDeleteLifts && mode !== 'deleted' && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-danger border-danger/30 hover:bg-red-50 dark:hover:bg-red-950/30"
+              onClick={() => openDeleteForLifts(checkedLifts)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCheckedLiftIds([])}
+            onClick={() => {
+              setCheckedLiftIds([])
+              selectionAnchorRef.current = null
+            }}
             aria-label="Clear selection"
           >
             <X className="h-4 w-4" />
@@ -506,20 +685,28 @@ export function LiftRegisterPage() {
         sortDirection={sort.direction}
         onSortChange={handleSortChange}
         onRowClick={handleSelectLift}
-        onSelectRow={mode === 'pending' ? toggleCheckedLift : undefined}
-        onSelectAllVisible={mode === 'pending' ? handleSelectAllVisible : undefined}
+        onSelectRow={toggleCheckedLift}
+        onSelectAllVisible={handleSelectAllVisible}
         getRowId={r => r.id}
         stickyFirstColumn
         emptyState={
           <EmptyState
             icon={<Scale className="h-10 w-10" />}
-            title={mode === 'pending' ? 'No lifts in transit' : 'No delivered lifts'}
+            title={
+              mode === 'pending'
+                ? 'No lifts in transit'
+                : mode === 'deleted'
+                  ? 'No deleted lifts'
+                  : 'No delivered lifts'
+            }
             description={
               hasActiveFilters
                 ? 'Try adjusting your search or filters.'
                 : mode === 'pending'
                   ? 'Record a lift when dispatched. Mark delivered once weight is confirmed.'
-                  : 'Delivered lifts appear after weight is confirmed.'
+                  : mode === 'deleted'
+                    ? 'Deleted lifts appear here. Restore them or delete permanently.'
+                    : 'Delivered lifts appear after weight is confirmed.'
             }
             action={
               hasActiveFilters ? (
@@ -540,7 +727,23 @@ export function LiftRegisterPage() {
                 <div className="flex items-center gap-1 shrink-0">
                   {liftHasCrossPoAllocations(r, store.tradeOrders) && <Badge variant="warning">Cross lot</Badge>}
                   {r.isSelfLift && <Badge variant="info">Self</Badge>}
-                  <LiftRowActions lift={r} />
+                  <LiftRowActions
+                    lift={r}
+                    canDelete={store.canDeleteLift(r.id)}
+                    deletedTab={mode === 'deleted'}
+                    onDelete={() => openDeleteForLifts([r])}
+                    onRestore={async () => {
+                      try {
+                        await store.restoreLift(r.id)
+                        toast.success(`${formatLiftRef(r.liftRef)} restored`)
+                      } catch (err) {
+                        const message = err instanceof Error ? err.message : 'Could not restore'
+                        toast.error('Could not restore', { description: message })
+                      }
+                    }}
+                    onPermanentlyDelete={() => openPermanentDeleteForLifts([r])}
+                    onBlockedDelete={reason => setBlockedDelete({ name: formatLiftRef(r.liftRef), reason })}
+                  />
                 </div>
               </div>
               <p className="text-heading truncate">{r.itemName} · {formatMt(r.liftedQty)}</p>
@@ -567,6 +770,81 @@ export function LiftRegisterPage() {
       open={bulkDeliverOpen}
       onClose={() => setBulkDeliverOpen(false)}
       onDelivered={handleBulkDelivered}
+    />
+
+    <ConfirmDeleteModal
+      open={deleteTargets.length > 0}
+      onClose={() => { setDeleteTargets([]); setDeleteError('') }}
+      onConfirm={handleConfirmDelete}
+      title={
+        deleteTargets.length === 1
+          ? `Move ${formatLiftRef(deleteTargets[0].liftRef)} to Deleted?`
+          : `Move ${deleteTargets.length} lifts to Deleted?`
+      }
+      error={deleteError}
+    >
+      <p className="text-sm text-gray-600 dark:text-muted">
+        {deleteTargets.length === 1 ? 'This lift' : 'These lifts'} will move to the Deleted tab.
+        You can restore them from there, or delete permanently.
+      </p>
+      {deleteTargets.length === 1 && deleteTargets[0] && (
+        <p className="text-sm text-gray-600 dark:text-muted mt-2">
+          <span className="font-medium text-heading">{formatLiftRef(deleteTargets[0].liftRef)}</span>
+          {' '}({formatQty(deleteTargets[0].liftedQty)} {deleteTargets[0].itemName})
+        </p>
+      )}
+      {deleteTargets.length > 1 && (
+        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-gray-600 dark:text-muted">
+          {deleteTargets.map(lift => (
+            <li key={lift.id}>
+              <span className="font-medium text-heading">{formatLiftRef(lift.liftRef)}</span>
+              {' '}({formatQty(lift.liftedQty)} {lift.itemName})
+            </li>
+          ))}
+        </ul>
+      )}
+    </ConfirmDeleteModal>
+
+    <ConfirmDeleteModal
+      open={permanentDeleteTargets.length > 0}
+      onClose={() => { setPermanentDeleteTargets([]); setPermanentDeleteError('') }}
+      onConfirm={handleConfirmPermanentDelete}
+      title={
+        permanentDeleteTargets.length === 1
+          ? `Permanently delete ${formatLiftRef(permanentDeleteTargets[0].liftRef)}?`
+          : `Permanently delete ${permanentDeleteTargets.length} lifts?`
+      }
+      error={permanentDeleteError}
+    >
+      <p className="text-sm text-danger font-medium">
+        This cannot be undone. The record will not be recoverable once deleted.
+      </p>
+      <p className="text-sm text-gray-600 dark:text-muted mt-2">
+        {permanentDeleteTargets.length === 1 ? 'This lift' : 'These lifts'} will be removed permanently from Tradeal.
+      </p>
+      {permanentDeleteTargets.length === 1 && permanentDeleteTargets[0] && (
+        <p className="text-sm text-gray-600 dark:text-muted mt-2">
+          <span className="font-medium text-heading">{formatLiftRef(permanentDeleteTargets[0].liftRef)}</span>
+          {' '}({formatQty(permanentDeleteTargets[0].liftedQty)} {permanentDeleteTargets[0].itemName})
+        </p>
+      )}
+      {permanentDeleteTargets.length > 1 && (
+        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-gray-600 dark:text-muted">
+          {permanentDeleteTargets.map(lift => (
+            <li key={lift.id}>
+              <span className="font-medium text-heading">{formatLiftRef(lift.liftRef)}</span>
+              {' '}({formatQty(lift.liftedQty)} {lift.itemName})
+            </li>
+          ))}
+        </ul>
+      )}
+    </ConfirmDeleteModal>
+
+    <BlockedDeleteModal
+      open={!!blockedDelete}
+      onClose={() => setBlockedDelete(null)}
+      name={blockedDelete?.name ?? ''}
+      reason={blockedDelete?.reason ?? ''}
     />
     </>
   )

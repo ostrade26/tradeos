@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, FileText } from 'lucide-react'
+import { Plus, FileText, Trash2, Undo2, X } from 'lucide-react'
 import { PageHeader } from '../ui/CommandPalette'
 import { Breadcrumb, Tabs, EmptyState } from '../ui/Tabs'
 import { Button } from '../ui/Button'
@@ -17,7 +17,7 @@ import { BlockedDeleteModal, ConfirmDeleteModal } from '../ui/DeleteActions'
 import { OrderRowActions } from './OrderRowActions'
 import { OrderDetailDrawer, findOrderByRef } from './OrderDetailDrawer'
 import { formatDate, cn, formatMt, formatQty, tableRefCellClass, availableQtyClass } from '../../lib/utils'
-import { formatDeletionDate, ORDER_DELETE_GRACE_DAYS } from '../../lib/orderDeletion'
+import { ORDER_DELETE_GRACE_DAYS } from '../../lib/orderDeletion'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER, weightedAverageRatePer10Kg } from '../../lib/orderRate'
 import { formatIndianAmount } from '../../lib/indianAmount'
 import { formatOrderRef, formatPoRef } from '../../lib/tradeRefs'
@@ -41,11 +41,19 @@ import { loadRegisterDetailRef, saveRegisterDetailRef } from '../../lib/register
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../../lib/registerSort'
 import { useToast } from '../../hooks/useToast'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
+import { usePermissions } from '../../hooks/useAuth'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { REGISTER_TABLE_LAYER_Z } from '../ui/Drawer'
 import { appPath } from '../../lib/appShellMode'
+import { applyRowSelection, type RowSelectMeta } from '../../lib/tableSelection'
 
-export type OrderListMode = 'pending' | 'completed'
+export type OrderListMode = 'pending' | 'completed' | 'deleted'
+
+function parseModeFromView(view: string | null): OrderListMode {
+  if (view === 'completed' || view === 'register') return 'completed'
+  if (view === 'deleted') return 'deleted'
+  return 'pending'
+}
 
 function registerToBeLift(order: TradeOrder): number {
   return toBeLifted(order)
@@ -70,17 +78,21 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<OrderFilterState>(emptyOrderFilters)
   const [sort, setSort] = useState(() => loadRegisterSort(registerId, 'date'))
-  const [deleteTarget, setDeleteTarget] = useState<TradeOrder | null>(null)
+  const [deleteTargets, setDeleteTargets] = useState<TradeOrder[]>([])
+  const [permanentDeleteTargets, setPermanentDeleteTargets] = useState<TradeOrder[]>([])
   const [deleteError, setDeleteError] = useState('')
+  const [permanentDeleteError, setPermanentDeleteError] = useState('')
   const [blockedDelete, setBlockedDelete] = useState<{ name: string; reason: string } | null>(null)
   const [cancelTarget, setCancelTarget] = useState<TradeOrder | null>(null)
   const [closeTarget, setCloseTarget] = useState<TradeOrder | null>(null)
   const [buyBackTarget, setBuyBackTarget] = useState<TradeOrder | null>(null)
   const [checkedOrderIds, setCheckedOrderIds] = useState<string[]>([])
+  const selectionAnchorRef = useRef<string | null>(null)
   const [panelDocked, setPanelDocked] = useState(() => loadOrderPanelDocked())
   const isLargeScreen = useLargeScreen()
   const effectiveDocked = panelDocked && isLargeScreen
   const { setOpen: setDetailPanelOpen } = useDetailPanelSlot()
+  const { canDeleteOrders } = usePermissions()
 
   const isPO = side === 'purchase'
   const label = isPO ? 'Purchase Order' : 'Sales Order'
@@ -236,19 +248,21 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     if (!urlRef) return
     const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.ref === urlRef)
     const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.ref === urlRef)
-    const target: OrderListMode | null = inCompleted && !inPending
-      ? 'completed'
-      : inPending && !inCompleted
-        ? 'pending'
-        : null
+    const inDeleted = (isPO ? store.getPODeleted() : store.getSODeleted()).some(o => o.ref === urlRef)
+    const target: OrderListMode | null = inDeleted
+      ? 'deleted'
+      : inCompleted && !inPending
+        ? 'completed'
+        : inPending && !inCompleted
+          ? 'pending'
+          : null
     if (!target) return
     setSearchParams(prev => {
-      const current: OrderListMode = prev.get('view') === 'completed' || prev.get('view') === 'register'
-        ? 'completed'
-        : 'pending'
+      const current = parseModeFromView(prev.get('view'))
       if (current === target) return prev
       const params = new URLSearchParams(prev)
       if (target === 'completed') params.set('view', 'completed')
+      else if (target === 'deleted') params.set('view', 'deleted')
       else params.delete('view')
       return params
     }, { replace: true })
@@ -257,6 +271,9 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const baseData = useMemo(() => {
     if (mode === 'pending') {
       return isPO ? store.getPOPending() : store.getSOPending()
+    }
+    if (mode === 'deleted') {
+      return isPO ? store.getPODeleted() : store.getSODeleted()
     }
     return isPO ? store.getPOCompleted() : store.getSOCompleted()
   }, [side, mode, isPO, store])
@@ -315,8 +332,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     }
   }, [checkedOrders])
 
-  const toggleCheckedOrder = useCallback((id: string) => {
-    setCheckedOrderIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  const toggleCheckedOrder = useCallback((id: string, meta?: RowSelectMeta) => {
+    setCheckedOrderIds(prev => {
+      const result = applyRowSelection(prev, id, meta, selectionAnchorRef.current)
+      selectionAnchorRef.current = result.anchorId
+      return result.selected
+    })
   }, [])
 
   const handleSelectAllVisible = useCallback((select: boolean, visibleIds: string[]) => {
@@ -325,6 +346,31 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         ? [...new Set([...prev, ...visibleIds])]
         : prev.filter(id => !visibleIds.includes(id))
     ))
+    if (select && visibleIds.length > 0) {
+      selectionAnchorRef.current = visibleIds[visibleIds.length - 1] ?? null
+    }
+  }, [])
+
+  const openDeleteForOrders = useCallback((orders: TradeOrder[]) => {
+    const deletable: TradeOrder[] = []
+    let blocked: { name: string; reason: string } | null = null
+    for (const order of orders) {
+      const check = store.canDeleteOrder(order.id)
+      if (check.ok) deletable.push(order)
+      else if (!blocked) blocked = { name: formatOrderRef(order.ref, order.side), reason: check.reason ?? 'Cannot delete' }
+    }
+    if (deletable.length === 0) {
+      setBlockedDelete(blocked ?? { name: shortLabel, reason: 'None of the selected orders can be deleted.' })
+      return
+    }
+    setDeleteError('')
+    setDeleteTargets(deletable)
+  }, [shortLabel, store])
+
+  const openPermanentDeleteForOrders = useCallback((orders: TradeOrder[]) => {
+    if (orders.length === 0) return
+    setPermanentDeleteError('')
+    setPermanentDeleteTargets(orders)
   }, [])
 
   const tableSelectedRows = checkedOrderIds
@@ -356,11 +402,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           {isPO && <BuyBackTag order={r} />}
           {mode === 'completed' && completionTypeLabel(r.completionType) && (
             <Badge variant="default" className="text-[10px]">{completionTypeLabel(r.completionType)}</Badge>
-          )}
-          {r.deleteScheduledAt && (
-            <Badge variant="warning" className="text-[10px]">
-              Deletes {formatDeletionDate(r.deleteScheduledAt)}
-            </Badge>
           )}
         </div>
       ),
@@ -516,13 +557,14 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           canClose={closable}
           canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
           sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
+          deletedTab={mode === 'deleted'}
           onCloseOrder={() => setCloseTarget(r)}
           onBuyBack={() => setBuyBackTarget(r)}
           onScheduleDelete={() => {
-            setDeleteError('')
-            setDeleteTarget(r)
+            openDeleteForOrders([r])
           }}
           onCancelDelete={() => setCancelTarget(r)}
+          onPermanentlyDelete={() => openPermanentDeleteForOrders([r])}
           onBlockedDelete={reason => setBlockedDelete({ name: r.ref, reason })}
         />
         )
@@ -531,18 +573,55 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   ]
 
   const handleConfirmDelete = async () => {
-    if (!deleteTarget) return
+    if (deleteTargets.length === 0) return
+    const targets = deleteTargets
     try {
-      await store.scheduleOrderDeletion(deleteTarget.id)
-      toast.info(`${formatOrderRef(deleteTarget.ref, deleteTarget.side)} scheduled for deletion`, {
-        description: `Removes in ${ORDER_DELETE_GRACE_DAYS} days unless cancelled`,
-      })
-      setDeleteTarget(null)
+      for (const order of targets) {
+        await store.scheduleOrderDeletion(order.id)
+      }
+      const count = targets.length
+      if (count === 1) {
+        const order = targets[0]
+        toast.info(`${formatOrderRef(order.ref, order.side)} moved to Deleted`, {
+          description: `Permanently removes in ${ORDER_DELETE_GRACE_DAYS} days unless restored`,
+        })
+      } else {
+        toast.info(`${count} ${shortLabel}s moved to Deleted`, {
+          description: `Permanently remove in ${ORDER_DELETE_GRACE_DAYS} days unless restored`,
+        })
+      }
+      setCheckedOrderIds(prev => prev.filter(id => !targets.some(o => o.id === id)))
+      setDeleteTargets([])
       setDeleteError('')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not schedule deletion'
+      const message = err instanceof Error ? err.message : 'Could not move to Deleted'
       setDeleteError(message)
-      toast.error('Could not schedule deletion', { description: message })
+      toast.error('Could not move to Deleted', { description: message })
+      throw err
+    }
+  }
+
+  const handleConfirmPermanentDelete = async () => {
+    if (permanentDeleteTargets.length === 0) return
+    const targets = permanentDeleteTargets
+    try {
+      for (const order of targets) {
+        await store.permanentlyDeleteOrder(order.id)
+      }
+      const count = targets.length
+      if (count === 1) {
+        toast.success(`${formatOrderRef(targets[0].ref, targets[0].side)} permanently deleted`)
+      } else {
+        toast.success(`${count} ${shortLabel}s permanently deleted`)
+      }
+      setCheckedOrderIds(prev => prev.filter(id => !targets.some(o => o.id === id)))
+      setPermanentDeleteTargets([])
+      setPermanentDeleteError('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not permanently delete'
+      setPermanentDeleteError(message)
+      toast.error('Could not permanently delete', { description: message })
+      throw err
     }
   }
 
@@ -550,11 +629,11 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     if (!cancelTarget) return
     try {
       await store.cancelOrderDeletion(cancelTarget.id)
-      toast.success(`${formatOrderRef(cancelTarget.ref, cancelTarget.side)} deletion cancelled`)
+      toast.success(`${formatOrderRef(cancelTarget.ref, cancelTarget.side)} restored`)
       setCancelTarget(null)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not cancel deletion'
-      toast.error('Could not cancel deletion', { description: message })
+      const message = err instanceof Error ? err.message : 'Could not restore'
+      toast.error('Could not restore', { description: message })
       setBlockedDelete({
         name: cancelTarget.ref,
         reason: message,
@@ -615,25 +694,32 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
 
   const pendingCount = isPO ? store.getPOPending().length : store.getSOPending().length
   const completedCount = isPO ? store.getPOCompleted().length : store.getSOCompleted().length
+  const deletedCount = isPO ? store.getPODeleted().length : store.getSODeleted().length
   const pageTitle = isPO ? 'Purchase Orders' : 'Sales Orders'
 
   const emptyTitle = hasActiveFilters
-    ? mode === 'pending'
-      ? `No matching ${label.toLowerCase()}s`
-      : `No matching completed ${label.toLowerCase()}s`
-    : mode === 'pending'
-      ? `No ${label.toLowerCase()}s yet`
-      : `No completed ${label.toLowerCase()}s yet`
+    ? mode === 'deleted'
+      ? `No matching deleted ${label.toLowerCase()}s`
+      : mode === 'pending'
+        ? `No matching ${label.toLowerCase()}s`
+        : `No matching completed ${label.toLowerCase()}s`
+    : mode === 'deleted'
+      ? `No deleted ${label.toLowerCase()}s`
+      : mode === 'pending'
+        ? `No ${label.toLowerCase()}s yet`
+        : `No completed ${label.toLowerCase()}s yet`
 
   const emptyDescription = hasActiveFilters
     ? 'Try adjusting your search or filters.'
-    : mode === 'pending'
-      ? completedCount > 0
-        ? `${completedCount} completed ${label.toLowerCase()}${completedCount === 1 ? '' : 's'} in Register — switch to the Register tab to view imported history.`
-        : `Create a ${shortLabel} to get started.`
-      : pendingCount > 0
-        ? `${pendingCount} pending ${label.toLowerCase()}${pendingCount === 1 ? '' : 's'} still in progress. Orders appear here once fully lifted.`
-        : `Completed ${label.toLowerCase()}s appear here once order quantity is fully lifted.`
+    : mode === 'deleted'
+      ? `Deleted ${shortLabel}s appear here for ${ORDER_DELETE_GRACE_DAYS} days. Restore them or delete permanently.`
+      : mode === 'pending'
+        ? completedCount > 0
+          ? `${completedCount} completed ${label.toLowerCase()}${completedCount === 1 ? '' : 's'} in Register — switch to the Register tab to view imported history.`
+          : `Create a ${shortLabel} to get started.`
+        : pendingCount > 0
+          ? `${pendingCount} pending ${label.toLowerCase()}${pendingCount === 1 ? '' : 's'} still in progress. Orders appear here once fully lifted.`
+          : `Completed ${label.toLowerCase()}s appear here once order quantity is fully lifted.`
 
   const emptyAction = hasActiveFilters ? (
     <Button variant="outline" size="sm" onClick={() => { setSearch(''); setFilters(emptyOrderFilters) }}>
@@ -647,7 +733,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     ) : (
       <Button to={`${pathPrefix}/new`} size="sm"><Plus className="h-4 w-4" /> New {shortLabel}</Button>
     )
-  ) : pendingCount > 0 && onModeChange ? (
+  ) : mode === 'completed' && pendingCount > 0 && onModeChange ? (
     <Button variant="outline" size="sm" onClick={() => onModeChange('pending')}>
       View pending {label.toLowerCase()}s
     </Button>
@@ -661,7 +747,9 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         subtitle={
           mode === 'pending'
             ? `${filtered.length} ongoing ${label.toLowerCase()}s · ${formatQty(totals.toBeLift)} to be lifted`
-            : `${filtered.length} completed ${label.toLowerCase()}s · ${formatMt(totals.orderQty)} total`
+            : mode === 'deleted'
+              ? `${filtered.length} deleted ${label.toLowerCase()}${filtered.length === 1 ? '' : 's'}`
+              : `${filtered.length} completed ${label.toLowerCase()}s · ${formatMt(totals.orderQty)} total`
         }
         breadcrumb={<Breadcrumb items={[
           { label: 'Tradeal', href: '/' },
@@ -679,6 +767,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           tabs={[
             { id: 'pending', label: 'Pending', count: pendingCount },
             { id: 'completed', label: 'Completed', count: completedCount },
+            { id: 'deleted', label: 'Deleted', count: deletedCount },
           ]}
           active={mode}
           onChange={id => onModeChange(id as OrderListMode)}
@@ -699,6 +788,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         onExport={handleExport}
       />
 
+      {mode !== 'deleted' && (
       <CollapsibleRegisterStats className="grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
           <p className="text-xs uppercase tracking-wider text-muted leading-snug">Total {shortLabel} qty (MT)</p>
@@ -724,6 +814,83 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           </p>
         </div>
       </CollapsibleRegisterStats>
+      )}
+
+      {mode === 'deleted' && (
+        <p className="mb-4 text-sm text-muted">
+          Records here are removed permanently after {ORDER_DELETE_GRACE_DAYS} days unless you restore them.
+          Deleting from this tab cannot be undone.
+        </p>
+      )}
+
+      {checkedOrderIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-4 py-3">
+          <span className="text-sm font-medium text-heading tabular-nums">
+            {checkedOrderIds.length} selected
+          </span>
+          {canDeleteOrders && mode === 'deleted' && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  for (const order of checkedOrders) {
+                    try {
+                      await store.cancelOrderDeletion(order.id)
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Could not restore'
+                      toast.error('Could not restore', { description: message })
+                      return
+                    }
+                  }
+                  toast.success(
+                    checkedOrders.length === 1
+                      ? `${formatOrderRef(checkedOrders[0].ref, checkedOrders[0].side)} restored`
+                      : `${checkedOrders.length} ${shortLabel}s restored`,
+                  )
+                  setCheckedOrderIds([])
+                  selectionAnchorRef.current = null
+                }}
+              >
+                <Undo2 className="h-4 w-4" />
+                Restore
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-danger border-danger/30 hover:bg-red-50 dark:hover:bg-red-950/30"
+                onClick={() => openPermanentDeleteForOrders(checkedOrders)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete permanently
+              </Button>
+            </>
+          )}
+          {canDeleteOrders && mode !== 'deleted' && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-danger border-danger/30 hover:bg-red-50 dark:hover:bg-red-950/30"
+              onClick={() => openDeleteForOrders(checkedOrders)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCheckedOrderIds([])
+              selectionAnchorRef.current = null
+            }}
+            aria-label="Clear selection"
+          >
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+      )}
 
       <div
         className={cn('min-w-0', undockedDetailOpen && 'relative')}
@@ -771,13 +938,14 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                           canClose={canCloseOrder(r, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok}
                           canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
           sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
+                          deletedTab={mode === 'deleted'}
                           onCloseOrder={() => setCloseTarget(r)}
                           onBuyBack={() => setBuyBackTarget(r)}
                           onScheduleDelete={() => {
-                            setDeleteError('')
-                            setDeleteTarget(r)
+                            openDeleteForOrders([r])
                           }}
                           onCancelDelete={() => setCancelTarget(r)}
+                          onPermanentlyDelete={() => openPermanentDeleteForOrders([r])}
                           onBlockedDelete={reason => setBlockedDelete({ name: r.ref, reason })}
                         />
                       </div>
@@ -806,29 +974,79 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       docked={effectiveDocked}
       onClose={handleCloseOrder}
       onDockChange={handleDockChange}
-      onScheduleDelete={selectedOrder ? () => { setDeleteError(''); setDeleteTarget(selectedOrder) } : undefined}
+      onScheduleDelete={selectedOrder ? () => openDeleteForOrders([selectedOrder]) : undefined}
       onCancelDelete={selectedOrder ? () => setCancelTarget(selectedOrder) : undefined}
       onBlockedDelete={reason => setBlockedDelete({ name: selectedOrder?.ref ?? '', reason })}
     />
 
     <ConfirmDeleteModal
-        open={!!deleteTarget}
-        onClose={() => { setDeleteTarget(null); setDeleteError('') }}
+        open={deleteTargets.length > 0}
+        onClose={() => { setDeleteTargets([]); setDeleteError('') }}
         onConfirm={handleConfirmDelete}
-        title={`Delete ${deleteTarget?.ref ?? shortLabel}?`}
-        confirmLabel="Schedule deletion"
+        title={
+          deleteTargets.length === 1
+            ? `Move ${deleteTargets[0]?.ref ?? shortLabel} to Deleted?`
+            : `Move ${deleteTargets.length} ${shortLabel}s to Deleted?`
+        }
+        confirmLabel="Move to Deleted"
         error={deleteError}
       >
         <p className="text-sm text-gray-600 dark:text-muted">
-          This {shortLabel} will be scheduled for deletion in{' '}
+          {deleteTargets.length === 1 ? `This ${shortLabel}` : `These ${shortLabel}s`} will move to the Deleted tab for{' '}
           <span className="font-medium text-heading">{ORDER_DELETE_GRACE_DAYS} days</span>.
-          {' '}It will remain visible and editable until then.
+          {' '}You can restore them from there, or delete permanently.
         </p>
-        {deleteTarget && (
+        {deleteTargets.length === 1 && deleteTargets[0] && (
           <p className="text-sm text-gray-600 dark:text-muted mt-2">
-            <span className="font-medium text-heading">{formatOrderRef(deleteTarget.ref, deleteTarget.side)}</span>
-            {' '}({formatQty(deleteTarget.orderQty)} {deleteTarget.itemName})
+            <span className="font-medium text-heading">{formatOrderRef(deleteTargets[0].ref, deleteTargets[0].side)}</span>
+            {' '}({formatQty(deleteTargets[0].orderQty)} {deleteTargets[0].itemName})
           </p>
+        )}
+        {deleteTargets.length > 1 && (
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-gray-600 dark:text-muted">
+            {deleteTargets.map(order => (
+              <li key={order.id}>
+                <span className="font-medium text-heading">{formatOrderRef(order.ref, order.side)}</span>
+                {' '}({formatQty(order.orderQty)} {order.itemName})
+              </li>
+            ))}
+          </ul>
+        )}
+      </ConfirmDeleteModal>
+
+      <ConfirmDeleteModal
+        open={permanentDeleteTargets.length > 0}
+        onClose={() => { setPermanentDeleteTargets([]); setPermanentDeleteError('') }}
+        onConfirm={handleConfirmPermanentDelete}
+        title={
+          permanentDeleteTargets.length === 1
+            ? `Permanently delete ${permanentDeleteTargets[0]?.ref ?? shortLabel}?`
+            : `Permanently delete ${permanentDeleteTargets.length} ${shortLabel}s?`
+        }
+        confirmLabel="Delete forever"
+        error={permanentDeleteError}
+      >
+        <p className="text-sm text-danger font-medium">
+          This cannot be undone. The record will not be recoverable once deleted.
+        </p>
+        <p className="text-sm text-gray-600 dark:text-muted mt-2">
+          {permanentDeleteTargets.length === 1 ? `This ${shortLabel}` : `These ${shortLabel}s`} will be removed permanently from Tradeal.
+        </p>
+        {permanentDeleteTargets.length === 1 && permanentDeleteTargets[0] && (
+          <p className="text-sm text-gray-600 dark:text-muted mt-2">
+            <span className="font-medium text-heading">{formatOrderRef(permanentDeleteTargets[0].ref, permanentDeleteTargets[0].side)}</span>
+            {' '}({formatQty(permanentDeleteTargets[0].orderQty)} {permanentDeleteTargets[0].itemName})
+          </p>
+        )}
+        {permanentDeleteTargets.length > 1 && (
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-gray-600 dark:text-muted">
+            {permanentDeleteTargets.map(order => (
+              <li key={order.id}>
+                <span className="font-medium text-heading">{formatOrderRef(order.ref, order.side)}</span>
+                {' '}({formatQty(order.orderQty)} {order.itemName})
+              </li>
+            ))}
+          </ul>
         )}
       </ConfirmDeleteModal>
 
@@ -836,12 +1054,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
         onConfirm={handleConfirmCancelDeletion}
-        title={`Cancel deletion of ${cancelTarget ? formatOrderRef(cancelTarget.ref, cancelTarget.side) : shortLabel}?`}
-        confirmLabel="Keep order"
+        title={`Restore ${cancelTarget ? formatOrderRef(cancelTarget.ref, cancelTarget.side) : shortLabel}?`}
+        confirmLabel="Restore"
       >
         <p className="text-sm text-gray-600 dark:text-muted">
           <span className="font-medium text-heading">{cancelTarget ? formatOrderRef(cancelTarget.ref, cancelTarget.side) : ''}</span>
-          {' '}will no longer be scheduled for deletion.
+          {' '}will leave Deleted and return to the register.
         </p>
       </ConfirmDeleteModal>
 

@@ -191,3 +191,7 @@ export function canDeleteOrders(session: AuthSession | null): boolean {
     hasPermission(session, 'purchase.delete') || hasPermission(session, 'sales.delete')
   )
 }
+
+export function canDeleteLifts(session: AuthSession | null): boolean {
+  return hasPermission(session, 'lifts.delete')
+}

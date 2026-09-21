@@ -185,6 +185,8 @@ export interface Lift {
   stockLift?: boolean
   /** Buyer accepts loading without tanker cleaning at producer — shared on WhatsApp. */
   loadOnRisk?: boolean
+  /** Soft-deleted — shown on Deleted tab until permanently removed. */
+  deletedAt?: string
   remarks?: string
 }
 
@@ -352,11 +354,15 @@ export function unliftedQty(
 }
 
 export function getLiftsPending(lifts: Lift[]): Lift[] {
-  return lifts.filter(l => l.status === 'pending')
+  return lifts.filter(l => l.status === 'pending' && !l.deletedAt)
 }
 
 export function getLiftsDelivered(lifts: Lift[]): Lift[] {
-  return lifts.filter(l => l.status === 'delivered')
+  return lifts.filter(l => l.status === 'delivered' && !l.deletedAt)
+}
+
+export function getLiftsDeleted(lifts: Lift[]): Lift[] {
+  return lifts.filter(l => Boolean(l.deletedAt))
 }
 
 export function formatDeliveryPeriodLabel(order: Pick<TradeOrder, 'deliveryType' | 'deliveryPeriodStart' | 'deliveryPeriodEnd'>): string {
@@ -369,27 +375,35 @@ export function formatDeliveryPeriod(order: Pick<TradeOrder, 'deliveryType' | 'd
 }
 
 export function getPOPending(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled')
+  return orders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt)
 }
 
 export function getSOPending(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled')
+  return orders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt)
 }
 
 export function getPOCompleted(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'purchase' && o.status === 'completed')
+  return orders.filter(o => o.side === 'purchase' && o.status === 'completed' && !o.deleteScheduledAt)
 }
 
 export function getSOCompleted(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && o.status === 'completed')
+  return orders.filter(o => o.side === 'sale' && o.status === 'completed' && !o.deleteScheduledAt)
+}
+
+export function getPODeleted(orders: TradeOrder[]): TradeOrder[] {
+  return orders.filter(o => o.side === 'purchase' && Boolean(o.deleteScheduledAt))
+}
+
+export function getSODeleted(orders: TradeOrder[]): TradeOrder[] {
+  return orders.filter(o => o.side === 'sale' && Boolean(o.deleteScheduledAt))
 }
 
 export function getPORegister(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'purchase')
+  return orders.filter(o => o.side === 'purchase' && !o.deleteScheduledAt)
 }
 
 export function getSORegister(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale')
+  return orders.filter(o => o.side === 'sale' && !o.deleteScheduledAt)
 }
 
 export function getLastOrder(orders: TradeOrder[], side: OrderSide): TradeOrder | undefined {
@@ -401,7 +415,7 @@ export function getRemainingSellQty(orders: TradeOrder[], poRef: string): number
   const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
   if (!po) return 0
   const soldQty = orders
-    .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled')
+    .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled' && !o.deleteScheduledAt)
     .reduce((sum, o) => sum + o.orderQty, 0)
   const cap = orderQtyCap(po)
   return roundQtyMt(cap - soldQty)

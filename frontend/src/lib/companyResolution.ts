@@ -27,11 +27,12 @@ const LOCATION_TAIL_PATTERN = /,\s*[A-Za-z][A-Za-z\s.-]{1,40}$/
 
 /** Strip PDF noise before matching — keep original for audit display */
 export function prepareNameForMatching(name: string): string {
-  return name
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(LOCATION_TAIL_PATTERN, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  let text = name.replace(/\([^)]*\)/g, ' ')
+  // Strip every trailing ", City" / ", State" segment (e.g. Chipri, Maharashtra)
+  while (LOCATION_TAIL_PATTERN.test(text)) {
+    text = text.replace(LOCATION_TAIL_PATTERN, ' ')
+  }
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 /** Normalize for matching — not for display */

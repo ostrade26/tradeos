@@ -78,6 +78,11 @@ export const tradeApi = {
       method: 'DELETE',
     }),
 
+  permanentlyDeleteOrder: (id: string) =>
+    apiFetch<MutationResponse<{ deleted: boolean }>>(`/orders/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
   buyBackPo: (id: string, input: Record<string, unknown>) =>
     apiFetch<MutationResponse<TradeOrder>>(`/orders/${encodeURIComponent(id)}/buy-back`, {
       method: 'POST',
@@ -107,6 +112,22 @@ export const tradeApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  deleteLift: (id: string) =>
+    apiFetch<MutationResponse<{ deleted: boolean }>>(`/lifts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  restoreLift: (id: string) =>
+    apiFetch<MutationResponse<{ restored: boolean }>>(`/lifts/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+    }),
+
+  permanentlyDeleteLift: (id: string) =>
+    apiFetch<MutationResponse<{ deleted: boolean }>>(`/lifts/${encodeURIComponent(id)}/permanent`, {
+      method: 'DELETE',
+    }),
+
+  canDeleteLift: (id: string) =>
+    apiFetch<{ ok: boolean; reason?: string }>(`/lifts/${encodeURIComponent(id)}/can-delete`),
 
   createBroker: (input: Record<string, unknown>) =>
     apiFetch<MutationResponse<Broker>>('/brokers', { method: 'POST', body: JSON.stringify(input) }),

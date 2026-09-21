@@ -7,6 +7,7 @@ import { Select } from './Select'
 import { Checkbox } from './Checkbox'
 import { EmptyState, emptyStateShellClass } from './Tabs'
 import type { SortDirection } from '../../lib/registerSort'
+import type { RowSelectMeta } from '../../lib/tableSelection'
 
 const DEFAULT_PAGE_SIZES = [10, 25, 50, 100]
 
@@ -39,7 +40,7 @@ interface DataTableProps<T> {
    * Applied to cells so sticky columns stay opaque while scrolling.
    */
   getRowTone?: (row: T) => 'unread' | undefined
-  onSelectRow?: (id: string) => void
+  onSelectRow?: (id: string, meta?: RowSelectMeta) => void
   onSelectAllVisible?: (select: boolean, visibleIds: string[]) => void
   getRowId?: (row: T) => string
   emptyMessage?: string
@@ -339,6 +340,7 @@ export function DataTable<T extends { id?: string | number }>({
             fullWidth ? 'w-full' : 'w-max',
             density.text,
             density.leading,
+            hasCheckboxColumn && 'select-none',
           )}
         >
           {(hasCheckboxColumn || stickyFirstColumn || stickActions) && (
@@ -365,11 +367,15 @@ export function DataTable<T extends { id?: string | number }>({
                   className={cn(
                     CHECKBOX_COL_CLASS,
                     `${density.headerY} hidden md:table-cell`,
+                    'select-none',
                     gridCellClasses(false, stickyFirstColumn, true),
                     gridOuterEdgeClasses({ top: true, left: true }),
                     stickyFirstColumn && 'sticky left-0 z-30',
                   )}
                   scope="col"
+                  onMouseDown={e => {
+                    if (e.shiftKey) e.preventDefault()
+                  }}
                 >
                   <div className={CHECKBOX_COL_INNER}>
                     {onSelectAllVisible && (
@@ -457,18 +463,32 @@ export function DataTable<T extends { id?: string | number }>({
                       className={cn(
                         CHECKBOX_COL_CLASS,
                         `${density.bodyY} hidden md:table-cell`,
+                        'select-none',
                         gridCellClasses(highlighted, stickyFirstColumn, false, tone),
                         gridOuterEdgeClasses({ left: true }),
                         stickyFirstColumn && 'sticky left-0 z-20',
                         !highlighted && !tone && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                       )}
-                      onClick={e => e.stopPropagation()}
+                      onMouseDown={e => {
+                        // Prevent Shift+click from selecting table text.
+                        if (e.shiftKey) e.preventDefault()
+                      }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        onSelectRow(id, {
+                          shiftKey: e.shiftKey,
+                          visibleIds,
+                        })
+                      }}
                     >
                       <div className={CHECKBOX_COL_INNER}>
                         <Checkbox
                           compact
                           checked={checked}
-                          onChange={() => onSelectRow(id)}
+                          // Clicks are handled on the cell so label+input don't double-toggle.
+                          className="pointer-events-none"
+                          tabIndex={-1}
+                          onChange={() => {}}
                           aria-label={`Select row ${id}`}
                         />
                       </div>

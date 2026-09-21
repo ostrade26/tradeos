@@ -11,6 +11,7 @@ from .helpers import (
     format_deletion_date,
     format_qty,
     is_deletion_due,
+    normalize_company_name,
     round_qty_mt,
     uid,
 )
@@ -131,6 +132,8 @@ def apply_lift_totals(data: dict) -> dict:
     committed_by_ref: dict[str, float] = {}
     delivered_by_ref: dict[str, float] = {}
     for lift in data.get("lifts") or []:
+        if lift.get("deletedAt"):
+            continue
         delivered = (lift.get("status") or "delivered") == "delivered"
         for a in get_lift_allocations(lift):
             committed_by_ref[a["poRef"]] = committed_by_ref.get(a["poRef"], 0) + a["qtyMt"]
@@ -310,7 +313,7 @@ def ensure_lots_for_pos(data: dict) -> dict:
     return {**data, "lots": lots}
 
 
-def _apply_remove_order(data: dict, order_id: str) -> dict:
+def apply_remove_order(data: dict, order_id: str) -> dict:
     order = next((o for o in data.get("tradeOrders") or [] if o.get("id") == order_id), None)
     if not order:
         return data
@@ -359,7 +362,7 @@ def purge_due_order_deletions(data: dict) -> dict:
     next_data = data
     for order in list(data.get("tradeOrders") or []):
         if order.get("deleteScheduledAt") and is_deletion_due(order["deleteScheduledAt"]):
-            next_data = _apply_remove_order(next_data, order["id"])
+            next_data = apply_remove_order(next_data, order["id"])
     return next_data
 
 
@@ -377,6 +380,117 @@ def migrate_po_contract_qty(data: dict) -> dict:
     return {**data, "tradeOrders": orders, "meta": meta}
 
 
+def _prefer_directory_name(a: str, b: str) -> str:
+    a_comma = "," in (a or "")
+    b_comma = "," in (b or "")
+    if a_comma != b_comma:
+        return b if a_comma else a
+    return a if len((a or "").strip()) >= len((b or "").strip()) else b
+
+
+def _pick_nonempty(*values: str | None) -> str:
+    for value in values:
+        text = (value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _prefer_location(a: str | None, b: str | None) -> str:
+    """Prefer fuller place strings (city + state over state alone)."""
+    left = (a or "").strip()
+    right = (b or "").strip()
+    if not left:
+        return right
+    if not right:
+        return left
+    l = left.lower()
+    r = right.lower()
+    if l != r and l.find(r) >= 0:
+        return left
+    if l != r and r.find(l) >= 0:
+        return right
+    left_parts = len([p for p in left.split(",") if p.strip()])
+    right_parts = len([p for p in right.split(",") if p.strip()])
+    if left_parts != right_parts:
+        return left if left_parts > right_parts else right
+    return left if len(left) >= len(right) else right
+
+
+def _merge_products(left: list | None, right: list | None) -> list:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in [*(left or []), *(right or [])]:
+        text = str(item or "").strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
+
+
+def _dedupe_named_rows(rows: list[dict], kind: str) -> list[dict]:
+    by_key: dict[str, dict] = {}
+    for row in rows:
+        key = normalize_company_name(row.get("name") or "")
+        if not key:
+            continue
+        existing = by_key.get(key)
+        if not existing:
+            by_key[key] = dict(row)
+            continue
+        merged = {
+            **existing,
+            **{k: v for k, v in row.items() if v not in (None, "", [], {})},
+            "id": existing.get("id") or row.get("id"),
+            "name": _prefer_directory_name(existing.get("name") or "", row.get("name") or ""),
+        }
+        if kind == "broker":
+            merged["contracts"] = int(existing.get("contracts") or 0) + int(row.get("contracts") or 0)
+            merged["commissionEarned"] = float(existing.get("commissionEarned") or 0) + float(
+                row.get("commissionEarned") or 0
+            )
+            merged["email"] = _pick_nonempty(existing.get("email"), row.get("email"))
+            merged["phone"] = _pick_nonempty(existing.get("phone"), row.get("phone"))
+        elif kind == "producer":
+            merged["contracts"] = int(existing.get("contracts") or 0) + int(row.get("contracts") or 0)
+            merged["products"] = _merge_products(existing.get("products"), row.get("products"))
+            location = _prefer_location(
+                existing.get("city") or existing.get("location"),
+                row.get("city") or row.get("location"),
+            )
+            merged["location"] = location
+            merged["city"] = location or None
+        else:
+            merged["totalPurchases"] = float(existing.get("totalPurchases") or 0) + float(
+                row.get("totalPurchases") or 0
+            )
+            merged["outstanding"] = float(existing.get("outstanding") or 0) + float(row.get("outstanding") or 0)
+            merged["products"] = _merge_products(existing.get("products"), row.get("products"))
+            location = _prefer_location(
+                existing.get("city") or existing.get("location"),
+                row.get("city") or row.get("location"),
+            )
+            merged["location"] = location
+            merged["city"] = location or None
+            left_last = existing.get("lastOrder") or ""
+            right_last = row.get("lastOrder") or ""
+            merged["lastOrder"] = left_last if left_last >= right_last else right_last
+        by_key[key] = merged
+    return list(by_key.values())
+
+
+def dedupe_directory(data: dict) -> dict:
+    """Collapse near-identical brokers / producers / retailers (case, suffix, location tail)."""
+    return {
+        **data,
+        "brokers": _dedupe_named_rows(list(data.get("brokers") or []), "broker"),
+        "producers": _dedupe_named_rows(list(data.get("producers") or []), "producer"),
+        "retailers": _dedupe_named_rows(list(data.get("retailers") or []), "retailer"),
+    }
+
+
 def load_and_normalize(raw: dict | None = None) -> dict:
     from ..db import DEFAULT_STATE
 
@@ -390,7 +504,7 @@ def load_and_normalize(raw: dict | None = None) -> dict:
             ),
         ),
     )
-    return pipeline
+    return dedupe_directory(pipeline)
 
 
 def load_seed_state() -> dict:

@@ -115,8 +115,12 @@ function isDateCell(value: string): boolean {
     if (serial > 20000 && serial < 60000) return true
   }
   if (/^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(value)) return true
-  const parsed = Date.parse(value)
-  return !Number.isNaN(parsed)
+  // Avoid Date.parse on slash dates — that uses US MM/DD and flips Indian dates.
+  if (!/^\d{1,2}[/.-]\d{1,2}[/.-]\d/.test(value)) {
+    const parsed = Date.parse(value)
+    return !Number.isNaN(parsed)
+  }
+  return false
 }
 
 function detectColumns(rows: string[][]): ColumnMap | null {

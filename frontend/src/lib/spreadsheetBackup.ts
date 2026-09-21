@@ -719,13 +719,80 @@ function appendRawSheetRows(
   XLSX: Pick<typeof import('xlsx'), 'utils'>,
   sheet: import('xlsx').WorkSheet,
 ) {
-  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+  const raw = sheetToAoAPreferDateText(XLSX, sheet)
   if (raw.length === 0) return
   appendSheetRows(
     target,
     key,
     raw.map(cells => ({ _cells: cells })),
   )
+}
+
+/** Excel date serial / Date cells → use displayed text so DD/MM stays consistent. */
+function cellLooksLikeExcelDate(cell: import('xlsx').CellObject): boolean {
+  if (cell.t === 'd') return true
+  if (cell.t !== 'n' || typeof cell.v !== 'number') return false
+  if (cell.v <= 20000 || cell.v >= 60000) return false
+  const z = typeof cell.z === 'string' ? cell.z : ''
+  if (/[dy]|mm?[/.-]dd?|dd?[/.-]mm?/i.test(z)) return true
+  const w = typeof cell.w === 'string' ? cell.w.trim() : ''
+  return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(w)
+}
+
+function sheetToJsonPreferDateText(
+  XLSX: Pick<typeof import('xlsx'), 'utils'>,
+  sheet: import('xlsx').WorkSheet,
+): Record<string, unknown>[] {
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: true })
+  if (rows.length === 0) return rows
+
+  const ref = sheet['!ref']
+  if (!ref) return rows
+
+  const range = XLSX.utils.decode_range(ref)
+  const headers: string[] = []
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const address = XLSX.utils.encode_cell({ r: range.s.r, c })
+    const headerCell = sheet[address]
+    const header = headerCell != null && headerCell.v != null ? String(headerCell.v).trim() : ''
+    headers.push(header)
+  }
+
+  return rows.map((row, rowIndex) => {
+    const excelRow = range.s.r + 1 + rowIndex
+    const next = { ...row }
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const header = headers[c - range.s.c]
+      if (!header) continue
+      const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
+      if (!cell || !cellLooksLikeExcelDate(cell)) continue
+      const display = typeof cell.w === 'string' ? cell.w.trim() : ''
+      if (display) next[header] = display
+    }
+    return next
+  })
+}
+
+function sheetToAoAPreferDateText(
+  XLSX: Pick<typeof import('xlsx'), 'utils'>,
+  sheet: import('xlsx').WorkSheet,
+): unknown[][] {
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as unknown[][]
+  const ref = sheet['!ref']
+  if (!ref || raw.length === 0) return raw
+
+  const range = XLSX.utils.decode_range(ref)
+  return raw.map((row, rowIndex) => {
+    const excelRow = range.s.r + rowIndex
+    const next = [...row]
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
+      if (!cell || !cellLooksLikeExcelDate(cell)) continue
+      const display = typeof cell.w === 'string' ? cell.w.trim() : ''
+      if (display) next[c - range.s.c] = display
+    }
+    return next
+  })
 }
 
 function appendSheetFromWorkbook(
@@ -738,13 +805,13 @@ function appendSheetFromWorkbook(
   const isPoSheet = kind === 'purchaseOrders'
     || inferSheetKindFromFilename(filename ?? '') === 'purchaseOrders'
 
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+  const rows = sheetToJsonPreferDateText(XLSX, sheet)
   if (rows.length > 0 && isPoSheet && sheetHasStandardPoHeaders(rows)) {
     appendSheetRows(target, 'purchaseOrders', rows)
     return
   }
 
-  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+  const raw = sheetToAoAPreferDateText(XLSX, sheet)
 
   if (isPoSheet && (isGroupedPoRawRows(raw) || tryParseGroupedPoRawRows(raw))) {
     appendSheetRows(target, 'purchaseOrders', raw.map(cells => ({ _cells: cells })))

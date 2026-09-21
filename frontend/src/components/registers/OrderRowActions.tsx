@@ -14,10 +14,13 @@ interface OrderRowActionsProps {
   canClose?: boolean
   canBuyBack?: boolean
   sellAvailableQty?: number
+  /** When true, show restore + permanent delete instead of schedule delete. */
+  deletedTab?: boolean
   onCloseOrder?: () => void
   onBuyBack?: () => void
   onScheduleDelete: () => void
   onCancelDelete: () => void
+  onPermanentlyDelete?: () => void
   onBlockedDelete: (reason: string) => void
 }
 
@@ -28,10 +31,12 @@ export function OrderRowActions({
   canClose,
   canBuyBack,
   sellAvailableQty,
+  deletedTab,
   onCloseOrder,
   onBuyBack,
   onScheduleDelete,
   onCancelDelete,
+  onPermanentlyDelete,
   onBlockedDelete,
 }: OrderRowActionsProps) {
   const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
@@ -41,22 +46,24 @@ export function OrderRowActions({
   const ref = encodeURIComponent(order.ref)
 
   const items = useMemo((): DetailPanelMenuItem[] => groupMenuItems([
-    {
-      items: [
-        ...(canEditOrders
-          ? [{ type: 'link' as const, label: 'Edit', icon: Pencil, href: editHref }]
-          : []),
-        ...(isPO && canCreateOrders
-          ? [{
-              type: 'link' as const,
-              label: (sellAvailableQty ?? 0) > 0 ? 'Sell available' : 'Create SO',
-              icon: Plus,
-              href: appPath(`/sales-orders/new?poRef=${ref}`),
-            }]
-          : []),
-      ],
-    },
-    ...(canEditOrders
+    ...(!deletedTab
+      ? [{
+          items: [
+            ...(canEditOrders
+              ? [{ type: 'link' as const, label: 'Edit', icon: Pencil, href: editHref }]
+              : []),
+            ...(isPO && canCreateOrders
+              ? [{
+                  type: 'link' as const,
+                  label: (sellAvailableQty ?? 0) > 0 ? 'Sell available' : 'Create SO',
+                  icon: Plus,
+                  href: appPath(`/sales-orders/new?poRef=${ref}`),
+                }]
+              : []),
+          ],
+        }]
+      : []),
+    ...(!deletedTab && canEditOrders
       ? [{
           items: [
             ...(canClose && onCloseOrder
@@ -74,20 +81,33 @@ export function OrderRowActions({
         { type: 'link', label: 'Timeline', icon: History, href: `${pathPrefix}/${ref}/timeline` },
       ],
     },
-    {
-      items: [{
-        type: 'button',
-        label: 'WhatsApp',
-        icon: Share2,
-        tone: 'whatsapp',
-        onClick: () => shareOrderOnWhatsApp(order),
-      }],
-    },
+    ...(!deletedTab
+      ? [{
+          items: [{
+            type: 'button' as const,
+            label: 'WhatsApp',
+            icon: Share2,
+            tone: 'whatsapp' as const,
+            onClick: () => shareOrderOnWhatsApp(order),
+          }],
+        }]
+      : []),
     ...(canDeleteOrders
       ? [{
-          items: [order.deleteScheduledAt
-            ? { type: 'button' as const, label: 'Cancel deletion', icon: Undo2, onClick: onCancelDelete }
-            : {
+          items: deletedTab || order.deleteScheduledAt
+            ? [
+                { type: 'button' as const, label: 'Restore', icon: Undo2, onClick: onCancelDelete },
+                ...(onPermanentlyDelete
+                  ? [{
+                      type: 'button' as const,
+                      label: 'Delete permanently',
+                      icon: Trash2,
+                      tone: 'danger' as const,
+                      onClick: onPermanentlyDelete,
+                    }]
+                  : []),
+              ]
+            : [{
                 type: 'button' as const,
                 label: 'Delete',
                 icon: Trash2,
@@ -96,8 +116,7 @@ export function OrderRowActions({
                   if (canDelete.ok) onScheduleDelete()
                   else onBlockedDelete(canDelete.reason ?? 'This order cannot be deleted.')
                 },
-              },
-          ],
+              }],
         }]
       : []),
   ]), [
@@ -106,6 +125,7 @@ export function OrderRowActions({
     canEditOrders,
     canDelete.ok,
     canDelete.reason,
+    deletedTab,
     editHref,
     canCreateOrders,
     canDeleteOrders,
@@ -114,10 +134,12 @@ export function OrderRowActions({
     onBlockedDelete,
     onCancelDelete,
     onCloseOrder,
+    onPermanentlyDelete,
     onScheduleDelete,
     order,
     pathPrefix,
     ref,
+    sellAvailableQty,
   ])
 
   return (

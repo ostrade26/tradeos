@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from datetime import datetime
 from typing import Any
 
@@ -51,6 +52,7 @@ from .lift_logic import (
 )
 from .loader import (
     apply_lift_totals,
+    apply_remove_order,
     build_lot_from_po,
     get_sos_for_po,
     load_and_normalize,
@@ -414,8 +416,11 @@ class TradeService:
             retailers = synced["retailers"]
 
         def party_named(rows: list[dict], name: str) -> bool:
-            key = (name or "").strip().lower()
-            return bool(key) and any((r.get("name") or "").strip().lower() == key for r in rows)
+            key = normalize_company_name(name or "")
+            return bool(key) and any(normalize_company_name(r.get("name") or "") == key for r in rows)
+
+        def party_row_match(row: dict, name: str) -> bool:
+            return normalize_company_name(row.get("name") or "") == normalize_company_name(name or "")
 
         touch_company(order.get("partyCompanyId"))
         touch_company(order.get("sellerCompanyId"))
@@ -445,7 +450,7 @@ class TradeService:
                         "contracts": p.get("contracts", 0) + 1,
                         "products": upsert_string(p.get("products") or [], order["itemName"]),
                     }
-                    if p.get("name") == order["partyName"]
+                    if party_row_match(p, order["partyName"])
                     else p
                     for p in producers
                 ]
@@ -471,7 +476,7 @@ class TradeService:
                         "products": upsert_string(r.get("products") or [], order["itemName"]),
                         "lastOrder": order["date"],
                     }
-                    if r.get("name") == order["partyName"]
+                    if party_row_match(r, order["partyName"])
                     else r
                     for r in retailers
                 ]
@@ -497,15 +502,21 @@ class TradeService:
                 ]
 
         brokers = list(data.get("brokers") or [])
-        if order["brokerName"]:
-            if any(b.get("name") == order["brokerName"] for b in brokers):
+        broker_name = (order.get("brokerName") or "").strip()
+        if broker_name and not re.match(r"^(direct|na|n/a|-|—|none)$", broker_name, re.I):
+            broker_key = normalize_company_name(broker_name)
+            existing_broker = next(
+                (b for b in brokers if normalize_company_name(b.get("name") or "") == broker_key),
+                None,
+            )
+            if existing_broker:
                 brokers = [
                     {
                         **b,
                         "contracts": b.get("contracts", 0) + 1,
                         "commissionEarned": b.get("commissionEarned", 0) + self._order_commission(order),
                     }
-                    if b.get("name") == order["brokerName"]
+                    if normalize_company_name(b.get("name") or "") == broker_key
                     else b
                     for b in brokers
                 ]
@@ -513,7 +524,7 @@ class TradeService:
                 brokers.append(
                     {
                         "id": uid(),
-                        "name": order["brokerName"],
+                        "name": broker_name,
                         "email": "",
                         "phone": "",
                         "contracts": 1,
@@ -1294,17 +1305,112 @@ class TradeService:
         )
         return updated, self._write(next_data)
 
+    def can_delete_lift(self, lift_id: str) -> dict:
+        data = self._read()
+        lift = next((l for l in data["lifts"] if l.get("id") == lift_id), None)
+        if not lift:
+            return {"ok": False, "reason": "Lift not found"}
+        return {"ok": True}
+
+    def delete_lift(self, lift_id: str) -> tuple[None, dict]:
+        """Soft-delete: move lift to the Deleted tab."""
+        data = self._read()
+        lift = next((l for l in data["lifts"] if l.get("id") == lift_id), None)
+        if not lift:
+            raise ValueError("Lift not found")
+        if lift.get("deletedAt"):
+            raise ValueError("Lift is already in Deleted")
+
+        deleted_at = datetime.utcnow().isoformat() + "Z"
+        order_summary = format_allocations_summary(
+            get_lift_allocations(lift),
+            stock_lift=bool(lift.get("stockLift")),
+        )
+        desc = f"Lift #{lift['liftRef']} — {format_qty(lift.get('liftedQty', 0))} moved to Deleted ({order_summary})"
+
+        next_data = apply_lift_totals(
+            {
+                **data,
+                "lifts": [
+                    {**l, "deletedAt": deleted_at} if l.get("id") == lift_id else l
+                    for l in data["lifts"]
+                ],
+                "activities": [
+                    self._activity("lift_recorded", "Lift deleted", desc, f"Lift-{lift['liftRef']}"),
+                    *(data.get("activities") or []),
+                ],
+            }
+        )
+        return None, self._write(next_data)
+
+    def restore_lift(self, lift_id: str) -> tuple[None, dict]:
+        data = self._read()
+        lift = next((l for l in data["lifts"] if l.get("id") == lift_id), None)
+        if not lift:
+            raise ValueError("Lift not found")
+        if not lift.get("deletedAt"):
+            raise ValueError("Lift is not in Deleted")
+
+        order_summary = format_allocations_summary(
+            get_lift_allocations(lift),
+            stock_lift=bool(lift.get("stockLift")),
+        )
+        desc = f"Lift #{lift['liftRef']} — restored from Deleted ({order_summary})"
+
+        next_data = apply_lift_totals(
+            {
+                **data,
+                "lifts": [
+                    {**l, "deletedAt": None} if l.get("id") == lift_id else l
+                    for l in data["lifts"]
+                ],
+                "activities": [
+                    self._activity("lift_recorded", "Lift restored", desc, f"Lift-{lift['liftRef']}"),
+                    *(data.get("activities") or []),
+                ],
+            }
+        )
+        return None, self._write(next_data)
+
+    def permanently_delete_lift(self, lift_id: str) -> tuple[None, dict]:
+        data = self._read()
+        lift = next((l for l in data["lifts"] if l.get("id") == lift_id), None)
+        if not lift:
+            raise ValueError("Lift not found")
+        if not lift.get("deletedAt"):
+            raise ValueError("Move the lift to Deleted before permanently deleting it")
+
+        order_summary = format_allocations_summary(
+            get_lift_allocations(lift),
+            stock_lift=bool(lift.get("stockLift")),
+        )
+        desc = f"Lift #{lift['liftRef']} — permanently deleted ({order_summary})"
+
+        next_data = apply_lift_totals(
+            {
+                **data,
+                "lifts": [l for l in data["lifts"] if l.get("id") != lift_id],
+                "activities": [
+                    self._activity("lift_recorded", "Lift permanently deleted", desc, f"Lift-{lift['liftRef']}"),
+                    *(data.get("activities") or []),
+                ],
+            }
+        )
+        return None, self._write(next_data)
+
     def _get_delete_block_reason(self, order: dict, orders: list[dict], lifts: list[dict]) -> str | None:
         if order.get("deleteScheduledAt"):
             return f"Deletion already scheduled for {format_deletion_date(order['deleteScheduledAt'])}."
         if order.get("liftedQty", 0) > 0:
             return f"This order has {format_qty(order['liftedQty'])} lifted. Remove lift records first."
-        if any(lift_touches_ref(l, order["ref"]) for l in lifts):
+        active_lifts = [l for l in lifts if not l.get("deletedAt")]
+        if any(lift_touches_ref(l, order["ref"]) for l in active_lifts):
             return "This order has lift records linked to it. Delete those lifts first."
         if order.get("side") == "purchase":
-            from .loader import get_sos_for_po
-
-            linked = get_sos_for_po(orders, order["ref"])
+            linked = [
+                s for s in get_sos_for_po(orders, order["ref"])
+                if not s.get("deleteScheduledAt")
+            ]
             if linked:
                 return f"This PO has linked SO(s): {', '.join(s['ref'] for s in linked)}. Delete those first."
         return None
@@ -1336,8 +1442,8 @@ class TradeService:
             "activities": [
                 self._activity(
                     "order_deletion_scheduled",
-                    "PO deletion scheduled" if order["side"] == "purchase" else "SO deletion scheduled",
-                    f"{order['ref']} will be deleted on {format_deletion_date(delete_scheduled_at)}",
+                    "PO moved to Deleted" if order["side"] == "purchase" else "SO moved to Deleted",
+                    f"{order['ref']} will be permanently removed on {format_deletion_date(delete_scheduled_at)} unless restored",
                     order["ref"],
                 ),
                 *(data.get("activities") or []),
@@ -1361,14 +1467,31 @@ class TradeService:
             "activities": [
                 self._activity(
                     "order_updated",
-                    "PO deletion cancelled" if order["side"] == "purchase" else "SO deletion cancelled",
-                    f"{order['ref']} will no longer be deleted",
+                    "PO restored" if order["side"] == "purchase" else "SO restored",
+                    f"{order['ref']} restored from Deleted",
                     order["ref"],
                 ),
                 *(data.get("activities") or []),
             ],
         }
         return None, self._write(next_data)
+
+    def permanently_delete_order(self, order_id: str) -> tuple[None, dict]:
+        data = self._read()
+        order = next((o for o in data["tradeOrders"] if o.get("id") == order_id), None)
+        if not order:
+            raise ValueError("Order not found")
+        if not order.get("deleteScheduledAt"):
+            raise ValueError("Move the order to Deleted before permanently deleting it")
+
+        # Re-check blockers against active lifts / linked orders (ignore this order's schedule flag).
+        blockers = dict(order)
+        blockers.pop("deleteScheduledAt", None)
+        reason = self._get_delete_block_reason(blockers, data["tradeOrders"], data["lifts"])
+        if reason:
+            raise ValueError(reason)
+
+        return None, self._write(apply_remove_order(data, order_id))
 
     def confirm_company_link(self, input_data: dict) -> tuple[dict, dict]:
         data = self._read()

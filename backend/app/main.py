@@ -534,6 +534,24 @@ def cancel_order_deletion(order_id: str, request: Request) -> dict:
     return _handle(run)
 
 
+@app.delete("/api/v1/orders/{order_id}", tags=["orders"], summary="Permanently delete order from Deleted")
+def permanently_delete_order(order_id: str, request: Request) -> dict:
+    session = _session(request)
+    svc = _trade_service(request)
+    order = next(
+        (o for o in svc.get_state().get("tradeOrders", []) if o.get("id") == order_id),
+        None,
+    )
+    side = (order or {}).get("side") or "purchase"
+    auth.require_permission(session, _order_perm(side, "delete"))
+
+    def run():
+        _, state = svc.permanently_delete_order(order_id)
+        return _mutation({"deleted": True}, state)
+
+    return _handle(run)
+
+
 @app.get("/api/v1/orders/{order_id}/can-delete", tags=["orders"], summary="Check if order can be deleted")
 def can_delete_order(order_id: str, request: Request) -> dict:
     _session(request)
@@ -571,6 +589,45 @@ def mark_lift_delivered(lift_id: str, body: DictBody, request: Request) -> dict:
         return _mutation(lift, state)
 
     return _handle(run)
+
+
+@app.delete("/api/v1/lifts/{lift_id}", tags=["lifts"], summary="Soft-delete lift (move to Deleted)")
+def delete_lift(lift_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.delete")
+
+    def run():
+        _, state = _trade_service(request).delete_lift(lift_id)
+        return _mutation({"deleted": True}, state)
+
+    return _handle(run)
+
+
+@app.post("/api/v1/lifts/{lift_id}/restore", tags=["lifts"], summary="Restore lift from Deleted")
+def restore_lift(lift_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.delete")
+
+    def run():
+        _, state = _trade_service(request).restore_lift(lift_id)
+        return _mutation({"restored": True}, state)
+
+    return _handle(run)
+
+
+@app.delete("/api/v1/lifts/{lift_id}/permanent", tags=["lifts"], summary="Permanently delete lift from Deleted")
+def permanently_delete_lift(lift_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "lifts.delete")
+
+    def run():
+        _, state = _trade_service(request).permanently_delete_lift(lift_id)
+        return _mutation({"deleted": True}, state)
+
+    return _handle(run)
+
+
+@app.get("/api/v1/lifts/{lift_id}/can-delete", tags=["lifts"], summary="Check if lift can be deleted")
+def can_delete_lift(lift_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_lift(lift_id)
 
 
 @app.post("/api/v1/brokers", tags=["directory"], summary="Create broker")

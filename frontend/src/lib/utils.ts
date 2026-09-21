@@ -47,9 +47,49 @@ function excelSerialToIso(value: number): string {
   return utc.toISOString().slice(0, 10)
 }
 
+function expandTwoDigitYear(year: number): number {
+  if (year >= 100) return year
+  // Trade dates are contemporary — treat 00–99 as 2000–2099.
+  return 2000 + year
+}
+
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const dt = new Date(year, month - 1, day)
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day
+}
+
+function ymdToIso(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/**
+ * Parse numeric slash/dash dates as DD/MM/YYYY (India).
+ * Ambiguous values like 08/10/2026 prefer day-first; only fall back to
+ * month-first when day-first is an invalid calendar date (e.g. 08/19/2026).
+ */
+function parseDayMonthYearText(text: string): string {
+  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/)
+  if (!match) return ''
+
+  const a = parseInt(match[1]!, 10)
+  const b = parseInt(match[2]!, 10)
+  const year = expandTwoDigitYear(parseInt(match[3]!, 10))
+
+  if (isValidCalendarDate(year, b, a)) return ymdToIso(year, b, a)
+  if (isValidCalendarDate(year, a, b)) return ymdToIso(year, a, b)
+  return ''
+}
+
+function dateObjectToIso(value: Date): string {
+  if (Number.isNaN(value.getTime())) return ''
+  return ymdToIso(value.getFullYear(), value.getMonth() + 1, value.getDate())
+}
+
 /** Normalize spreadsheet / user date input to `YYYY-MM-DD`, or empty when unparseable. */
 export function normalizeDateToIso(value: unknown): string {
   if (value == null || value === '') return ''
+  if (value instanceof Date) return dateObjectToIso(value)
   if (typeof value === 'number' && Number.isFinite(value)) return excelSerialToIso(value)
 
   const text = String(value).trim()
@@ -58,21 +98,19 @@ export function normalizeDateToIso(value: unknown): string {
   const isoPrefix = text.match(/^(\d{4}-\d{2}-\d{2})/)
   if (isoPrefix) return isoPrefix[1]!
 
-  const dmy = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
-  if (dmy) {
-    const day = dmy[1]!.padStart(2, '0')
-    const month = dmy[2]!.padStart(2, '0')
-    const year = dmy[3]!
-    return `${year}-${month}-${day}`
-  }
+  const dmy = parseDayMonthYearText(text)
+  if (dmy) return dmy
 
   if (/^\d+(\.\d+)?$/.test(text)) {
     const serial = parseFloat(text)
     if (serial > 20000 && serial < 60000) return excelSerialToIso(serial)
   }
 
-  const parsed = Date.parse(text)
-  if (!Number.isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10)
+  // Named months / ISO-like strings only — never slash dates (those are DD/MM above).
+  if (!/^\d{1,2}[/.-]\d{1,2}[/.-]\d/.test(text)) {
+    const parsed = Date.parse(text)
+    if (!Number.isNaN(parsed)) return dateObjectToIso(new Date(parsed))
+  }
 
   return ''
 }

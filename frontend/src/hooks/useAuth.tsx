@@ -9,6 +9,7 @@ import {
 } from 'react'
 import {
   canCreateOrders,
+  canDeleteLifts,
   canDeleteOrders,
   canEditOrders,
   clearAuthSession,
@@ -41,6 +42,7 @@ interface AuthContextValue {
   canEditOrders: boolean
   canCreateOrders: boolean
   canDeleteOrders: boolean
+  canDeleteLifts: boolean
   isAdmin: boolean
   isPlatformAdmin: boolean
   organisationSandboxTools: boolean
@@ -126,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canEditOrders: canEditOrders(session),
       canCreateOrders: canCreateOrders(session),
       canDeleteOrders: canDeleteOrders(session),
+      canDeleteLifts: canDeleteLifts(session),
       isAdmin: isAdmin(session),
       isPlatformAdmin: !!session?.isPlatformAdmin,
       organisationSandboxTools: !!session?.organisationSandboxTools,
@@ -152,6 +155,7 @@ export function usePermissions() {
     canEditOrders: auth.canEditOrders,
     canCreateOrders: auth.canCreateOrders,
     canDeleteOrders: auth.canDeleteOrders,
+    canDeleteLifts: auth.canDeleteLifts,
     isAdmin: auth.isAdmin,
     isPlatformAdmin: auth.isPlatformAdmin,
     organisationSandboxTools: auth.organisationSandboxTools,

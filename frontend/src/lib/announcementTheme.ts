@@ -45,9 +45,9 @@ const THEMES: Record<
     label: 'Maintenance',
     icon: Wrench,
     headerGradient:
-      'bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,#ffffff_0%,rgba(232,93,4,0.2)_100%)] dark:bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,rgba(255,255,255,0.06)_0%,rgba(232,93,4,0.2)_100%)]',
+      'bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,#ffffff_0%,rgba(124,58,237,0.2)_100%)] dark:bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,rgba(255,255,255,0.06)_0%,rgba(124,58,237,0.2)_100%)]',
     illustration: 'maintenance',
-    ring: 'ring-orange-300/40',
+    ring: 'ring-violet-300/40',
     primaryButton: 'bg-accent hover:bg-accent-hover text-white',
   },
   backup: {

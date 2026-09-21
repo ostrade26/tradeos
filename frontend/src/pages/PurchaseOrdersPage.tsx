@@ -4,7 +4,14 @@ import { OrderRegisterView, type OrderListMode } from '../components/registers/O
 
 function parseMode(view: string | null): OrderListMode {
   if (view === 'completed' || view === 'register') return 'completed'
+  if (view === 'deleted') return 'deleted'
   return 'pending'
+}
+
+function viewParam(mode: OrderListMode): string | null {
+  if (mode === 'completed') return 'completed'
+  if (mode === 'deleted') return 'deleted'
+  return null
 }
 
 export function PurchaseOrdersPage() {
@@ -17,7 +24,8 @@ export function PurchaseOrdersPage() {
       if (current === next) return prev
       const params = new URLSearchParams(prev)
       params.delete('ref')
-      if (next === 'completed') params.set('view', 'completed')
+      const view = viewParam(next)
+      if (view) params.set('view', view)
       else params.delete('view')
       return params
     }, { replace: true })

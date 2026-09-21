@@ -28,6 +28,7 @@ import {
   getSOsForPO,
 } from '../data/mockData'
 import { getOutstandingBalance as calcOutstandingBalance, getSellerOutstandingBalance } from '../lib/liftBalance'
+import { dedupeDirectory, refreshPartyLocationsFromOrders } from '../lib/ensureDirectoryFromOrders'
 import { liftTouchesRef } from '../lib/liftAllocations'
 import type { BuyBackInput } from '../lib/buyBack'
 import type { CloseOrderMethod } from '../lib/orderClosure'
@@ -178,12 +179,18 @@ export interface TradeStoreValue extends TradeData {
   addLift: (input: CreateLiftInput) => Promise<Lift>
   updateLift: (id: string, input: UpdateLiftInput) => Promise<Lift>
   markLiftDelivered: (id: string, input: MarkLiftDeliveredInput) => Promise<Lift>
+  deleteLift: (id: string) => Promise<void>
+  restoreLift: (id: string) => Promise<void>
+  permanentlyDeleteLift: (id: string) => Promise<void>
+  canDeleteLift: (id: string) => { ok: boolean; reason?: string }
   getOutstandingBalance: (poRef: string, soRef: string) => number
   getSellerOutstandingBalance: (sellerName: string) => { total: number; lines: { poRef: string; soRef: string; qtyMt: number }[] }
   getLiftsPending: () => Lift[]
   getLiftsDelivered: () => Lift[]
+  getLiftsDeleted: () => Lift[]
   scheduleOrderDeletion: (id: string) => Promise<void>
   cancelOrderDeletion: (id: string) => Promise<void>
+  permanentlyDeleteOrder: (id: string) => Promise<void>
   canDeleteOrder: (id: string) => { ok: boolean; reason?: string }
   getOrderByRef: (ref: string, side: OrderSide) => TradeOrder | undefined
   confirmCompanyLink: (input: ConfirmCompanyLinkInput) => Promise<Company>
@@ -207,6 +214,8 @@ export interface TradeStoreValue extends TradeData {
   getSOPending: () => TradeOrder[]
   getPOCompleted: () => TradeOrder[]
   getSOCompleted: () => TradeOrder[]
+  getPODeleted: () => TradeOrder[]
+  getSODeleted: () => TradeOrder[]
   getPORegister: () => TradeOrder[]
   getSORegister: () => TradeOrder[]
   getLastOrder: (side: OrderSide) => TradeOrder | undefined
@@ -237,7 +246,7 @@ const defaultData: TradeData = {
 
 function normalizeTradeState(state: Partial<TradeData> | null | undefined): TradeData {
   if (!state || typeof state !== 'object') return { ...defaultData }
-  return {
+  const next = {
     ...defaultData,
     ...state,
     tradeOrders: Array.isArray(state.tradeOrders) ? state.tradeOrders : [],
@@ -256,6 +265,7 @@ function normalizeTradeState(state: Partial<TradeData> | null | undefined): Trad
     items: Array.isArray(state.items) ? state.items : [],
     counters: { ...defaultData.counters, ...(state.counters ?? {}) },
   }
+  return dedupeDirectory(refreshPartyLocationsFromOrders(next))
 }
 
 const TradeContext = createContext<TradeStoreValue | null>(null)
@@ -266,16 +276,16 @@ function monthKey(date: string) {
 
 function getDeleteBlockReason(order: TradeOrder, orders: TradeOrder[], lifts: Lift[]): string | undefined {
   if (order.deleteScheduledAt) {
-    return `Deletion already scheduled for ${formatDeletionDate(order.deleteScheduledAt)}.`
+    return `Already in Deleted — restores until ${formatDeletionDate(order.deleteScheduledAt)}.`
   }
   if (order.liftedQty > 0) {
     return `This order has ${formatQty(order.liftedQty)} lifted. Remove lift records first.`
   }
-  if (lifts.some(l => liftTouchesRef(l, order.ref))) {
+  if (lifts.some(l => !l.deletedAt && liftTouchesRef(l, order.ref))) {
     return 'This order has lift records linked to it. Delete those lifts first.'
   }
   if (order.side === 'purchase') {
-    const linkedSOs = getSOsForPO(orders, order.ref)
+    const linkedSOs = getSOsForPO(orders, order.ref).filter(s => !s.deleteScheduledAt)
     if (linkedSOs.length > 0) {
       return `This PO has linked SO(s): ${linkedSOs.map(s => s.ref).join(', ')}. Delete those first.`
     }
@@ -482,6 +492,27 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     [applyMutation],
   )
 
+  const deleteLift = useCallback(
+    async (id: string) => {
+      await applyMutation(() => tradeApi.deleteLift(id))
+    },
+    [applyMutation],
+  )
+
+  const restoreLift = useCallback(
+    async (id: string) => {
+      await applyMutation(() => tradeApi.restoreLift(id))
+    },
+    [applyMutation],
+  )
+
+  const permanentlyDeleteLift = useCallback(
+    async (id: string) => {
+      await applyMutation(() => tradeApi.permanentlyDeleteLift(id))
+    },
+    [applyMutation],
+  )
+
   const scheduleOrderDeletion = useCallback(
     async (id: string) => {
       await applyMutation(() => tradeApi.scheduleOrderDeletion(id))
@@ -492,6 +523,13 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const cancelOrderDeletion = useCallback(
     async (id: string) => {
       await applyMutation(() => tradeApi.cancelOrderDeletion(id))
+    },
+    [applyMutation],
+  )
+
+  const permanentlyDeleteOrder = useCallback(
+    async (id: string) => {
+      await applyMutation(() => tradeApi.permanentlyDeleteOrder(id))
     },
     [applyMutation],
   )
@@ -581,6 +619,13 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     return reason ? { ok: false, reason } : { ok: true }
   }, [data.tradeOrders, data.lifts])
 
+  const canDeleteLift = useCallback((id: string) => {
+    const lift = data.lifts.find(l => l.id === id)
+    if (!lift) return { ok: false, reason: 'Lift not found' }
+    if (lift.deletedAt) return { ok: false, reason: 'Lift is already in Deleted' }
+    return { ok: true }
+  }, [data.lifts])
+
   const canDeleteBroker = useCallback((id: string) => {
     const broker = data.brokers.find(b => b.id === id)
     if (!broker) return { ok: false, reason: 'Broker not found' }
@@ -623,46 +668,77 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getPOPending = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled'),
+    () => data.tradeOrders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
   const getSOPending = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled'),
+    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
   const getPOCompleted = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'purchase' && o.status === 'completed'),
+    () => data.tradeOrders.filter(o => o.side === 'purchase' && o.status === 'completed' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
   const getSOCompleted = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status === 'completed'),
+    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status === 'completed' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
-  const getLiftsPending = useCallback(() => data.lifts.filter(l => l.status === 'pending'), [data.lifts])
+  const getPODeleted = useCallback(
+    () => data.tradeOrders.filter(o => o.side === 'purchase' && Boolean(o.deleteScheduledAt)),
+    [data.tradeOrders],
+  )
 
-  const getLiftsDelivered = useCallback(() => data.lifts.filter(l => l.status === 'delivered'), [data.lifts])
+  const getSODeleted = useCallback(
+    () => data.tradeOrders.filter(o => o.side === 'sale' && Boolean(o.deleteScheduledAt)),
+    [data.tradeOrders],
+  )
+
+  const getLiftsPending = useCallback(
+    () => data.lifts.filter(l => l.status === 'pending' && !l.deletedAt),
+    [data.lifts],
+  )
+
+  const getLiftsDelivered = useCallback(
+    () => data.lifts.filter(l => l.status === 'delivered' && !l.deletedAt),
+    [data.lifts],
+  )
+
+  const getLiftsDeleted = useCallback(
+    () => data.lifts.filter(l => Boolean(l.deletedAt)),
+    [data.lifts],
+  )
 
   const getOutstandingBalance = useCallback(
-    (poRef: string, soRef: string) => calcOutstandingBalance(data.lifts, poRef, soRef, data.balanceSettlements ?? []),
+    (poRef: string, soRef: string) => calcOutstandingBalance(
+      data.lifts.filter(l => !l.deletedAt),
+      poRef,
+      soRef,
+      data.balanceSettlements ?? [],
+    ),
     [data.lifts, data.balanceSettlements],
   )
 
   const getSellerOutstandingBalanceForParty = useCallback(
-    (sellerName: string) => getSellerOutstandingBalance(data.lifts, data.tradeOrders, sellerName, data.balanceSettlements ?? []),
+    (sellerName: string) => getSellerOutstandingBalance(
+      data.lifts.filter(l => !l.deletedAt),
+      data.tradeOrders,
+      sellerName,
+      data.balanceSettlements ?? [],
+    ),
     [data.lifts, data.tradeOrders, data.balanceSettlements],
   )
 
   const getPORegister = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'purchase'),
+    () => data.tradeOrders.filter(o => o.side === 'purchase' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
   const getSORegister = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale'),
+    () => data.tradeOrders.filter(o => o.side === 'sale' && !o.deleteScheduledAt),
     [data.tradeOrders],
   )
 
@@ -729,11 +805,16 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     addLift,
     updateLift,
     markLiftDelivered,
+    deleteLift,
+    restoreLift,
+    permanentlyDeleteLift,
     getOutstandingBalance,
     getSellerOutstandingBalance: getSellerOutstandingBalanceForParty,
     scheduleOrderDeletion,
     cancelOrderDeletion,
+    permanentlyDeleteOrder,
     canDeleteOrder,
+    canDeleteLift,
     getOrderByRef,
     confirmCompanyLink,
     linkHighConfidenceCompany,
@@ -756,8 +837,11 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     getSOPending,
     getPOCompleted,
     getSOCompleted,
+    getPODeleted,
+    getSODeleted,
     getLiftsPending,
     getLiftsDelivered,
+    getLiftsDeleted,
     getPORegister,
     getSORegister,
     getLastOrder,

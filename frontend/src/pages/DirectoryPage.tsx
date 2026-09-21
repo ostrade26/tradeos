@@ -30,7 +30,9 @@ import {
   formValueToBrokerageTerms,
 } from '../lib/brokerBrokerage'
 import { formatIndianAmount } from '../lib/indianAmount'
+import { normalizeCompanyName } from '../lib/companyResolution'
 import type { BrokerageTerms } from '../data/mockData'
+import { Badge } from '../components/ui/Badge'
 
 const tabs = ['parties', 'brokers'] as const
 type DirectoryTab = typeof tabs[number]
@@ -48,7 +50,50 @@ const tabLabels: Record<DirectoryTab, string> = {
 
 type PartyKind = 'producer' | 'retailer'
 
-type PartyEntry = (Producer | Retailer) & { kind: PartyKind }
+type PartyEntry = (Producer | Retailer) & {
+  kind: PartyKind
+  kinds: PartyKind[]
+  producerId?: string
+  retailerId?: string
+}
+
+function partyRoleLabel(kinds: PartyKind[]): string {
+  const seller = kinds.includes('producer')
+  const buyer = kinds.includes('retailer')
+  if (seller && buyer) return 'Seller · Buyer'
+  if (seller) return 'Seller'
+  return 'Buyer'
+}
+
+function mergePartyFields(a: Producer | Retailer, b: Producer | Retailer): Producer | Retailer {
+  const location = (() => {
+    const left = (a.city || a.location || '').trim()
+    const right = (b.city || b.location || '').trim()
+    if (!left) return right
+    if (!right) return left
+    const l = left.toLowerCase()
+    const r = right.toLowerCase()
+    if (l.includes(r) && l !== r) return left
+    if (r.includes(l) && r !== l) return right
+    const leftParts = left.split(',').filter(Boolean).length
+    const rightParts = right.split(',').filter(Boolean).length
+    if (leftParts !== rightParts) return leftParts > rightParts ? left : right
+    return left.length >= right.length ? left : right
+  })()
+  return {
+    ...a,
+    ...b,
+    id: a.id,
+    name: a.name.trim().length >= b.name.trim().length ? a.name : b.name,
+    location,
+    city: location || a.city || b.city,
+    code: a.code || b.code,
+    phone: a.phone || b.phone,
+    email: a.email || b.email,
+    gst: a.gst || b.gst,
+    products: [...new Set([...(a.products ?? []), ...(b.products ?? [])])],
+  }
+}
 
 type BrokerFormState = {
   name: string
@@ -122,7 +167,13 @@ export function DirectoryPage() {
   const [partyInitial, setPartyInitial] = useState<Partial<PartyFormValues> | null>(null)
   const [partySaving, setPartySaving] = useState(false)
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; kind?: PartyKind } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+    kind?: PartyKind
+    producerId?: string
+    retailerId?: string
+  } | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [blockedDelete, setBlockedDelete] = useState<{ name: string; reason: string } | null>(null)
 
@@ -202,10 +253,22 @@ export function DirectoryPage() {
     try {
       const input = partyFormToInput(values)
       if (partyEditId) {
+        const priorKey = normalizeCompanyName(partyInitial?.name ?? input.name)
+        const nextKey = normalizeCompanyName(input.name)
+        const twinProducer = producers.find(p => {
+          const key = normalizeCompanyName(p.name)
+          return (key === priorKey || key === nextKey) && p.id !== partyEditId
+        })
+        const twinRetailer = retailers.find(r => {
+          const key = normalizeCompanyName(r.name)
+          return (key === priorKey || key === nextKey) && r.id !== partyEditId
+        })
         if (partyEditKind === 'producer') {
           await updateProducer(partyEditId, input)
+          if (twinRetailer) await updateRetailer(twinRetailer.id, input)
         } else {
           await updateRetailer(partyEditId, input)
+          if (twinProducer) await updateProducer(twinProducer.id, input)
         }
         toast.success('Party updated', { description: input.name })
       } else {
@@ -225,9 +288,17 @@ export function DirectoryPage() {
     }
   }
 
-  const canDelete = (id: string, kind?: PartyKind) => {
-    if (active === 'brokers') return canDeleteBroker(id)
-    return kind === 'retailer' ? canDeleteRetailer(id) : canDeleteProducer(id)
+  const canDeleteParty = (entry: PartyEntry) => {
+    const checks = []
+    if (entry.producerId) checks.push(canDeleteProducer(entry.producerId))
+    if (entry.retailerId) checks.push(canDeleteRetailer(entry.retailerId))
+    if (checks.length === 0) {
+      checks.push(
+        entry.kind === 'retailer' ? canDeleteRetailer(entry.id) : canDeleteProducer(entry.id),
+      )
+    }
+    const blocked = checks.find(c => !c.ok)
+    return blocked ?? { ok: true as const }
   }
 
   const handleConfirmDelete = async () => {
@@ -235,9 +306,14 @@ export function DirectoryPage() {
     setDeleteError('')
     const name = deleteTarget.name
     try {
-      if (active === 'brokers') await deleteBroker(deleteTarget.id)
-      else if (deleteTarget.kind === 'retailer') await deleteRetailer(deleteTarget.id)
-      else await deleteProducer(deleteTarget.id)
+      if (active === 'brokers') {
+        await deleteBroker(deleteTarget.id)
+      } else {
+        if (deleteTarget.producerId) await deleteProducer(deleteTarget.producerId)
+        else if (deleteTarget.kind === 'producer') await deleteProducer(deleteTarget.id)
+        if (deleteTarget.retailerId) await deleteRetailer(deleteTarget.retailerId)
+        else if (deleteTarget.kind === 'retailer' && !deleteTarget.producerId) await deleteRetailer(deleteTarget.id)
+      }
       toast.success(`${tabLabels[active]} removed`, { description: name })
       setDeleteTarget(null)
     } catch (err) {
@@ -265,11 +341,17 @@ export function DirectoryPage() {
         </button>
         <DeleteActionButton
           label={r.name}
-          check={canDelete(r.id, r.kind)}
+          check={canDeleteParty(r)}
           className="inline-flex min-h-9 min-w-9 items-center justify-center"
           onDelete={() => {
             setDeleteError('')
-            setDeleteTarget({ id: r.id, name: r.name, kind: r.kind })
+            setDeleteTarget({
+              id: r.id,
+              name: r.name,
+              kind: r.kind,
+              producerId: r.producerId,
+              retailerId: r.retailerId,
+            })
           }}
           onBlocked={reason => setBlockedDelete({ name: r.name, reason })}
         />
@@ -295,7 +377,7 @@ export function DirectoryPage() {
         </button>
         <DeleteActionButton
           label={r.name}
-          check={canDelete(r.id)}
+          check={canDeleteBroker(r.id)}
           className="inline-flex min-h-9 min-w-9 items-center justify-center"
           onDelete={() => {
             setDeleteError('')
@@ -325,13 +407,67 @@ export function DirectoryPage() {
       || (p.phone ?? '').toLowerCase().includes(q)
       || (p.gst ?? '').toLowerCase().includes(q)
       || p.products.some(prod => prod.toLowerCase().includes(q))
-    return [
-      ...producers.filter(match).map(p => ({ ...p, kind: 'producer' as const })),
-      ...retailers.filter(match).map(r => ({ ...r, kind: 'retailer' as const })),
-    ].sort((a, b) => a.name.localeCompare(b.name))
+
+    const byKey = new Map<string, PartyEntry>()
+    for (const p of producers) {
+      if (!match(p)) continue
+      const key = normalizeCompanyName(p.name)
+      if (!key) continue
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, {
+          ...p,
+          kind: 'producer',
+          kinds: ['producer'],
+          producerId: p.id,
+        })
+        continue
+      }
+      byKey.set(key, {
+        ...mergePartyFields(existing, p),
+        kind: existing.kind,
+        kinds: [...new Set([...existing.kinds, 'producer' as const])],
+        producerId: p.id,
+        retailerId: existing.retailerId,
+      })
+    }
+    for (const r of retailers) {
+      if (!match(r)) continue
+      const key = normalizeCompanyName(r.name)
+      if (!key) continue
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, {
+          ...r,
+          kind: 'retailer',
+          kinds: ['retailer'],
+          retailerId: r.id,
+        })
+        continue
+      }
+      byKey.set(key, {
+        ...mergePartyFields(existing, r),
+        kind: existing.kinds.includes('producer') ? 'producer' : 'retailer',
+        kinds: [...new Set([...existing.kinds, 'retailer' as const])],
+        producerId: existing.producerId,
+        retailerId: r.id,
+      })
+    }
+    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [producers, retailers, search])
 
-  const partyCount = producers.length + retailers.length
+  const partyCount = useMemo(() => {
+    const keys = new Set<string>()
+    for (const p of producers) {
+      const key = normalizeCompanyName(p.name)
+      if (key) keys.add(key)
+    }
+    for (const r of retailers) {
+      const key = normalizeCompanyName(r.name)
+      if (key) keys.add(key)
+    }
+    return keys.size
+  }, [producers, retailers])
 
   const hasActiveSearch = search.trim() !== ''
   const emptyState = (
@@ -424,6 +560,12 @@ export function DirectoryPage() {
                 {r.name}
               </Link>
             )},
+            {
+              key: 'role',
+              header: 'Role',
+              className: 'hidden md:table-cell',
+              render: r => <Badge variant="default">{partyRoleLabel(r.kinds)}</Badge>,
+            },
             { key: 'city', header: 'City', render: r => r.city || r.location || '—' },
             { key: 'phone', header: 'Phone', className: 'hidden md:table-cell', render: r => r.phone || '—' },
             { key: 'gst', header: 'GST', className: 'hidden lg:table-cell', render: r => r.gst || '—' },

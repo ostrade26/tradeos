@@ -224,7 +224,9 @@ def canonical_item_name(extracted: str, candidates: list[str]) -> str:
 
 def prepare_name_for_matching(name: str) -> str:
     text = re.sub(r"\([^)]*\)", " ", name)
-    text = LOCATION_TAIL_PATTERN.sub(" ", text)
+    # Strip every trailing ", City" / ", State" segment (e.g. Chipri, Maharashtra)
+    while LOCATION_TAIL_PATTERN.search(text):
+        text = LOCATION_TAIL_PATTERN.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

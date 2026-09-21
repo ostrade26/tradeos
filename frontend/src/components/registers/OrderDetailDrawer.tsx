@@ -21,7 +21,6 @@ import { DetailPanelMenu, groupMenuItems, type DetailPanelMenuItem } from '../ui
 import { Badge, StatusBadge } from '../ui/Badge'
 import { VerifiedPeriod } from '../ui/GroupedDataTable'
 import { formatDate, formatCurrency, formatQty } from '../../lib/utils'
-import { formatDeletionDate } from '../../lib/orderDeletion'
 import { formatContractRate, orderLineAmount, contractRateFromOrder } from '../../lib/orderRate'
 import { formatOrderRef } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
@@ -235,9 +234,6 @@ export function OrderDetailDrawer({
             <StatusBadge status={order.status} />
             {closureLabel && <Badge variant="default">{closureLabel}</Badge>}
             {order.deliveryType === 'ready' && <Badge variant="info">Ready</Badge>}
-            {order.deleteScheduledAt && (
-              <Badge variant="warning">Deletes {formatDeletionDate(order.deleteScheduledAt)}</Badge>
-            )}
           </div>
         </div>
       </DetailHero>
