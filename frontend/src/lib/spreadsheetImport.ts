@@ -12,7 +12,7 @@ import { STOCK_LIFT_LABEL } from './stockLift'
 import { importRateFromSpreadsheet } from './orderRate'
 import { parseIndianAmount } from './indianAmount'
 import { refCore } from './tradeRefs'
-import { normalizeDateToIso, parseDeliveryPeriodRangeText } from './utils'
+import { normalizeDateToIso } from './utils'
 
 export function parseJsonCell(value: unknown): unknown {
   if (value == null || value === '') return null
@@ -157,39 +157,10 @@ function parseDeliveryTypeFromImport(row: Record<string, unknown>): DeliveryType
   return 'period'
 }
 
-/**
- * Resolve delivery from/to for an import row.
- * Prefer the "Delivery Period" label (`10/5 - 25/5`) when present — those stay as typed
- * DD/M text even when Excel US-locale corrupted the Delivery From/To date cells.
- */
-function resolveImportDeliveryDates(
-  row: Record<string, unknown>,
-  orderDateKeys: string[],
-): { start: string; end: string } {
-  const orderDate = parseDateCell(row, ...orderDateKeys)
-  const yearHint = orderDate
-    ? parseInt(orderDate.slice(0, 4), 10) || new Date().getFullYear()
-    : new Date().getFullYear()
-
-  if (parseDeliveryTypeFromImport(row) === 'ready') {
-    const day = orderDate
-      || parseDateCell(row, 'Delivery From', 'Delivery Start')
-      || parseDateCell(row, 'Delivery To', 'Delivery End')
-    return { start: day, end: day }
-  }
-
-  const fromPeriod = parseDeliveryPeriodRangeText(str(row, 'Delivery Period'), yearHint)
-  if (fromPeriod) return fromPeriod
-
-  const deliveryFrom = parseDateCell(row, 'Delivery From', 'Delivery Start') || orderDate
-  const deliveryTo = parseDateCell(row, 'Delivery To', 'Delivery End') || deliveryFrom
-  return { start: deliveryFrom, end: deliveryTo }
-}
-
 function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): TradeOrder {
   const ref = firstRef(str(row, 'Purchase Ref#', 'Ref#', 'PO Ref#', 'PO Ref', 'PO')) || str(row, 'Purchase Ref#', 'Ref#', 'PO Ref#', 'PO Ref', 'PO')
-  const orderDate = parseDateCell(row, 'Purchase Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10)
-  const { start: deliveryFrom, end: deliveryTo } = resolveImportDeliveryDates(row, ['Purchase Date', 'Date'])
+  const deliveryFrom = parseDateCell(row, 'Delivery From', 'Delivery Start') || parseDateCell(row, 'Purchase Date', 'Date')
+  const deliveryTo = parseDateCell(row, 'Delivery To', 'Delivery End') || deliveryFrom
   const { brokeragePct, brokeragePerTon } = parseBrokerage(str(row, 'Brokerage'))
   const orderQty = parseNumber(row.Qty ?? row['Order Qty']) ?? base?.orderQty ?? 0
   const liftedQty = base?.liftedQty ?? 0
@@ -199,13 +170,13 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
     id: base?.id ?? newOrderId(),
     ref,
     side: 'purchase',
-    date: orderDate,
+    date: parseDateCell(row, 'Purchase Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     partyName: sellerName,
     itemName: str(row, 'Item Name', 'Item') || base?.itemName || '',
     spot: str(row, 'Spot') || base?.spot || '',
     deliveryType: parseDeliveryTypeFromImport(row),
-    deliveryPeriodStart: deliveryFrom || orderDate,
-    deliveryPeriodEnd: deliveryTo || deliveryFrom || orderDate,
+    deliveryPeriodStart: deliveryFrom,
+    deliveryPeriodEnd: deliveryTo,
     deliveryPeriodVerified: base?.deliveryPeriodVerified ?? false,
     ...spreadsheetRateFields(row, base),
     taxRate: parseNumber(row.Tax) ?? base?.taxRate ?? 0,
@@ -236,8 +207,8 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
 
 function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): TradeOrder {
   const ref = firstRef(str(row, 'Sale Ref#', 'Ref#', 'SO Ref#', 'SO Ref', 'SO')) || str(row, 'Sale Ref#', 'Ref#', 'SO Ref#', 'SO Ref', 'SO')
-  const orderDate = parseDateCell(row, 'Sale Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10)
-  const { start: deliveryFrom, end: deliveryTo } = resolveImportDeliveryDates(row, ['Sale Date', 'Date'])
+  const deliveryFrom = parseDateCell(row, 'Delivery From', 'Delivery Start') || parseDateCell(row, 'Sale Date', 'Date')
+  const deliveryTo = parseDateCell(row, 'Delivery To', 'Delivery End') || deliveryFrom
   const { brokeragePct, brokeragePerTon } = parseBrokerage(str(row, 'Brokerage'))
   const orderQty = parseNumber(row.Qty ?? row['Order Qty']) ?? base?.orderQty ?? 0
   const liftedQty = base?.liftedQty ?? 0
@@ -249,13 +220,13 @@ function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): Trade
     ref,
     side: 'sale',
     poRef: base?.poRef ?? (linkedPo ? firstRef(linkedPo) || undefined : undefined),
-    date: orderDate,
+    date: parseDateCell(row, 'Sale Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     partyName: buyerName,
     itemName: str(row, 'Item', 'Item Name') || base?.itemName || '',
     spot: str(row, 'Spot') || base?.spot || '',
     deliveryType: parseDeliveryTypeFromImport(row),
-    deliveryPeriodStart: deliveryFrom || orderDate,
-    deliveryPeriodEnd: deliveryTo || deliveryFrom || orderDate,
+    deliveryPeriodStart: deliveryFrom,
+    deliveryPeriodEnd: deliveryTo,
     deliveryPeriodVerified: base?.deliveryPeriodVerified ?? false,
     ...spreadsheetRateFields(row, base),
     taxRate: parseNumber(row.Tax) ?? base?.taxRate ?? 0,

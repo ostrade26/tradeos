@@ -143,51 +143,8 @@ export function swapAmbiguousIsoDayMonth(iso: string): string {
 }
 
 /**
- * Parse legacy India delivery-period labels like `10/5 - 25/5` or `13/5 - 20/5`
- * as DD/M (optional year). Year defaults from `yearHint` (usually the order date year).
- */
-export function parseDeliveryPeriodRangeText(
-  text: string,
-  yearHint: number,
-): { start: string; end: string } | null {
-  const raw = text.trim().replace(/\u00a0/g, ' ')
-  if (!raw || /^ready$/i.test(raw)) return null
-
-  const m = raw.match(
-    /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\s*(?:-|–|—|to)\s*(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/i,
-  )
-  if (!m) return null
-
-  const day1 = parseInt(m[1]!, 10)
-  const month1 = parseInt(m[2]!, 10)
-  const year1 = m[3] ? expandTwoDigitYear(parseInt(m[3], 10)) : yearHint
-  const day2 = parseInt(m[4]!, 10)
-  const month2 = parseInt(m[5]!, 10)
-  let year2 = m[6] ? expandTwoDigitYear(parseInt(m[6], 10)) : yearHint
-
-  if (!isValidCalendarDate(year1, month1, day1) || !isValidCalendarDate(year2, month2, day2)) {
-    return null
-  }
-
-  const start = ymdToIso(year1, month1, day1)
-  let end = ymdToIso(year2, month2, day2)
-  // Cross-year period when end month/day is before start and years were inferred.
-  if (end < start && !m[3] && !m[6]) {
-    const nextYear = yearHint + 1
-    if (isValidCalendarDate(nextYear, month2, day2)) end = ymdToIso(nextYear, month2, day2)
-  }
-  if (end < start) return null
-  return { start, end }
-}
-
-function isoInInclusiveRange(iso: string, start: string, end: string): boolean {
-  return Boolean(iso && start && end && iso >= start && iso <= end)
-}
-
-/**
- * Fix dates corrupted by US MM/DD display text parsed as DD/MM.
- * Repairs inverted delivery periods and order dates that fall outside the period
- * when a day/month swap lands inside.
+ * Previously repaired US MM/DD ↔ India DD/MM flips after import.
+ * Disabled for now — keep dates exactly as imported from Excel (DD-MM-YYYY text).
  */
 export function repairAmbiguousTradeDates<T extends {
   date?: string
@@ -195,50 +152,7 @@ export function repairAmbiguousTradeDates<T extends {
   deliveryPeriodEnd?: string
   deliveredAt?: string
 }>(row: T): T {
-  let date = row.date ?? ''
-  let start = row.deliveryPeriodStart ?? ''
-  let end = row.deliveryPeriodEnd ?? ''
-  let deliveredAt = row.deliveredAt ?? ''
-
-  if (start && end && start > end) {
-    const swapStart = swapAmbiguousIsoDayMonth(start)
-    const swapEnd = swapAmbiguousIsoDayMonth(end)
-    if (swapStart !== start && swapStart <= end) start = swapStart
-    else if (swapEnd !== end && start <= swapEnd) end = swapEnd
-    else if (swapStart !== start && swapEnd !== end && swapStart <= swapEnd) {
-      start = swapStart
-      end = swapEnd
-    }
-  }
-
-  if (date && start && end && !isoInInclusiveRange(date, start, end)) {
-    const swapped = swapAmbiguousIsoDayMonth(date)
-    if (swapped !== date && isoInInclusiveRange(swapped, start, end)) date = swapped
-  } else if (date && start && date !== start && swapAmbiguousIsoDayMonth(date) === start) {
-    date = start
-  }
-
-  if (deliveredAt && start && end && !isoInInclusiveRange(deliveredAt, start, end)) {
-    const swapped = swapAmbiguousIsoDayMonth(deliveredAt)
-    if (swapped !== deliveredAt && isoInInclusiveRange(swapped, start, end)) deliveredAt = swapped
-  }
-
-  if (
-    date === (row.date ?? '')
-    && start === (row.deliveryPeriodStart ?? '')
-    && end === (row.deliveryPeriodEnd ?? '')
-    && deliveredAt === (row.deliveredAt ?? '')
-  ) {
-    return row
-  }
-
-  return {
-    ...row,
-    ...(row.date !== undefined ? { date } : {}),
-    ...(row.deliveryPeriodStart !== undefined ? { deliveryPeriodStart: start } : {}),
-    ...(row.deliveryPeriodEnd !== undefined ? { deliveryPeriodEnd: end } : {}),
-    ...(row.deliveredAt !== undefined ? { deliveredAt: deliveredAt || undefined } : {}),
-  }
+  return row
 }
 
 /** Normalize spreadsheet / user date input to `YYYY-MM-DD`, or empty when unparseable. */
