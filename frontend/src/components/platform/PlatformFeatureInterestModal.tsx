@@ -19,6 +19,7 @@ export type FeatureInterestRow = {
   feature_title: string
   feature_detail?: string
   card_tone?: string
+  card_image_url?: string
   pricing_type?: string
   price_cents?: number
   status: string
@@ -156,6 +157,7 @@ export function PlatformFeatureInterestModal({
           title={interest.feature_title}
           description={interest.feature_detail}
           cardTone={interest.card_tone}
+          imageUrl={interest.card_image_url}
           priceLabel={priceLabel}
         />
         {interest.platform_note?.trim() ? (

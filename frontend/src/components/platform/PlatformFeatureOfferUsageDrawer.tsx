@@ -107,10 +107,12 @@ export function PlatformFeatureOfferUsageDrawer({
           <FeatureOfferCatalogCard
             className="h-full w-full"
             interactive={false}
+            featured={Boolean(detail.card_featured)}
             featureKey={detail.feature_key}
             title={detail.title}
             description={detail.description}
             cardTone={detail.card_tone}
+            imageUrl={detail.card_image_url}
             priceLabel={priceLabel}
             footer={
               <Button size="sm" type="button" tabIndex={-1} className="pointer-events-none">

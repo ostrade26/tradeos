@@ -39,6 +39,8 @@ export interface OrgFeatureOffer {
   currency: string
   catalog_status: string
   card_tone?: string
+  card_image_url?: string
+  card_featured?: boolean
   entitlement_status: 'available' | 'pending' | 'active'
 }
 

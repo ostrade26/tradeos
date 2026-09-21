@@ -250,8 +250,10 @@ export function LiftRegisterPage() {
         case 'liftRef': return row.liftRef
         case 'date': return row.date
         case 'itemName': return row.itemName
+        case 'parties': return `${row.sellerName} → ${row.buyerName}`
         case 'buyerName': return row.buyerName
         case 'sellerName': return row.sellerName
+        case 'deliveryPeriod': return row.deliveryPeriodStart || row.deliveryPeriodEnd || row.deliveryPeriod || ''
         case 'liftedQty': return row.liftedQty
         case 'rate': return row.rate
         case 'balanceQtyMt': return getLiftBalanceQty(row)
@@ -458,6 +460,8 @@ export function LiftRegisterPage() {
       key: 'parties',
       header: 'Seller → Buyer',
       className: 'hidden lg:table-cell min-w-[12rem]',
+      sortable: true,
+      sortValue: (r: Lift) => `${r.sellerName} → ${r.buyerName}`,
       render: (r: Lift) => (
         <span className="max-w-[14rem] truncate block text-muted">{r.sellerName} → {r.buyerName}</span>
       ),
@@ -466,6 +470,8 @@ export function LiftRegisterPage() {
       key: 'deliveryPeriod',
       header: 'Delivery Period',
       className: 'hidden xl:table-cell whitespace-nowrap min-w-[9rem]',
+      sortable: true,
+      sortValue: (r: Lift) => r.deliveryPeriodStart || r.deliveryPeriodEnd || r.deliveryPeriod || '',
       render: (r: Lift) => (
         <VerifiedPeriod
           period={r.deliveryPeriod}
@@ -561,11 +567,6 @@ export function LiftRegisterPage() {
         }
         hideActionsOnMobile
       />
-      {mode === 'pending' && (
-        <p className="text-xs text-muted -mt-3 mb-4 leading-relaxed">
-          In transit = dispatched, not yet delivered. Qty still to book onto a lift is on the dashboard inbox as Ready to lift.
-        </p>
-      )}
 
       <Tabs
         className="mb-4"

@@ -443,6 +443,8 @@ export interface PlatformFeatureOffer {
   catalog_status: 'draft' | 'listed' | 'retired'
   sort_order: number
   card_tone?: string
+  card_image_url?: string
+  card_featured?: boolean
   created_at: string
   updated_at: string
   listed_at?: string | null
@@ -761,6 +763,8 @@ export const platformApi = {
     currency?: string
     sort_order?: number
     card_tone?: string
+    card_image_url?: string
+    card_featured?: boolean
   }) =>
     apiFetch<{ offer: PlatformFeatureOffer }>('/platform/feature-offers', {
       method: 'POST',
@@ -778,6 +782,8 @@ export const platformApi = {
       currency?: string
       sort_order?: number
       card_tone?: string
+      card_image_url?: string
+      card_featured?: boolean
     },
   ) =>
     apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {

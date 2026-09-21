@@ -288,9 +288,13 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       switch (key) {
         case 'ref': return row.ref
         case 'date': return row.date
+        case 'poRef': return row.poRef ?? ''
         case 'partyName': return row.partyName
         case 'itemName': return row.itemName
+        case 'deliveryPeriod': return row.deliveryPeriodStart || row.deliveryPeriodEnd || ''
+        case 'spot': return row.spot ?? ''
         case 'orderQty': return row.orderQty
+        case 'buyBackQty': return totalBuyBackQty(row)
         case 'liftedQty': return row.liftedQty
         case 'toBeLift': return registerToBeLift(row)
         case 'rate': return row.rate
@@ -417,6 +421,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       key: 'poRef',
       header: 'PO Ref#',
       className: 'whitespace-nowrap',
+      sortable: true,
+      sortValue: (r: TradeOrder) => r.poRef ?? '',
       render: (r: TradeOrder) => {
         const poRef = r.poRef
         if (!poRef) return <span className="text-muted">Not linked</span>
@@ -452,6 +458,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     {
       key: 'deliveryPeriod',
       header: 'Delivery Period',
+      sortable: true,
+      sortValue: (r: TradeOrder) => r.deliveryPeriodStart || r.deliveryPeriodEnd || '',
       render: (r: TradeOrder) => (
         <VerifiedPeriod
           start={r.deliveryPeriodStart}
@@ -466,11 +474,15 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       key: 'spot',
       header: 'Spot',
       className: 'hidden lg:table-cell',
+      sortable: true,
+      sortValue: (r: TradeOrder) => r.spot ?? '',
     },
     {
       key: 'rate',
       header: RATE_COLUMN_HEADER,
       className: 'text-right',
+      sortable: true,
+      sortValue: (r: TradeOrder) => r.rate,
       render: (r: TradeOrder) => (
         <span className="tabular-nums">{formatRateCell(r.rate, r.rateBasis, r.ratePerBasis)}</span>
       ),

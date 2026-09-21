@@ -1583,6 +1583,8 @@ class FeatureOfferBody(BaseModel):
     currency: str = "INR"
     sort_order: int = 0
     card_tone: str = ""
+    card_image_url: str = ""
+    card_featured: bool = False
 
 
 class FeatureOfferStatusBody(BaseModel):
@@ -1623,6 +1625,8 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
                 currency=body.currency,
                 sort_order=body.sort_order,
                 card_tone=body.card_tone,
+                card_image_url=body.card_image_url,
+                card_featured=body.card_featured,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1639,6 +1643,8 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
             currency=body.currency,
             sort_order=body.sort_order,
             card_tone=body.card_tone,
+            card_image_url=body.card_image_url,
+            card_featured=body.card_featured,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1665,6 +1671,8 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
                 currency=body.currency,
                 sort_order=body.sort_order,
                 card_tone=body.card_tone,
+                card_image_url=body.card_image_url,
+                card_featured=body.card_featured,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1681,6 +1689,8 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
             currency=body.currency,
             sort_order=body.sort_order,
             card_tone=body.card_tone,
+            card_image_url=body.card_image_url,
+            card_featured=body.card_featured,
             actor_user_id=session.user.id,
         )
         conn.commit()

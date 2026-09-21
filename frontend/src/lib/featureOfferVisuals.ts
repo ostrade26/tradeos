@@ -169,70 +169,98 @@ export function visualThemeForFeatureKey(featureKey: string, title = ''): AddOnV
 }
 
 export type AddOnCardSurface = {
-  /** Soft wash from top-right, like marketplace mockups */
-  wash: string
-  /** Stronger corner colour bloom */
-  bloom: string
-  /** Soft mesh highlight over the bloom */
-  mesh: string
-  iconBox: string
+  /** Solid left image panel */
+  imagePanel: string
+  /** Right content panel */
+  contentPanel: string
+  /** Text/price ink on content panel */
+  ink: 'dark' | 'light'
+  title: string
+  body: string
+  price: string
   categoryPill: string
+  divider: string
+  iconFallback: string
   ring: string
   ringHover: string
 }
 
 const CARD_SURFACES: Record<AddOnIllustrationKind, AddOnCardSurface> = {
   neutral: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.18)_0%,rgba(148,163,184,0.06)_40%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-slate-400/28 via-slate-300/12 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(148,163,184,0.14)_0%,transparent_48%)]',
-    iconBox: 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
-    categoryPill: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200',
+    imagePanel: 'bg-slate-500 dark:bg-slate-600',
+    contentPanel: 'bg-slate-100 dark:bg-slate-800/90',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-slate-50',
+    body: 'text-slate-700 dark:text-slate-300',
+    price: 'text-slate-900 dark:text-slate-50',
+    categoryPill: 'bg-slate-500 text-white dark:bg-slate-400 dark:text-slate-950',
+    divider: 'border-slate-300/80 dark:border-slate-600',
+    iconFallback: 'text-white/90',
     ring: 'ring-slate-200/95 dark:ring-slate-500/30',
     ringHover: 'hover:ring-slate-300 dark:hover:ring-slate-400/40',
   },
   ai: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(56,189,248,0.2)_0%,rgba(147,197,253,0.08)_42%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-sky-400/30 via-blue-400/14 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(56,189,248,0.16)_0%,transparent_48%)]',
-    iconBox: 'bg-sky-300/25 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-    categoryPill: 'bg-sky-50 text-sky-800 dark:bg-sky-900/35 dark:text-sky-200',
+    imagePanel: 'bg-sky-500 dark:bg-sky-600',
+    contentPanel: 'bg-sky-50 dark:bg-sky-950/50',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-sky-50',
+    body: 'text-slate-700 dark:text-sky-100/80',
+    price: 'text-slate-900 dark:text-sky-50',
+    categoryPill: 'bg-sky-500 text-white dark:bg-sky-400 dark:text-sky-950',
+    divider: 'border-sky-200 dark:border-sky-800',
+    iconFallback: 'text-white',
     ring: 'ring-sky-200/90 dark:ring-sky-500/25',
     ringHover: 'hover:ring-sky-300 dark:hover:ring-sky-400/40',
   },
   analytics: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(244,114,182,0.18)_0%,rgba(244,114,182,0.07)_42%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-pink-400/30 via-fuchsia-400/12 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(244,114,182,0.15)_0%,transparent_48%)]',
-    iconBox: 'bg-pink-300/25 text-pink-800 dark:bg-pink-500/15 dark:text-pink-200',
-    categoryPill: 'bg-pink-50 text-pink-800 dark:bg-pink-900/35 dark:text-pink-200',
+    imagePanel: 'bg-pink-500 dark:bg-pink-600',
+    contentPanel: 'bg-pink-50 dark:bg-pink-950/45',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-pink-50',
+    body: 'text-slate-700 dark:text-pink-100/80',
+    price: 'text-slate-900 dark:text-pink-50',
+    categoryPill: 'bg-pink-500 text-white dark:bg-pink-400 dark:text-pink-950',
+    divider: 'border-pink-200 dark:border-pink-800',
+    iconFallback: 'text-white',
     ring: 'ring-pink-200/90 dark:ring-pink-500/25',
     ringHover: 'hover:ring-pink-300 dark:hover:ring-pink-400/40',
   },
   connect: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(251,146,60,0.2)_0%,rgba(253,186,116,0.08)_42%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-orange-400/30 via-amber-400/12 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(251,146,60,0.16)_0%,transparent_48%)]',
-    iconBox: 'bg-orange-300/25 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200',
-    categoryPill: 'bg-orange-50 text-orange-800 dark:bg-orange-900/35 dark:text-orange-200',
+    imagePanel: 'bg-orange-500 dark:bg-orange-600',
+    contentPanel: 'bg-[#f7e8d8] dark:bg-orange-950/45',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-orange-50',
+    body: 'text-slate-800 dark:text-orange-100/85',
+    price: 'text-slate-900 dark:text-orange-50',
+    categoryPill: 'bg-orange-500 text-white dark:bg-orange-400 dark:text-orange-950',
+    divider: 'border-orange-200/90 dark:border-orange-800',
+    iconFallback: 'text-white',
     ring: 'ring-orange-200/95 dark:ring-orange-500/25',
     ringHover: 'hover:ring-orange-300 dark:hover:ring-orange-400/40',
   },
   ops: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(52,211,153,0.18)_0%,rgba(134,239,172,0.07)_42%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-emerald-400/30 via-teal-400/12 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(52,211,153,0.15)_0%,transparent_48%)]',
-    iconBox: 'bg-emerald-300/25 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
-    categoryPill: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-200',
+    imagePanel: 'bg-emerald-500 dark:bg-emerald-600',
+    contentPanel: 'bg-emerald-50 dark:bg-emerald-950/45',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-emerald-50',
+    body: 'text-slate-700 dark:text-emerald-100/80',
+    price: 'text-slate-900 dark:text-emerald-50',
+    categoryPill: 'bg-emerald-500 text-white dark:bg-emerald-400 dark:text-emerald-950',
+    divider: 'border-emerald-200 dark:border-emerald-800',
+    iconFallback: 'text-white',
     ring: 'ring-emerald-200/90 dark:ring-emerald-500/25',
     ringHover: 'hover:ring-emerald-300 dark:hover:ring-emerald-400/40',
   },
   spark: {
-    wash: 'bg-[radial-gradient(circle_at_100%_0%,rgba(34,211,238,0.18)_0%,rgba(103,232,249,0.07)_42%,transparent_70%)]',
-    bloom: 'bg-gradient-to-br from-cyan-400/30 via-sky-400/12 to-transparent',
-    mesh: 'bg-[radial-gradient(circle_at_78%_12%,rgba(255,255,255,0.35)_0%,transparent_42%),radial-gradient(circle_at_92%_40%,rgba(34,211,238,0.15)_0%,transparent_48%)]',
-    iconBox: 'bg-cyan-300/25 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200',
-    categoryPill: 'bg-cyan-50 text-cyan-900 dark:bg-cyan-900/35 dark:text-cyan-200',
+    imagePanel: 'bg-cyan-500 dark:bg-cyan-600',
+    contentPanel: 'bg-cyan-50 dark:bg-cyan-950/45',
+    ink: 'dark',
+    title: 'text-slate-900 dark:text-cyan-50',
+    body: 'text-slate-700 dark:text-cyan-100/80',
+    price: 'text-slate-900 dark:text-cyan-50',
+    categoryPill: 'bg-cyan-500 text-white dark:bg-cyan-400 dark:text-cyan-950',
+    divider: 'border-cyan-200 dark:border-cyan-800',
+    iconFallback: 'text-white',
     ring: 'ring-cyan-200/90 dark:ring-cyan-500/25',
     ringHover: 'hover:ring-cyan-300 dark:hover:ring-cyan-400/40',
   },

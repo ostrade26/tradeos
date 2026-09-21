@@ -1,5 +1,6 @@
 import { storageGet, storageSet } from './storage'
 import { compareSemver } from './releaseVersion'
+import { normalizeDateToIso } from './utils'
 
 export type SortDirection = 'asc' | 'desc'
 
@@ -46,23 +47,73 @@ function compareRefLabels(a: string, b: string) {
   return left.prefix.localeCompare(right.prefix)
 }
 
+const DATE_SORT_KEYS = /^(date|purchaseDate|deliveredAt|created_at|updated_at|published_at|purchase_date|payment_date|end_date|lastOrder|deliveryPeriod|deliveryPeriodStart|deliveryPeriodEnd)$/i
+
+function isDateSortKey(key: string): boolean {
+  return DATE_SORT_KEYS.test(key) || /(?:^|_)(date|at)$/i.test(key)
+}
+
+function dateSortToken(value: string | number): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return normalizeDateToIso(value) || String(value)
+  }
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  return normalizeDateToIso(text) || text.slice(0, 10)
+}
+
+function compareDateValues(av: string | number, bv: string | number, dir: number) {
+  const as = dateSortToken(av)
+  const bs = dateSortToken(bv)
+  if (!as && !bs) return 0
+  // Empty dates always last, regardless of direction
+  if (!as) return 1
+  if (!bs) return -1
+  return as.localeCompare(bs) * dir
+}
+
 function compareSortValues(
   av: string | number,
   bv: string | number,
   key: string,
   dir: number,
 ) {
-  if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+  if (typeof av === 'number' && typeof bv === 'number') {
+    if (Number.isNaN(av) && Number.isNaN(bv)) return 0
+    if (Number.isNaN(av)) return 1
+    if (Number.isNaN(bv)) return -1
+    return (av - bv) * dir
+  }
 
-  const as = String(av)
-  const bs = String(bv)
+  const as = String(av ?? '')
+  const bs = String(bv ?? '')
+
+  if (isDateSortKey(key)) {
+    return compareDateValues(av, bv, dir)
+  }
+
   if (key === 'ref' || key === 'poRef' || key === 'lotNumber' || key === 'liftRef') {
     return compareRefLabels(as, bs) * dir
   }
   if (key === 'version') {
     return compareSemver(as, bs) * dir
   }
-  return as.localeCompare(bs) * dir
+
+  // Prefer numeric compare when both sides are plain numbers (e.g. qty stored as string)
+  const an = Number(as.replace(/,/g, ''))
+  const bn = Number(bs.replace(/,/g, ''))
+  if (
+    as.trim() !== ''
+    && bs.trim() !== ''
+    && Number.isFinite(an)
+    && Number.isFinite(bn)
+    && /^-?\d+(\.\d+)?$/.test(as.trim())
+    && /^-?\d+(\.\d+)?$/.test(bs.trim())
+  ) {
+    return (an - bn) * dir
+  }
+
+  return as.localeCompare(bs, undefined, { sensitivity: 'base', numeric: true }) * dir
 }
 
 export function sortRows<T>(rows: T[], sort: SortState, getValue: (row: T, key: string) => string | number): T[] {

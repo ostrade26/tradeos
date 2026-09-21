@@ -14,6 +14,8 @@ from .repository import append_audit_log
 PRICING_TYPES = frozenset({"free", "paid", "contact"})
 CATALOG_STATUSES = frozenset({"draft", "listed", "retired"})
 CARD_TONES = frozenset({"neutral", "ai", "analytics", "connect", "ops", "spark"})
+# ~500KB binary as base64 data URL
+MAX_CARD_IMAGE_CHARS = 700_000
 
 
 def _now() -> str:
@@ -23,6 +25,22 @@ def _now() -> str:
 def _normalize_card_tone(raw: str | None) -> str:
     tone = (raw or "").strip().lower()
     return tone if tone in CARD_TONES else ""
+
+
+def _normalize_card_image_url(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if len(value) > MAX_CARD_IMAGE_CHARS:
+        raise HTTPException(status_code=400, detail="Card image is too large (max ~500KB)")
+    lower = value.lower()
+    if lower.startswith("data:image/"):
+        if ";base64," not in lower[:80]:
+            raise HTTPException(status_code=400, detail="Invalid card image data")
+        return value
+    if lower.startswith("https://") or lower.startswith("http://"):
+        return value
+    raise HTTPException(status_code=400, detail="Card image must be an http(s) URL or image data URL")
 
 
 def _default_card_tone(feature_key: str, title: str = "") -> str:
@@ -52,6 +70,8 @@ def _offer_row(row: Any) -> dict[str, Any]:
     if not tone:
         tone = _default_card_tone(str(data.get("feature_key") or ""), str(data.get("title") or ""))
     data["card_tone"] = tone
+    data["card_image_url"] = str(data.get("card_image_url") or "").strip()
+    data["card_featured"] = bool(int(data.get("card_featured") or 0))
     return data
 
 
@@ -60,11 +80,11 @@ def list_offers_platform(conn, *, status: str | None = None) -> list[dict[str, A
         q = """
             SELECT * FROM platform_feature_offers
             WHERE catalog_status = ?
-            ORDER BY sort_order, id
+            ORDER BY card_featured DESC, sort_order, id
         """
         params = (status,)
     else:
-        q = "SELECT * FROM platform_feature_offers ORDER BY sort_order, id"
+        q = "SELECT * FROM platform_feature_offers ORDER BY card_featured DESC, sort_order, id"
         params = ()
     if uses_postgres():
         q = q.replace("?", "%s")
@@ -207,6 +227,8 @@ def upsert_offer(
     sort_order: int,
     actor_user_id: int,
     card_tone: str = "",
+    card_image_url: str = "",
+    card_featured: bool = False,
 ) -> dict[str, Any]:
     key = normalize_feature_key(feature_key, title)
     title = title.strip()
@@ -216,6 +238,8 @@ def upsert_offer(
     if pricing not in PRICING_TYPES:
         raise HTTPException(status_code=400, detail="Invalid pricing type")
     tone = _normalize_card_tone(card_tone) or _default_card_tone(key, title)
+    image_url = _normalize_card_image_url(card_image_url)
+    featured = 1 if card_featured else 0
     now = _now()
     if offer_id:
         current = get_offer(conn, offer_id)
@@ -223,40 +247,98 @@ def upsert_offer(
             clash = get_offer_by_key(conn, key)
             if clash and int(clash["id"]) != offer_id:
                 raise HTTPException(status_code=400, detail="Feature key already in use")
+        if featured:
+            if uses_postgres():
+                conn.execute(
+                    "UPDATE platform_feature_offers SET card_featured = 0 WHERE id <> %s",
+                    (offer_id,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE platform_feature_offers SET card_featured = 0 WHERE id <> ?",
+                    (offer_id,),
+                )
         if uses_postgres():
             conn.execute(
                 """
                 UPDATE platform_feature_offers
                 SET feature_key = %s, title = %s, description = %s, pricing_type = %s,
-                    price_cents = %s, currency = %s, sort_order = %s, card_tone = %s, updated_at = %s
+                    price_cents = %s, currency = %s, sort_order = %s, card_tone = %s,
+                    card_image_url = %s, card_featured = %s, updated_at = %s
                 WHERE id = %s
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, offer_id),
+                (
+                    key,
+                    title,
+                    description.strip(),
+                    pricing,
+                    price_cents,
+                    currency.strip() or "INR",
+                    sort_order,
+                    tone,
+                    image_url,
+                    featured,
+                    now,
+                    offer_id,
+                ),
             )
         else:
             conn.execute(
                 """
                 UPDATE platform_feature_offers
                 SET feature_key = ?, title = ?, description = ?, pricing_type = ?,
-                    price_cents = ?, currency = ?, sort_order = ?, card_tone = ?, updated_at = ?
+                    price_cents = ?, currency = ?, sort_order = ?, card_tone = ?,
+                    card_image_url = ?, card_featured = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, offer_id),
+                (
+                    key,
+                    title,
+                    description.strip(),
+                    pricing,
+                    price_cents,
+                    currency.strip() or "INR",
+                    sort_order,
+                    tone,
+                    image_url,
+                    featured,
+                    now,
+                    offer_id,
+                ),
             )
         offer = get_offer(conn, offer_id)
     else:
         if get_offer_by_key(conn, key):
             raise HTTPException(status_code=400, detail="Feature key already exists")
+        if featured:
+            if uses_postgres():
+                conn.execute("UPDATE platform_feature_offers SET card_featured = 0")
+            else:
+                conn.execute("UPDATE platform_feature_offers SET card_featured = 0")
         if uses_postgres():
             row = conn.execute(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, card_tone, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s)
+                 catalog_status, sort_order, card_tone, card_image_url, card_featured,
+                 created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, now),
+                (
+                    key,
+                    title,
+                    description.strip(),
+                    pricing,
+                    price_cents,
+                    currency.strip() or "INR",
+                    sort_order,
+                    tone,
+                    image_url,
+                    featured,
+                    now,
+                    now,
+                ),
             ).fetchone()
             offer = _offer_row(row)
         else:
@@ -264,10 +346,24 @@ def upsert_offer(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, card_tone, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+                 catalog_status, sort_order, card_tone, card_image_url, card_featured,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
                 """,
-                (key, title, description.strip(), pricing, price_cents, currency.strip() or "INR", sort_order, tone, now, now),
+                (
+                    key,
+                    title,
+                    description.strip(),
+                    pricing,
+                    price_cents,
+                    currency.strip() or "INR",
+                    sort_order,
+                    tone,
+                    image_url,
+                    featured,
+                    now,
+                    now,
+                ),
             )
             offer = get_offer(conn, int(cur.lastrowid))
     append_audit_log(
@@ -276,7 +372,12 @@ def upsert_offer(
         action="feature_offer.upserted",
         entity_type="platform_feature_offer",
         entity_id=str(offer["id"]),
-        new_value={"feature_key": key, "pricing_type": pricing, "card_tone": tone},
+        new_value={
+            "feature_key": key,
+            "pricing_type": pricing,
+            "card_tone": tone,
+            "card_featured": bool(featured),
+        },
     )
     return offer
 

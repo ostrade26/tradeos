@@ -10,6 +10,7 @@ import { saveAuthSession } from '../../lib/auth'
 import { cn } from '../../lib/utils'
 import {
   ADDON_CATALOG_CARD_FRAME,
+  ADDON_CATALOG_CARD_FRAME_FEATURED,
   FeatureOfferCatalogCard,
   featureOfferPriceLabel,
 } from '../features/FeatureOfferCatalogCard'
@@ -18,24 +19,33 @@ import {
   mergeAddOnOffersWithPreview,
 } from '../../lib/addOnMarketplacePreview'
 
-const MARKETPLACE_GRID = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+const MARKETPLACE_GRID =
+  'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:auto-rows-[180px]'
 
-function AddOnTileSkeleton() {
+function AddOnTileSkeleton({ featured = false }: { featured?: boolean }) {
   return (
-    <div className={cn(ADDON_CATALOG_CARD_FRAME, 'animate-pulse overflow-hidden rounded-md bg-white ring-1 ring-black/[0.05] dark:bg-card dark:ring-white/10')}>
-      <div className="p-6 h-full flex flex-col">
-        <div className="relative pr-14">
-          <div className="h-6 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="mt-2 h-5 w-24 rounded-full bg-gray-100 dark:bg-gray-800" />
-          <div className="absolute right-0 top-0 h-12 w-12 rounded-md bg-gray-100 dark:bg-gray-800" />
-        </div>
-        <div className="mt-5 space-y-2 flex-1">
-          <div className="h-3 w-full rounded bg-gray-100 dark:bg-gray-800" />
-          <div className="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
-        </div>
-        <div className="mt-6 flex justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
-          <div className="h-6 w-24 rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-9 w-24 rounded-md bg-gray-100 dark:bg-gray-800" />
+    <div
+      className={cn(
+        'animate-pulse overflow-hidden rounded-md bg-white ring-1 ring-black/[0.05] dark:bg-card dark:ring-white/10',
+        featured
+          ? cn(ADDON_CATALOG_CARD_FRAME_FEATURED, 'sm:col-span-2 sm:row-span-2')
+          : ADDON_CATALOG_CARD_FRAME,
+      )}
+    >
+      <div className="flex h-full">
+        <div className={cn('shrink-0 bg-gray-200 dark:bg-gray-700', featured ? 'w-1/2' : 'w-[40%]')} />
+        <div className={cn('flex flex-1 flex-col', featured ? 'w-1/2 px-6 py-6' : 'w-[60%] px-5 py-5')}>
+          <div className="h-5 w-20 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="mt-3 h-6 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="mt-2 space-y-2 flex-1">
+            <div className="h-3 w-full rounded bg-gray-100 dark:bg-gray-800" />
+            <div className="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
+            <div className="h-3 w-4/6 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+          <div className="mt-3 flex justify-between border-t border-gray-200 pt-3 dark:border-gray-700">
+            <div className="h-6 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-8 w-20 rounded-md bg-gray-100 dark:bg-gray-800" />
+          </div>
         </div>
       </div>
     </div>
@@ -56,6 +66,7 @@ function AddOnOfferCard({
   onRequest: () => void
 }) {
   const price = featureOfferPriceLabel(offer.pricing_type, offer.price_cents)
+  const featured = Boolean(offer.card_featured)
 
   const action =
     offer.entitlement_status === 'active' ? (
@@ -75,13 +86,21 @@ function AddOnOfferCard({
     )
 
   return (
-    <div className={ADDON_CATALOG_CARD_FRAME}>
+    <div
+      className={cn(
+        featured
+          ? cn(ADDON_CATALOG_CARD_FRAME_FEATURED, 'sm:col-span-2 sm:row-span-2')
+          : ADDON_CATALOG_CARD_FRAME,
+      )}
+    >
       <FeatureOfferCatalogCard
         className="h-full w-full"
+        featured={featured}
         featureKey={offer.feature_key}
         title={offer.title}
         description={offer.description}
         cardTone={offer.card_tone}
+        imageUrl={offer.card_image_url}
         priceLabel={price}
         footer={action}
       />
@@ -174,8 +193,8 @@ export function AddOnsMarketplace() {
     <div className="w-full min-w-0">
       {loading ? (
         <div className={MARKETPLACE_GRID}>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <AddOnTileSkeleton key={i} />
+          {Array.from({ length: 7 }).map((_, i) => (
+            <AddOnTileSkeleton key={i} featured={i === 0} />
           ))}
         </div>
       ) : (

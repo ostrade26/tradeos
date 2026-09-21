@@ -15,6 +15,8 @@ def init_feature_offers_schema() -> None:
         with _pg_connect() as conn:
             _create_tables(conn)
             _ensure_card_tone_column(conn)
+            _ensure_card_image_column(conn)
+            _ensure_card_featured_column(conn)
             _seed_tradeal_ai_offer(conn)
             _seed_custom_branding_offer(conn)
             conn.commit()
@@ -22,6 +24,8 @@ def init_feature_offers_schema() -> None:
     with _sqlite_connect() as conn:
         _create_tables(conn)
         _ensure_card_tone_column(conn)
+        _ensure_card_image_column(conn)
+        _ensure_card_featured_column(conn)
         _seed_tradeal_ai_offer(conn)
         _seed_custom_branding_offer(conn)
         conn.commit()
@@ -44,6 +48,32 @@ def _ensure_card_tone_column(conn) -> None:
         )
 
 
+def _ensure_card_image_column(conn) -> None:
+    if uses_postgres():
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS card_image_url TEXT NOT NULL DEFAULT ''"
+        )
+        return
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(platform_feature_offers)").fetchall()}
+    if "card_image_url" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN card_image_url TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _ensure_card_featured_column(conn) -> None:
+    if uses_postgres():
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS card_featured INTEGER NOT NULL DEFAULT 0"
+        )
+        return
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(platform_feature_offers)").fetchall()}
+    if "card_featured" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN card_featured INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def _create_tables(conn) -> None:
     pk = "SERIAL PRIMARY KEY" if uses_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
     conn.execute(
@@ -59,6 +89,8 @@ def _create_tables(conn) -> None:
             catalog_status TEXT NOT NULL DEFAULT 'draft',
             sort_order INTEGER NOT NULL DEFAULT 0,
             card_tone TEXT NOT NULL DEFAULT '',
+            card_image_url TEXT NOT NULL DEFAULT '',
+            card_featured INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             listed_at TEXT,
