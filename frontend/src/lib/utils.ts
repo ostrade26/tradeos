@@ -36,6 +36,9 @@ export function formatNumber(n: number): string {
 }
 
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const SHORT_MONTH_INDEX: Record<string, number> = Object.fromEntries(
+  SHORT_MONTHS.map((m, i) => [m.toLowerCase(), i + 1]),
+)
 
 /** Calendar date — always `16 Sep 2026` (no comma, English short month). */
 function formatDayMonthYear(date: Date): string {
@@ -43,8 +46,9 @@ function formatDayMonthYear(date: Date): string {
 }
 
 function excelSerialToIso(value: number): string {
+  // Excel serial day count (1900 system) → UTC calendar day (no local TZ shift).
   const utc = new Date(Math.round((value - 25569) * 86400 * 1000))
-  return utc.toISOString().slice(0, 10)
+  return ymdToIso(utc.getUTCFullYear(), utc.getUTCMonth() + 1, utc.getUTCDate())
 }
 
 function expandTwoDigitYear(year: number): number {
@@ -69,7 +73,7 @@ function ymdToIso(year: number, month: number, day: number): string {
  * month-first when day-first is an invalid calendar date (e.g. 08/19/2026).
  */
 function parseDayMonthYearText(text: string): string {
-  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/)
+  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s+.*)?$/)
   if (!match) return ''
 
   const a = parseInt(match[1]!, 10)
@@ -81,6 +85,27 @@ function parseDayMonthYearText(text: string): string {
   return ''
 }
 
+/** Parse `8 Dec 2026`, `08-Dec-2026`, `8 December 2026`. */
+function parseNamedMonthDateText(text: string): string {
+  const match = text.match(
+    /^(\d{1,2})[-\s]+([A-Za-z]{3,9})[-\s,]+(\d{2}|\d{4})(?:\s+.*)?$/i,
+  )
+  if (!match) {
+    const us = text.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2}|\d{4})(?:\s+.*)?$/i)
+    if (!us) return ''
+    const month = SHORT_MONTH_INDEX[us[1]!.slice(0, 3).toLowerCase()]
+    if (!month) return ''
+    const day = parseInt(us[2]!, 10)
+    const year = expandTwoDigitYear(parseInt(us[3]!, 10))
+    return isValidCalendarDate(year, month, day) ? ymdToIso(year, month, day) : ''
+  }
+  const day = parseInt(match[1]!, 10)
+  const month = SHORT_MONTH_INDEX[match[2]!.slice(0, 3).toLowerCase()]
+  if (!month) return ''
+  const year = expandTwoDigitYear(parseInt(match[3]!, 10))
+  return isValidCalendarDate(year, month, day) ? ymdToIso(year, month, day) : ''
+}
+
 function dateObjectToIso(value: Date): string {
   if (Number.isNaN(value.getTime())) return ''
   return ymdToIso(value.getFullYear(), value.getMonth() + 1, value.getDate())
@@ -90,26 +115,35 @@ function dateObjectToIso(value: Date): string {
 export function normalizeDateToIso(value: unknown): string {
   if (value == null || value === '') return ''
   if (value instanceof Date) return dateObjectToIso(value)
-  if (typeof value === 'number' && Number.isFinite(value)) return excelSerialToIso(value)
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // Excel serials are ~30k–50k for modern trade dates; reject epoch ms / junk.
+    if (value > 20000 && value < 60000) return excelSerialToIso(value)
+    return ''
+  }
 
-  const text = String(value).trim()
+  const text = String(value).trim().replace(/\u00a0/g, ' ')
   if (!text) return ''
 
-  const isoPrefix = text.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (isoPrefix) return isoPrefix[1]!
+  // Zero-padded or unpadded ISO: 2026-12-08 / 2026-12-8 / 2026-12-08T…
+  const isoLoose = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/)
+  if (isoLoose) {
+    const year = parseInt(isoLoose[1]!, 10)
+    const month = parseInt(isoLoose[2]!, 10)
+    const day = parseInt(isoLoose[3]!, 10)
+    if (isValidCalendarDate(year, month, day)) return ymdToIso(year, month, day)
+  }
 
   const dmy = parseDayMonthYearText(text)
   if (dmy) return dmy
 
+  const named = parseNamedMonthDateText(text)
+  if (named) return named
+
   if (/^\d+(\.\d+)?$/.test(text)) {
     const serial = parseFloat(text)
     if (serial > 20000 && serial < 60000) return excelSerialToIso(serial)
-  }
-
-  // Named months / ISO-like strings only — never slash dates (those are DD/MM above).
-  if (!/^\d{1,2}[/.-]\d{1,2}[/.-]\d/.test(text)) {
-    const parsed = Date.parse(text)
-    if (!Number.isNaN(parsed)) return dateObjectToIso(new Date(parsed))
+    // Never Date.parse bare integers — they become year 46004 etc.
+    return ''
   }
 
   return ''

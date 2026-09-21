@@ -55,11 +55,12 @@ function isDateSortKey(key: string): boolean {
 
 function dateSortToken(value: string | number): string {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return normalizeDateToIso(value) || String(value)
+    return normalizeDateToIso(value)
   }
   const text = String(value ?? '').trim()
   if (!text) return ''
-  return normalizeDateToIso(text) || text.slice(0, 10)
+  // Never fall back to raw display text — that sorts alphabetically ("8 Dec" before "15 Jan").
+  return normalizeDateToIso(text)
 }
 
 function compareDateValues(av: string | number, bv: string | number, dir: number) {

@@ -33,7 +33,7 @@ import { liftTouchesRef } from '../lib/liftAllocations'
 import type { BuyBackInput } from '../lib/buyBack'
 import type { CloseOrderMethod } from '../lib/orderClosure'
 import { formatDeletionDate } from '../lib/orderDeletion'
-import { formatQty } from '../lib/utils'
+import { formatQty, normalizeDateToIso } from '../lib/utils'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
@@ -244,15 +244,43 @@ const defaultData: TradeData = {
   counters: { po: 0, so: 0, lift: 0, invoice: 0 },
 }
 
+function coerceIsoDate(value: unknown, fallback = ''): string {
+  const iso = normalizeDateToIso(value)
+  if (iso) return iso
+  const text = String(value ?? '').trim()
+  return text || fallback
+}
+
 function normalizeTradeState(state: Partial<TradeData> | null | undefined): TradeData {
   if (!state || typeof state !== 'object') return { ...defaultData }
+  const tradeOrders = (Array.isArray(state.tradeOrders) ? state.tradeOrders : []).map(order => ({
+    ...order,
+    date: coerceIsoDate(order.date),
+    deliveryPeriodStart: coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date)),
+    deliveryPeriodEnd: coerceIsoDate(order.deliveryPeriodEnd, coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date))),
+  }))
+  const lifts = (Array.isArray(state.lifts) ? state.lifts : []).map(lift => ({
+    ...lift,
+    date: coerceIsoDate(lift.date),
+    deliveredAt: lift.deliveredAt ? coerceIsoDate(lift.deliveredAt) || lift.deliveredAt : lift.deliveredAt,
+    deliveryPeriodStart: lift.deliveryPeriodStart
+      ? coerceIsoDate(lift.deliveryPeriodStart) || lift.deliveryPeriodStart
+      : lift.deliveryPeriodStart,
+    deliveryPeriodEnd: lift.deliveryPeriodEnd
+      ? coerceIsoDate(lift.deliveryPeriodEnd) || lift.deliveryPeriodEnd
+      : lift.deliveryPeriodEnd,
+  }))
+  const lots = (Array.isArray(state.lots) ? state.lots : []).map(lot => ({
+    ...lot,
+    purchaseDate: coerceIsoDate(lot.purchaseDate, lot.purchaseDate),
+  }))
   const next = {
     ...defaultData,
     ...state,
-    tradeOrders: Array.isArray(state.tradeOrders) ? state.tradeOrders : [],
-    lifts: Array.isArray(state.lifts) ? state.lifts : [],
+    tradeOrders,
+    lifts,
+    lots,
     contracts: Array.isArray(state.contracts) ? state.contracts : [],
-    lots: Array.isArray(state.lots) ? state.lots : [],
     payments: Array.isArray(state.payments) ? state.payments : [],
     deliveries: Array.isArray(state.deliveries) ? state.deliveries : [],
     brokers: Array.isArray(state.brokers) ? state.brokers : [],
