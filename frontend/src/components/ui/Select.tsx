@@ -70,7 +70,7 @@ export function Select({
       onCreate={onCreate}
       createLabel={createLabel}
       emptyMessage={emptyMessage ?? 'No matches found'}
-      disabled={disabled || (listOptions.length === 0 && !allowCustom && !allowCreate)}
+      disabled={disabled || (listOptions.length === 0 && !value && !allowCustom && !allowCreate)}
       error={error}
       onValueChange={(v, lbl) => {
         onChange?.({ target: { value: v || lbl } })

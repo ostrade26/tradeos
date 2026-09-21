@@ -88,11 +88,7 @@ export function LiftAllocationsForm({
 
   const setSo = (row: LiftAllocationDraft, soRef: string) => {
     const so = orders.find(o => o.ref === soRef && o.side === 'sale')
-    const pool = so
-      ? poolPOsForSo(so, orders).filter(p =>
-        p.ref === row.poRef || remainingOnOrder(p, lifts, excludeLiftId) > 0,
-      )
-      : []
+    const pool = so ? poolPOsForSo(so, orders) : []
     const poRef = pool.some(p => p.ref === row.poRef)
       ? row.poRef
       : (pool.find(p => p.ref === so?.poRef) ?? pool[0])?.ref ?? ''
@@ -103,7 +99,7 @@ export function LiftAllocationsForm({
     updateRow(row.id, {
       soRef,
       poRef,
-      qty: qty > 0 ? String(qty) : '',
+      qty: qty > 0 ? String(qty) : row.qty,
     })
   }
 
@@ -158,12 +154,12 @@ export function LiftAllocationsForm({
           const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
           const usedSos = new Set(rows.filter(r => r.id !== row.id).map(r => r.soRef).filter(Boolean))
           const soOptions = (() => {
+            // Show all matching non-cancelled SOs so legacy/missing links can be repaired
+            // even when remaining capacity looks like zero due to bad import totals.
             const opts = eligibleSOs.filter(s => {
-              if (s.ref === row.soRef) return true
-              if (usedSos.has(s.ref)) return false
-              return remainingOnOrder(s, lifts, excludeLiftId) > 0
+              if (usedSos.has(s.ref) && s.ref !== row.soRef) return false
+              return true
             })
-            // Keep current SO visible even if filters hide it (legacy bad / missing link repair).
             if (row.soRef && !opts.some(s => s.ref === row.soRef)) {
               const currentSo = orders.find(o => o.ref === row.soRef && o.side === 'sale' && o.status !== 'cancelled')
               if (currentSo) opts.unshift(currentSo)
@@ -171,12 +167,7 @@ export function LiftAllocationsForm({
             return opts
           })()
           const poPool = (() => {
-            const pool = so
-              ? poolPOsForSo(so, orders).filter(p =>
-                p.ref === row.poRef || remainingOnOrder(p, lifts, excludeLiftId) > 0,
-              )
-              : []
-            // Keep current PO visible even if it is not in the seller pool (legacy bad link).
+            const pool = so ? [...poolPOsForSo(so, orders)] : []
             if (row.poRef && !pool.some(p => p.ref === row.poRef)) {
               const currentPo = orders.find(o => o.ref === row.poRef && o.side === 'purchase' && o.status !== 'cancelled')
               if (currentPo) pool.unshift(currentPo)
@@ -242,8 +233,10 @@ export function LiftAllocationsForm({
                       ))
                       : [{ value: '', label: itemFilter ? `No SO for ${itemFilter}` : 'No SO available' }]}
                     value={row.soRef}
+                    displayLabel={so ? undefined : (row.soRef || undefined)}
                     onChange={e => setSo(row, e.target.value)}
                     disabled={disabled}
+                    emptyMessage={itemFilter ? `No SO for ${itemFilter}` : 'No sales orders yet'}
                   />
                   {so && (
                     <AvailableQtyCaption available={soLeft} requested={rowQty} />

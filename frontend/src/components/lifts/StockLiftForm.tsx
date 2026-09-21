@@ -39,9 +39,7 @@ export function StockLiftForm({
     && (!sellerFilter || (o.sellerName || o.partyName) === sellerFilter),
   )
 
-  const poOptions = eligiblePOs.filter(o =>
-    o.ref === value.poRef || remainingOnOrder(o, lifts, excludeLiftId) > 0,
-  )
+  const poOptions = eligiblePOs
 
   const po = orders.find(o => o.ref === value.poRef && o.side === 'purchase')
   const poLeft = po ? remainingOnOrder(po, lifts, excludeLiftId) : 0
