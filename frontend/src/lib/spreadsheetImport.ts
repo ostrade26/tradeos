@@ -311,7 +311,15 @@ function buildTankersFromImport(tankerValue: string, liftedQty: number): LiftTan
 function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
   const liftRef = parseNumber(row['Lift Ref#'] ?? row['Lift #']) ?? base?.liftRef
   const liftedQty = parseNumber(row['Lifted Qty'] ?? row.Qty) ?? base?.liftedQty ?? 0
-  const plannedQty = parseNumber(row['SO Qty'] ?? row['Sale Qty']) ?? base?.plannedQtyMt ?? liftedQty
+  const plannedFromRow = parseNumber(row['SO Qty'] ?? row['Sale Qty'])
+  const plannedQty = plannedFromRow ?? base?.plannedQtyMt ?? liftedQty
+  // Only keep an explicit shortfall when the sheet provides one; otherwise don't invent
+  // planned−actual balance from SO Qty vs Lifted Qty (common legacy noise).
+  const balanceFromRow = parseNumber(row['Balance Qty'] ?? row['Shortfall'] ?? row['Balance'])
+  const balanceQtyMt =
+    balanceFromRow != null
+      ? balanceFromRow
+      : (base?.balanceQtyMt ?? undefined)
   const poRef = firstRef(str(row, 'PO Ref#', 'PO Ref')) || base?.poRef || ''
   const soRaw = str(row, 'SO Ref#', 'SO Ref')
   const stockLift = !soRaw || soRaw.includes(STOCK_LIFT_LABEL)
@@ -351,7 +359,7 @@ function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
     rate: importRateFromSpreadsheet(row.Rate) || base?.rate || 0,
     liftedQty,
     plannedQtyMt: plannedQty,
-    balanceQtyMt: base?.balanceQtyMt,
+    balanceQtyMt: balanceQtyMt ?? undefined,
     balanceAppliedQtyMt: base?.balanceAppliedQtyMt,
     tankerNo: tankers[0]?.tankerNo ?? formatTankerNo(tankerValue) ?? base?.tankerNo ?? '',
     tankers: tankers.length > 0 ? tankers : base?.tankers ?? [],

@@ -6,6 +6,7 @@ import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { DatePicker } from '../components/ui/DatePicker'
 import { QtyInput } from '../components/ui/QtyInput'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
@@ -18,7 +19,7 @@ import {
 } from '../components/lifts/LiftTankersForm'
 import { LiftAllocationsForm, newAllocationDraft, type LiftAllocationDraft } from '../components/lifts/LiftAllocationsForm'
 import { StockLiftForm, type StockLiftDraft } from '../components/lifts/StockLiftForm'
-import { cn, formatQty, formatDate } from '../lib/utils'
+import { cn, formatQty, formatDate, normalizeDateToIso } from '../lib/utils'
 import {
   emptyLiftTankerForm,
   formToLiftTanker,
@@ -252,7 +253,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
 
   useEffect(() => {
     if (!editingLift) return
-    setDate(editingLift.date)
+    setDate(normalizeDateToIso(editingLift.date) || editingLift.date.slice(0, 10))
     setSalesInvoiceNo(editingLift.salesInvoiceNo ?? '')
     setRemarks(editingLift.remarks ?? '')
     setIsSelfLift(editingLift.isSelfLift ? 'true' : 'false')
@@ -283,8 +284,9 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     const balanceQty = editingLift.status === 'pending' && editingLift.balanceAppliedQtyMt
       ? String(editingLift.balanceAppliedQtyMt)
       : ''
+    const liftDate = normalizeDateToIso(editingLift.date) || editingLift.date.slice(0, 10)
     liftBaseline.current = serializeLiftFormState({
-      date: editingLift.date,
+      date: liftDate,
       salesInvoiceNo: editingLift.salesInvoiceNo ?? '',
       remarks: editingLift.remarks ?? '',
       isSelfLift: editingLift.isSelfLift ? 'true' : 'false',
@@ -560,10 +562,10 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
   const pageTitle = isEdit ? `Edit ${formatLiftRef(editLiftRef!)}` : 'Record Lift'
   const pageSubtitle = isEdit
     ? editingLift?.status === 'delivered'
-      ? 'Correct SO/PO links and actual weighed quantities — changes sync to orders and inventory'
+      ? 'Correct date, SO/PO links, and actual weighed quantities — changes sync to orders and inventory'
       : isStockMode
-        ? 'Update tanker details for stock received from PO'
-        : 'Update tanker details and split quantity across SOs while in transit'
+        ? 'Update date and tanker details for stock received from PO'
+        : 'Update date, tanker details, and split quantity across SOs while in transit'
     : isStockMode
       ? `Receive goods into ${STOCK_LIFT_LABEL.toLowerCase()} — sell later when you have a buyer`
       : 'One tanker can cover several SOs — add each order and split the load'
@@ -638,9 +640,9 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
               (!isEdit || editingLift?.status === 'pending') && outstandingBalance > 0 && singlePair
                 ? {
                   label: 'Remaining balance',
-                  value: `${formatQty(outstandingBalance)} MT owed on this PO/SO pair`,
+                  value: `${formatQty(outstandingBalance)} owed on this PO/SO pair`,
                   detail: balanceApplied > 0
-                    ? `Total dispatch: ${formatQty(totalPlanned + balanceApplied)} MT (${formatQty(totalPlanned)} new + ${formatQty(balanceApplied)} balance)`
+                    ? `Total dispatch: ${formatQty(totalPlanned + balanceApplied)} (${formatQty(totalPlanned)} new + ${formatQty(balanceApplied)} balance)`
                     : 'Apply this on the next lift to clear short deliveries or qty carried from a closed order.',
                 }
                 : undefined
@@ -704,7 +706,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                 value={formatLiftRef(isEdit && editLiftRef != null ? editLiftRef : store.counters.lift + 1)}
                 readOnly
               />
-              <Input label="Lift Date" type="date" value={date} onChange={e => setDate(e.target.value)} className="text-base" />
+              <DatePicker label="Lift Date" value={date} onChange={setDate} />
               <Select
                 searchable={false}
                 label="Lift Type"

@@ -349,12 +349,11 @@ def get_lift_planned_qty(lift: dict) -> float:
 
 
 def get_lift_balance_qty(lift: dict) -> float:
+    # Only trust an explicit shortfall. Do not invent planned−actual gaps from
+    # legacy imports where SO Qty and Lifted Qty differ without a real balance.
     if lift.get("balanceQtyMt") is not None:
         return lift["balanceQtyMt"]
-    if lift.get("status") != "delivered":
-        return 0
-    planned = get_lift_planned_qty(lift)
-    return round_qty_mt(max(0, planned - lift.get("liftedQty", 0)))
+    return 0.0
 
 
 def compute_balance_qty(planned_qty_mt: float, actual_qty_mt: float) -> float:
@@ -428,8 +427,9 @@ def get_seller_outstanding_balance(
     if not normalized:
         return 0.0
     settlements = settlements or []
-    shortfall = 0.0
-    applied = 0.0
+    seen: set[str] = set()
+    total = 0.0
+
     for lift in lifts:
         if exclude_lift_id and lift.get("id") == exclude_lift_id:
             continue
@@ -439,24 +439,27 @@ def get_seller_outstanding_balance(
             for a in allocs
         ):
             continue
-        shortfall += get_lift_balance_qty(lift)
-        applied += lift.get("balanceAppliedQtyMt") or 0
+        for a in allocs:
+            so_ref = a.get("soRef") or ""
+            if not so_ref:
+                continue
+            if _po_seller_name(orders, a["poRef"], lift.get("sellerName") or "").lower() != normalized:
+                continue
+            key = f"{a['poRef']}\0{so_ref}"
+            if key in seen:
+                continue
+            seen.add(key)
+            total += get_outstanding_balance(lifts, a["poRef"], so_ref, settlements)
 
-    def settlement_seller(s: dict) -> str:
-        return _po_seller_name(orders, s.get("poRef") or "").lower()
+    for s in settlements:
+        if s.get("method") != "carried_forward" or s.get("source") != "unlifted":
+            continue
+        if _po_seller_name(orders, s.get("poRef") or "").lower() != normalized:
+            continue
+        key = f"carry\0{s.get('poRef')}\0{s.get('soRef') or ''}"
+        if key in seen:
+            continue
+        seen.add(key)
+        total += s.get("qtyMt", 0) or 0
 
-    cash = sum(
-        s.get("qtyMt", 0)
-        for s in settlements
-        if s.get("method") == "cash"
-        and s.get("source") != "unlifted"
-        and settlement_seller(s) == normalized
-    )
-    unlifted = sum(
-        s.get("qtyMt", 0)
-        for s in settlements
-        if s.get("method") == "carried_forward"
-        and s.get("source") == "unlifted"
-        and settlement_seller(s) == normalized
-    )
-    return round_qty_mt(max(0, shortfall + unlifted - applied - cash))
+    return round_qty_mt(max(0, total))

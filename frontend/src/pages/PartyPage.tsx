@@ -9,10 +9,11 @@ import { DataTable } from '../components/ui/DataTable'
 import { Button } from '../components/ui/Button'
 import { formatCurrency, formatDate, formatMt, formatQty } from '../lib/utils'
 import { formatContractRate, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
-import { formatLiftRef, formatOrderRef } from '../lib/tradeRefs'
+import { formatLiftRef, formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
 import { partyMatches } from '../lib/assistant/partyMatch'
 import { toBeLifted, type Lift, type TradeOrder } from '../data/mockData'
 import { getLiftAllocations, formatLiftPoRefs, formatLiftSoRefs } from '../lib/liftAllocations'
+import { formatSellerBalanceDetail } from '../lib/liftBalance'
 import { useTradeStore } from '../store/TradeStore'
 import { brokerBrokerageSummary } from '../lib/brokerBrokerage'
 import { downloadPartyReportPdf } from '../lib/partyReportPdf'
@@ -127,12 +128,10 @@ export function PartyPage() {
           caption={producer && sellerBalance.total > 0 ? {
             label: 'Remaining balance',
             value: formatQty(sellerBalance.total),
-            detail: [
-              'MT owed from prior short deliveries',
-              sellerBalance.lines.length === 1
-                ? `${sellerBalance.lines[0].poRef} → ${sellerBalance.lines[0].soRef}`
-                : sellerBalance.lines.map(line => `${line.poRef} → ${line.soRef}: ${formatQty(line.qtyMt)}`).join(' · '),
-            ].join(' · '),
+            detail: formatSellerBalanceDetail(
+              sellerBalance.lines,
+              (poRef, soRef, qtyMt) => `${formatPoRef(poRef)} → ${formatSoRef(soRef)}: ${formatQty(qtyMt)}`,
+            ),
           } : undefined}
         >
           <p className="text-xs font-medium uppercase tracking-wide text-muted">{partyKind} details</p>

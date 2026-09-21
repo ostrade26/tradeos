@@ -1167,12 +1167,16 @@ class TradeService:
             else existing.get("balanceQtyMt")
         )
 
+        next_date = (input_data.get("date") or existing.get("date") or "").strip()
+        if not next_date:
+            raise ValueError("Lift date is required")
+
         updated = {
             **existing,
             "poRef": first["poRef"],
             "soRef": so_ref,
             "allocations": allocations,
-            "date": input_data["date"],
+            "date": next_date,
             "buyerName": buyer_name or self._trader_name(),
             "sellerName": seller_name or po["partyName"],
             "itemName": po["itemName"],
@@ -1200,6 +1204,14 @@ class TradeService:
             inv = (input_data.get("salesInvoiceNo") or "").strip()
             updated["salesInvoiceNo"] = inv or existing.get("salesInvoiceNo")
 
+        # Keep deliveredAt day in sync when the lift date is corrected after delivery.
+        if existing.get("status") == "delivered" and next_date != (existing.get("date") or ""):
+            prev_delivered = str(existing.get("deliveredAt") or "")
+            time_suffix = "T12:00:00Z"
+            if "T" in prev_delivered:
+                time_suffix = "T" + prev_delivered.split("T", 1)[1]
+            updated["deliveredAt"] = f"{next_date}{time_suffix}"
+
         title = "Lift quantity updated"
         existing_allocs = get_lift_allocations(existing)
         links_changed = (
@@ -1212,8 +1224,11 @@ class TradeService:
                 for a, b in zip(allocations, existing_allocs)
             )
         )
+        date_changed = next_date != (existing.get("date") or "")
         if links_changed:
             title = "Lift orders updated"
+        elif date_changed and lifted_qty == existing.get("liftedQty"):
+            title = "Lift date updated"
         next_data = apply_lift_totals(
             {
                 **data,

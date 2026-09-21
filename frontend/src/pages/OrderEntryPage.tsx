@@ -48,6 +48,7 @@ import {
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
+import { collapseRepeatedPartyLocation, formatSellerBalanceDetail } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
 import { shareOrderOnWhatsApp } from '../lib/whatsappShare'
 import { partyMatches } from '../lib/assistant/partyMatch'
@@ -1101,10 +1102,11 @@ function OrderFormFields({
   const sellerItemCaption = isPO && sellerBalance.total > 0
     ? {
       label: 'Remaining balance',
-      value: `${formatQty(sellerBalance.total)} MT owed by ${form.partyName}`,
-      detail: sellerBalance.lines.length === 1
-        ? `From ${formatPoRef(sellerBalance.lines[0].poRef)} → ${formatSoRef(sellerBalance.lines[0].soRef)} — apply on the next lift.`
-        : sellerBalance.lines.map(line => `${formatPoRef(line.poRef)} → ${formatSoRef(line.soRef)}: ${formatQty(line.qtyMt)}`).join(' · '),
+      value: `${formatQty(sellerBalance.total)} owed by ${collapseRepeatedPartyLocation(form.partyName)}`,
+      detail: formatSellerBalanceDetail(
+        sellerBalance.lines,
+        (poRef, soRef, qtyMt) => `${formatPoRef(poRef)} → ${formatSoRef(soRef)}: ${formatQty(qtyMt)}`,
+      ),
     }
     : undefined
 
