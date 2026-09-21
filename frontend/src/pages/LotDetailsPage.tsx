@@ -10,6 +10,7 @@ import { DataTable } from '../components/ui/DataTable'
 import { ProgressBar } from '../components/ui/CommandPalette'
 import { formatCurrency, formatDate, formatMt, formatQty, cn, availableQtyClass } from '../lib/utils'
 import { formatContractRate, formatRateCell, SALE_RATE_COLUMN_HEADER } from '../lib/orderRate'
+import { formatLiftRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
 import { useTradeStore } from '../store/TradeStore'
 import { getLiftAllocations, liftTouchesRef } from '../lib/liftAllocations'
 
@@ -82,7 +83,7 @@ export function LotDetailsPage() {
         quantity: -qty,
         balance,
         date: lift.date,
-        ref: `Lift #${lift.liftRef}`,
+        ref: formatLiftRef(lift.liftRef),
       })
     }
 
@@ -152,7 +153,7 @@ export function LotDetailsPage() {
                   icon={<Package className="h-10 w-10" />}
                   title="No allocations yet"
                   description={`Stock from ${poRef} is not linked to any sales orders.`}
-                  action={<Button to={`/sales-orders/new?poRef=${encodeURIComponent(poRef)}`} size="sm">Create SO against {poRef}</Button>}
+                  action={<Button to={`/sales-orders/new?poRef=${encodeURIComponent(poRef)}`} size="sm">Create SO against {formatPoRef(poRef)}</Button>}
                 />
               </div>
             ) : (
@@ -161,7 +162,7 @@ export function LotDetailsPage() {
                 qtyNote
                 columns={[
                   { key: 'ref', header: 'SO Ref#', render: (r: typeof allocations[0]) => (
-                    <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="font-mono text-accent hover:underline text-sm">{r.ref}</Link>
+                    <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="font-mono text-accent hover:underline text-sm">{formatSoRef(r.ref)}</Link>
                   )},
                   { key: 'retailer', header: 'Buyer' },
                   { key: 'poQty', header: 'PO Qty', render: () => <span className="tabular-nums">{formatMt(lot.quantityPurchased)}</span>, className: 'text-right' },

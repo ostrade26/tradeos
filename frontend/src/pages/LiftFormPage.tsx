@@ -31,7 +31,7 @@ import {
   collectLiftTankerFieldErrors,
 } from '../lib/liftTankers'
 import { allocationTotal, formatLiftOrderSummary, getLiftAllocations, remainingOnOrder } from '../lib/liftAllocations'
-import { formatLiftRef } from '../lib/tradeRefs'
+import { formatLiftRef, formatPoRef } from '../lib/tradeRefs'
 import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
 import { uniqueSorted } from '../lib/orderFilters'
 import { crossPoAllocationSummary, poolPOsForSo } from '../lib/sellerLiftPool'
@@ -693,7 +693,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
             {!isEdit && !isStockMode && firstPoRef && parsedAllocations.length === 0 && (
               <div className="mt-4">
                 <Button to={`/sales-orders/new?poRef=${encodeURIComponent(firstPoRef)}`} variant="outline" size="sm">
-                  Create SO for {firstPoRef}
+                  Create SO for {formatPoRef(firstPoRef)}
                 </Button>
               </div>
             )}
@@ -702,6 +702,11 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
           <Card>
             <h3 className="text-sm font-semibold mb-4">Lift details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Lift Ref. No."
+                value={formatLiftRef(isEdit && editLiftRef != null ? editLiftRef : store.counters.lift + 1)}
+                readOnly
+              />
               <Input label="Lift Date" type="date" value={date} onChange={e => setDate(e.target.value)} className="text-base" />
               <Select
                 searchable={false}

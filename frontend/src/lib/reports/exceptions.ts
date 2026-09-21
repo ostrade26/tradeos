@@ -2,6 +2,7 @@ import type { TradeStoreValue } from '../../store/TradeStore'
 import { getLiftAllocations } from '../liftAllocations'
 import { getLiftPlannedQty } from '../liftBalance'
 import { roundQtyMt } from '../utils'
+import { formatLiftRef, formatPoRef } from '../tradeRefs'
 import { loadExceptionOverlay, type ExceptionOverlay } from './exceptionOverlay'
 
 export type ExceptionSeverity = 'Critical' | 'High' | 'Medium'
@@ -97,7 +98,7 @@ export function detectExceptions(store: TradeStoreValue): ExceptionRow[] {
       }))
     }
     if (po.status === 'completed' && roundQtyMt(Math.abs(po.liftedQty - po.orderQty)) > 0.05) {
-      out.push(base(`qty:${po.ref}`, 'Quantity mismatch vs PO', po.ref, `/purchase-orders?ref=${encodeURIComponent(po.ref)}`, 'High', {
+      out.push(base(`qty:${po.ref}`, 'Quantity mismatch vs PO', formatPoRef(po.ref), `/purchase-orders?ref=${encodeURIComponent(po.ref)}`, 'High', {
         date: po.date, item: po.itemName, supplier: po.partyName,
       }))
     }
@@ -107,7 +108,7 @@ export function detectExceptions(store: TradeStoreValue): ExceptionRow[] {
     const planned = getLiftPlannedQty(lift)
     if (lift.status === 'delivered' && roundQtyMt(Math.abs(lift.liftedQty - planned)) > 0.05) {
       const under = lift.liftedQty < planned
-      out.push(base(`lift-var:${lift.id}`, under ? 'Lift underfill' : 'Lift overfill', `#${lift.liftRef}`, `/lifts?ref=${lift.liftRef}`, 'High', {
+      out.push(base(`lift-var:${lift.id}`, under ? 'Lift underfill' : 'Lift overfill', formatLiftRef(lift.liftRef), `/lifts?ref=${lift.liftRef}`, 'High', {
         date: lift.date, item: lift.itemName, supplier: lift.sellerName, customer: lift.buyerName,
       }))
     }

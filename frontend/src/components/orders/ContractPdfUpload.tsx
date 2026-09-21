@@ -181,11 +181,6 @@ export function ContractPdfUpload({ side, onParsed, onBeforeApply, embedded = fa
   }
 
   const handleFile = async (file: File) => {
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Please upload a PDF contract confirmation')
-      return
-    }
-
     setLoading(true)
     setError('')
     setFileName(file.name)
@@ -330,8 +325,7 @@ export function ContractPdfUpload({ side, onParsed, onBeforeApply, embedded = fa
               </p>
               <p className="text-xs text-muted max-w-sm text-pretty leading-relaxed">
                 Broker contract confirmation to pre-fill this {isPO ? 'purchase order (PO)' : 'sales order (SO)'}.
-                {isPO ? ' Seller' : ' Buyer'} and contract fields are mapped automatically.
-                {isPO ? ' Buyer is always your account.' : ' Seller is always your account.'}
+                Seller, buyer, and contract fields are mapped from the PDF.
                 {' '}Open <Link to="/contracts" className="text-accent hover:underline">Contracts</Link> to file the original.
               </p>
               <span

@@ -373,7 +373,7 @@ class TradeService:
         side = input_data["side"]
         key = "po" if side == "purchase" else "so"
         counter_next = data["counters"][key] + 1
-        ref = (input_data.get("ref") or "").strip() or (f"PO-{counter_next}" if side == "purchase" else f"SO-{counter_next}")
+        ref = (input_data.get("ref") or "").strip() or (f"PO{counter_next}" if side == "purchase" else f"SO{counter_next}")
         validate_order_input_fields({**input_data, "ref": ref}, check_ref=True)
 
         po_ref = (input_data.get("poRef") or "").strip() if side == "sale" else None

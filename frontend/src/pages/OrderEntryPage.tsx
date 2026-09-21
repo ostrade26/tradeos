@@ -47,6 +47,7 @@ import {
   resolveBrokerageTerms,
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
+import { formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
 import { shareOrderOnWhatsApp } from '../lib/whatsappShare'
 import { partyMatches } from '../lib/assistant/partyMatch'
@@ -549,7 +550,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       const remaining = toBeLifted(saved)
       const registerHref = `${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`
       if (isEdit) {
-        toast.success(`${saved.ref} updated`, {
+        toast.success(`${formatOrderRef(saved.ref, saved.side)} updated`, {
           description: `${formatQty(saved.orderQty)} · ${saved.itemName}`,
           action: remaining > 0
             ? {
@@ -655,7 +656,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     <div className="w-full mx-auto max-w-3xl lg:max-w-5xl pb-24 sm:pb-0">
       <PageHeader
         title={isEdit ? `Edit ${label}` : `${label} Entry`}
-        subtitle={isEdit ? `Update ${form.ref || editRef}` : <>Create a new purchase order<span className="hidden md:inline"> · ⌘S to save</span></>}
+        subtitle={isEdit ? `Update ${formatOrderRef(form.ref || editRef || '', side)}` : <>Create a new purchase order<span className="hidden md:inline"> · ⌘S to save</span></>}
         breadcrumb={<Breadcrumb items={[
           { label: 'Tradeal', href: '/' },
           { label: isPO ? 'Purchase Orders' : 'Sales Orders', href: pathPrefix },
@@ -852,7 +853,7 @@ function SOEntryForm({
           sellFromLot
             ? <>{sellFromLot.lotNumber} · {sellFromLot.commodity} · {formatQty(sellFromLot.available)} available<span className="hidden md:inline"> · ⌘S to save</span></>
             : isEdit
-              ? `Update ${form.ref}`
+              ? `Update ${formatOrderRef(form.ref, side)}`
               : linkedPoRef
                 ? <>Selling against {linkedPoRef}<span className="hidden md:inline"> · ⌘S to save</span></>
                 : <>Create a sales order<span className="hidden md:inline"> · ⌘S to save</span></>
@@ -944,7 +945,7 @@ function SOEntryForm({
             maxQty={qtyCap > 0 ? qtyCap : undefined}
             maxQtyMessage={
               selectedPO
-                ? `Cannot exceed ${formatQty(qtyCap)} available on ${selectedPO.ref}`
+                ? `Cannot exceed ${formatQty(qtyCap)} available on ${formatPoRef(selectedPO.ref)}`
                 : sellFromLot
                   ? `Cannot exceed ${formatQty(qtyCap)} available on ${sellFromLot.lotNumber}`
                   : undefined
@@ -981,29 +982,38 @@ function SOEntryForm({
 }
 
 function ContractPartiesCard({ form, isPO, accountTrader }: { form: FormApi; isPO: boolean; accountTrader: string }) {
+  // Prefer PDF-extracted contract names when present so import matches the confirmation.
+  const sellerName = isPO
+    ? (form.sellerName || 'Select seller')
+    : (form.extractedSellerName?.trim() || form.sellerName || accountTrader)
+  const buyerName = isPO
+    ? (form.extractedBuyerName?.trim() || form.buyerName || accountTrader)
+    : (form.buyerName || 'Select buyer')
+  const sellerConfirmed = displayPartyConfirmedBy(form.sellerConfirmedBy, accountTrader)
+  const buyerConfirmed = displayPartyConfirmedBy(form.buyerConfirmedBy, accountTrader)
+
   return (
-    <Card className="border-gray-200 dark:border-gray-700">
+    <CaptionCard
+      captions={[
+        { label: 'Seller confirmed by', value: sellerConfirmed },
+        { label: 'Buyer confirmed by', value: buyerConfirmed },
+      ]}
+    >
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
         <FileText className="h-4 w-4 text-muted" />
         Contract Parties
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted">Seller</p>
-          <p className="font-medium">{isPO ? (form.sellerName || 'Select seller') : accountTrader}</p>
-          <p className="text-xs text-muted mt-0.5">
-            Confirmed by: {displayPartyConfirmedBy(form.sellerConfirmedBy, accountTrader)}
-          </p>
+          <p className="font-medium line-clamp-2 break-words" title={sellerName}>{sellerName}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted">Buyer</p>
-          <p className="font-medium">{isPO ? accountTrader : (form.buyerName || 'Select buyer')}</p>
-          <p className="text-xs text-muted mt-0.5">
-            Confirmed by: {displayPartyConfirmedBy(form.buyerConfirmedBy, accountTrader)}
-          </p>
+          <p className="font-medium line-clamp-2 break-words" title={buyerName}>{buyerName}</p>
         </div>
       </div>
-    </Card>
+    </CaptionCard>
   )
 }
 
@@ -1093,8 +1103,8 @@ function OrderFormFields({
       label: 'Remaining balance',
       value: `${formatQty(sellerBalance.total)} MT owed by ${form.partyName}`,
       detail: sellerBalance.lines.length === 1
-        ? `From ${sellerBalance.lines[0].poRef} → ${sellerBalance.lines[0].soRef} — apply on the next lift.`
-        : sellerBalance.lines.map(line => `${line.poRef} → ${line.soRef}: ${formatQty(line.qtyMt)}`).join(' · '),
+        ? `From ${formatPoRef(sellerBalance.lines[0].poRef)} → ${formatSoRef(sellerBalance.lines[0].soRef)} — apply on the next lift.`
+        : sellerBalance.lines.map(line => `${formatPoRef(line.poRef)} → ${formatSoRef(line.soRef)}: ${formatQty(line.qtyMt)}`).join(' · '),
     }
     : undefined
 
@@ -1137,13 +1147,9 @@ function OrderFormFields({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label={`${shortLabel} Ref. No.`}
-            value={form.ref}
-            readOnly={isEdit}
+            value={formatOrderRef(form.ref, isPO ? 'purchase' : 'sale')}
+            readOnly
             error={fieldErrors.ref}
-            onChange={e => {
-              onFieldEdit?.('ref')
-              form.set('ref', e.target.value)
-            }}
           />
           <DatePicker
             label="Date"
@@ -1454,8 +1460,8 @@ function OrderFormSidebar({
         <Card>
           <h3 className="text-sm font-semibold text-heading mb-3">Last entry in register</h3>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted">Deal No</span><span className="font-mono font-medium">{lastEntry.ref}</span></div>
-            {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span className="font-mono">{lastEntry.poRef}</span></div>}
+            <div className="flex justify-between"><span className="text-muted">Deal No</span><span className="font-mono font-medium">{formatOrderRef(lastEntry.ref, lastEntry.side)}</span></div>
+            {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span className="font-mono">{formatPoRef(lastEntry.poRef)}</span></div>}
             <div className="flex justify-between"><span className="text-muted">Date</span><span>{formatDate(lastEntry.date)}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">{isPO ? 'Seller' : 'Buyer'}</span><span className="font-medium text-right truncate">{lastEntry.partyName}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">Item</span><span className="font-medium text-right truncate">{lastEntry.itemName}</span></div>

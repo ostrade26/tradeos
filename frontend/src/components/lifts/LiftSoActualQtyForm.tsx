@@ -1,6 +1,7 @@
 import { QtyInput } from '../ui/QtyInput'
 import { sanitizeQtyInput } from '../../lib/liftTankers'
 import { formatQty, roundQtyMt } from '../../lib/utils'
+import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { allocationTotal } from '../../lib/liftAllocations'
 import { allocationActualKey, STOCK_LIFT_LABEL } from '../../lib/stockLift'
 import type { LiftAllocation, TradeOrder } from '../../data/mockData'
@@ -72,8 +73,9 @@ export function LiftSoActualQtyForm({
         const so = a.soRef ? orders.find(o => o.ref === a.soRef && o.side === 'sale') : undefined
         const actual = parseFloat(values[key] || '') || 0
         const shortfall = actual > 0 ? roundQtyMt(Math.max(0, a.qtyMt - actual)) : 0
-        const label = a.soRef ?? STOCK_LIFT_LABEL
+        const label = a.soRef ? formatSoRef(a.soRef) : STOCK_LIFT_LABEL
         const showPlanned = !compact || allocations.length > 1
+        const poLabel = formatPoRef(a.poRef)
 
         if (compact && allocations.length === 1) {
           return (
@@ -100,7 +102,7 @@ export function LiftSoActualQtyForm({
               <div className="min-w-0 pb-1 sm:pb-0">
                 <p className="font-mono text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5 truncate">
-                  {so ? `${so.partyName} · ${a.poRef}` : `Stock · ${a.poRef}`}
+                  {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
                   {showPlanned ? ` · planned ${formatQty(a.qtyMt)}` : ''}
                 </p>
                 {shortfall > 0 && a.soRef && (
@@ -131,7 +133,7 @@ export function LiftSoActualQtyForm({
               <div className="min-w-0">
                 <p className="font-mono text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5">
-                  {so ? `${so.partyName} · ${a.poRef}` : `Stock · ${a.poRef}`}
+                  {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
                 </p>
               </div>
               {showPlanned && (
@@ -152,7 +154,7 @@ export function LiftSoActualQtyForm({
             />
             {shortfall > 0 && a.soRef && (
               <p className="text-xs tabular-nums text-amber-700 dark:text-amber-400">
-                Balance on {a.soRef}: {formatQty(shortfall)}
+                Balance on {formatSoRef(a.soRef)}: {formatQty(shortfall)}
               </p>
             )}
           </div>

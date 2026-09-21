@@ -1,8 +1,11 @@
 import type { OrderSide } from '../data/mockData'
 
-/** Strip PO / SO / LT prefix for storage and URL lookup. */
+/** Strip PO / SO / LT (and legacy P/S/L) prefix for storage and URL lookup. */
 export function refCore(ref: string | number): string {
-  return String(ref).trim().replace(/^(PO|SO|LT)[-#\s]*/i, '')
+  return String(ref)
+    .trim()
+    .replace(/^(PO|SO|LT)[-#\s]*/i, '')
+    .replace(/^[PSL](?=\d)/i, '')
 }
 
 export function formatPoRef(ref: string | number): string {

@@ -7,6 +7,7 @@ import { contractRateFromOrder, formatRateCell, orderLineAmount } from '../order
 import { orderBrokerageTotal, computePoTradeProfit } from '../tradeProfit'
 import { toBeLifted } from '../../data/mockData'
 import { formatCurrency, formatDate, formatQty, roundQtyMt } from '../utils'
+import { formatLiftRef, formatPoRef, formatSoRef } from '../tradeRefs'
 import type { ReportId } from './catalog'
 import type { FilterableRow } from './filters'
 import { detectExceptions, type ExceptionRow } from './exceptions'
@@ -408,7 +409,7 @@ function inventoryMovement(store: TradeStoreValue): BuiltReport {
       status: lift.status === 'delivered' ? 'Delivered' : 'In transit',
       search: blob([String(lift.liftRef), lift.itemName, lift.sellerName, lift.buyerName]),
       dateLabel: formatDate(lift.date),
-      ref: `#${lift.liftRef}`,
+      ref: formatLiftRef(lift.liftRef),
       direction: stock ? 'Receipt (own stock)' : 'Dispatch',
       qty: formatQty(lift.liftedQty),
     }
@@ -440,7 +441,7 @@ function liftReport(store: TradeStoreValue): BuiltReport {
     broker: '',
     status: lift.status === 'delivered' ? 'Delivered' : 'In transit',
     search: blob([String(lift.liftRef), lift.poRef, lift.soRef, lift.itemName]),
-    ref: `#${lift.liftRef}`,
+    ref: formatLiftRef(lift.liftRef),
     poRefs: formatLiftPoRefs(lift),
     soRefs: formatLiftSoRefs(lift) || 'Stock',
     planned: formatQty(getLiftPlannedQty(lift)),
@@ -491,7 +492,7 @@ function liftVariance(store: TradeStoreValue): BuiltReport {
       broker: '',
       status: resolution,
       search: blob([String(lift.liftRef), lift.itemName, lift.remarks]),
-      ref: `#${lift.liftRef}`,
+      ref: formatLiftRef(lift.liftRef),
       poRefs: formatLiftPoRefs(lift),
       soRefs: formatLiftSoRefs(lift) || 'Stock',
       planned: formatQty(planned),
@@ -533,7 +534,7 @@ function deliveryReport(store: TradeStoreValue): BuiltReport {
         broker: '',
         status: 'Delivered',
         search: blob([String(lift.liftRef), lift.salesInvoiceNo, tanker?.lrNo, tanker?.tankerNo]),
-        ref: `#${lift.liftRef}`,
+        ref: formatLiftRef(lift.liftRef),
         deliveredAt: formatDate(lift.deliveredAt?.slice(0, 10) || lift.date),
         qty: formatQty(lift.liftedQty),
         invoiceNo: lift.salesInvoiceNo || 'Missing',
@@ -763,7 +764,7 @@ function creditDebitNotes(store: TradeStoreValue): BuiltReport {
       search: blob([s.poRef, s.soRef, s.notes]),
       dateLabel: formatDate(s.settledAt.slice(0, 10)),
       kind: s.method === 'cash' ? 'Cash settlement' : 'Carried forward',
-      ref: `${s.poRef} / ${s.soRef}`,
+      ref: `${formatPoRef(s.poRef)} / ${formatSoRef(s.soRef)}`,
       qty: formatQty(s.qtyMt),
       amount: formatCurrency(s.amount),
       notes: s.notes || '—',

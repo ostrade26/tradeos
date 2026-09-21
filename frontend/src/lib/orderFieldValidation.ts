@@ -3,7 +3,6 @@
 export const MAX_RATE_PER_10_KG = 100_000
 export const MAX_ORDER_QTY_MT = 10_000
 
-const ORDER_REF_RE = /^(PO|SO)-[A-Za-z0-9]{1,16}$/
 const BROKER_CONTRACT_RE = /^[A-Za-z0-9][A-Za-z0-9 ./\-]{0,39}$/
 const SPOT_RE = /^[A-Za-z0-9][A-Za-z0-9 ,.\-]{0,59}$/
 
@@ -11,10 +10,6 @@ export function validateOrderRef(ref: string, side: 'purchase' | 'sale'): string
   const trimmed = ref.trim()
   if (!trimmed) {
     return side === 'purchase' ? 'Enter a PO reference' : 'Enter an SO reference'
-  }
-  const expected = side === 'purchase' ? 'PO' : 'SO'
-  if (!ORDER_REF_RE.test(trimmed) || !trimmed.toUpperCase().startsWith(`${expected}-`)) {
-    return `Use a short code like ${expected}-12 (letters and numbers only, no spaces).`
   }
   return null
 }

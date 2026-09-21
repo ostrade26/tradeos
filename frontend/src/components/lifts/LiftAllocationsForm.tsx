@@ -5,6 +5,7 @@ import { Select } from '../ui/Select'
 import { cn, formatQty } from '../../lib/utils'
 import { sanitizeQtyInput } from '../../lib/liftTankers'
 import { orderDropdownOption } from '../../lib/orderSelectOptions'
+import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { remainingOnOrder } from '../../lib/liftAllocations'
 import { poolPOsForSo, isCrossPoAllocation } from '../../lib/sellerLiftPool'
 import { Badge } from '../ui/Badge'
@@ -174,9 +175,9 @@ export function LiftAllocationsForm({
           const rowQty = parseFloat(row.qty) || 0
           const maxQtyMessage = rowQty > maxQty && rowQty > 0
             ? rowQty > soLeft && row.soRef
-              ? `${row.soRef} only has ${formatQty(soLeft)} left to lift`
+              ? `${formatSoRef(row.soRef)} only has ${formatQty(soLeft)} left to lift`
               : rowQty > poLeft && row.poRef
-                ? `${row.poRef} only has ${formatQty(poLeft)} left to lift`
+                ? `${formatPoRef(row.poRef)} only has ${formatQty(poLeft)} left to lift`
                 : undefined
             : undefined
 
@@ -214,7 +215,7 @@ export function LiftAllocationsForm({
                       ? soOptions.map(s => orderDropdownOption(
                         s,
                         Math.max(0, remainingOnOrder(s, lifts, excludeLiftId) - qtyOnOtherRows(rows, s.ref, 'soRef', row.id)),
-                        [s.poRef ? `Lot ${s.poRef}` : 'No PO linked'],
+                        [s.poRef ? `Lot ${formatPoRef(s.poRef)}` : 'No PO linked'],
                       ))
                       : [{ value: '', label: itemFilter ? `No pending SO for ${itemFilter}` : 'No pending SO' }]}
                     value={row.soRef}
@@ -247,7 +248,7 @@ export function LiftAllocationsForm({
                   )}
                   {so && row.poRef && isCrossPoAllocation(so, row.poRef) && (
                     <p className="text-xs text-warning mt-1.5 leading-relaxed">
-                      Booked on {so.poRef} · dispatching from {row.poRef} (buyer-first delivery)
+                      Booked on {formatPoRef(so.poRef)} · dispatching from {formatPoRef(row.poRef)} (buyer-first delivery)
                     </p>
                   )}
                 </div>

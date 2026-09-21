@@ -14,7 +14,7 @@ function CaptionStripItem({ strip }: { strip: CaptionStrip }) {
   return (
     <div className="min-w-0">
       {hasLabel && (
-        <p className="text-sm font-medium text-caption">{strip.label}</p>
+        <p className="text-xs font-medium text-muted">{strip.label}</p>
       )}
       <div
         className={cn(
@@ -26,7 +26,7 @@ function CaptionStripItem({ strip }: { strip: CaptionStrip }) {
         {strip.value}
       </div>
       {strip.detail && (
-        <p className="text-sm text-caption mt-1.5 leading-relaxed">{strip.detail}</p>
+        <p className="text-xs text-muted mt-1.5 leading-relaxed">{strip.detail}</p>
       )}
     </div>
   )
@@ -66,7 +66,13 @@ export function CaptionCard({
               )}
             </>
           ) : (
-            <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <div
+              className={cn(
+                strips.length === 2
+                  ? 'grid grid-cols-1 sm:grid-cols-2 gap-4'
+                  : 'flex flex-wrap gap-x-8 gap-y-3',
+              )}
+            >
               {strips.map((strip, index) => (
                 <CaptionStripItem key={strip.label || `caption-${index}`} strip={strip} />
               ))}

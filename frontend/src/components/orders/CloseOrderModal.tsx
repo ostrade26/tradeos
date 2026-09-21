@@ -7,6 +7,7 @@ import type { TradeOrder } from '../../data/mockData'
 import { canCloseOrder, type CloseOrderMethod } from '../../lib/orderClosure'
 import { contractRateFromOrder, formatContractRate, orderLineAmount } from '../../lib/orderRate'
 import { formatCurrency, formatDate, formatQty } from '../../lib/utils'
+import { formatOrderRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
 
@@ -80,7 +81,7 @@ export function CloseOrderModal({ order, open, onClose, onComplete }: CloseOrder
         ...(method !== 'short_closed' ? { settledAt } : {}),
       })
       const methodTitle = METHOD_LABELS[method].title
-      toast.success('Order closed', { description: `${order.ref} · ${methodTitle}` })
+      toast.success('Order closed', { description: `${formatOrderRef(order.ref, order.side)} · ${methodTitle}` })
       onComplete?.()
       onClose()
     } catch (err) {
@@ -110,9 +111,11 @@ export function CloseOrderModal({ order, open, onClose, onComplete }: CloseOrder
     >
       <div className="space-y-5 py-1">
         <div className="rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50">
-          <p className="text-sm font-medium text-heading">{order.ref} · {order.itemName}</p>
+          <p className="text-sm font-medium text-heading">{formatOrderRef(order.ref, order.side)} · {order.itemName}</p>
           {context.poRef && context.soRef && (
-            <p className="text-xs text-muted mt-1">{shortLabel} vs {order.side === 'sale' ? context.poRef : context.soRef}</p>
+            <p className="text-xs text-muted mt-1">
+              {shortLabel} vs {order.side === 'sale' ? formatPoRef(context.poRef) : formatSoRef(context.soRef)}
+            </p>
           )}
         </div>
 

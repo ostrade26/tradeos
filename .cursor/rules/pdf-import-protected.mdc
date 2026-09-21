@@ -1,0 +1,40 @@
+---
+description: PDF contract import is protected — stop and warn before changing it
+alwaysApply: true
+---
+
+# PDF import is protected
+
+Contract PDF → PO/SO import is the app’s most important feature. Treat it as a **change fence**.
+
+## Protected surface (do not edit without approval)
+
+- `frontend/src/lib/parseContractPdf.ts`
+- `frontend/src/lib/pdfImport.ts`
+- `frontend/src/lib/pdfImportGuards.ts`
+- `frontend/src/lib/pdfjsClient.ts`
+- `frontend/src/components/orders/ContractPdfUpload.tsx`
+- `frontend/src/components/orders/PdfImportReview.tsx`
+- `frontend/src/components/orders/CompanyResolutionModal.tsx` (when used for PDF party resolve)
+- Any new helpers/tests whose only purpose is PDF import parsing, mapping, or upload UX
+- Call sites that overwrite PDF-mapped parties/fields (e.g. `OrderEntryPage` `applyPdfImport`, `ContractPartiesCard` extracted-name display)
+
+## Before any change that touches the surface
+
+1. **Stop.** Do not edit code yet.
+2. **Tell the user explicitly** that their request would change PDF import, which files, and the risk (field mapping, party display, security guards).
+3. **Wait for confirmation** before implementing (unless they already said to change PDF import in that same message).
+
+## Security invariants (keep these)
+
+- Client-only parse via PDF.js; never `eval` user PDF content into the app.
+- Validate file type + `%PDF` magic bytes; enforce max size and max pages.
+- Sanitize extracted strings (control chars, length caps) before form apply.
+- Prefer PDF-extracted party names for Contract Parties display (`extractedBuyerName` / `extractedSellerName`).
+- Do not “fix” mapping with silent field shifts without a regression check.
+
+## Do not
+
+- “Harden,” refactor, or retune labeled-form / party heuristics casually.
+- Restore older parsers or rewrite mapping without saying it will change PDF import.
+- Bypass `pdfImportGuards` validation.

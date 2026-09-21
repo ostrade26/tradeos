@@ -577,7 +577,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           }}
           onCancelDelete={() => setCancelTarget(r)}
           onPermanentlyDelete={() => openPermanentDeleteForOrders([r])}
-          onBlockedDelete={reason => setBlockedDelete({ name: r.ref, reason })}
+          onBlockedDelete={reason => setBlockedDelete({ name: formatOrderRef(r.ref, r.side), reason })}
         />
         )
       },
@@ -958,7 +958,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                           }}
                           onCancelDelete={() => setCancelTarget(r)}
                           onPermanentlyDelete={() => openPermanentDeleteForOrders([r])}
-                          onBlockedDelete={reason => setBlockedDelete({ name: r.ref, reason })}
+                          onBlockedDelete={reason => setBlockedDelete({ name: formatOrderRef(r.ref, r.side), reason })}
                         />
                       </div>
                     </div>

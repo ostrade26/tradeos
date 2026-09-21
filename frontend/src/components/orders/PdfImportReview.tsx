@@ -1,6 +1,5 @@
 import { CheckCircle2, AlertTriangle } from 'lucide-react'
 import type { ParsedContractPdf } from '../../lib/parseContractPdf'
-import { CURRENT_TRADER } from '../../data/mockData'
 import { formatContractRate } from '../../lib/orderRate'
 import { cn, formatDate, formatDeliveryPeriodRange, formatQty } from '../../lib/utils'
 
@@ -18,7 +17,7 @@ function field(label: string, value: string | number | undefined, required = tru
 
 export function buildPdfReviewFields(
   parsed: ParsedContractPdf,
-  isPO: boolean,
+  _isPO: boolean,
   itemCorrection?: { from: string; to: string } | null,
 ): ReviewField[] {
   const itemValue = itemCorrection
@@ -28,9 +27,9 @@ export function buildPdfReviewFields(
   return [
     field('Contract #', parsed.brokerContractRef),
     field('Date', parsed.contractDate ? formatDate(parsed.contractDate) : ''),
-    field('Seller', isPO ? parsed.sellerName : CURRENT_TRADER),
+    field('Seller', parsed.sellerName),
     field('Seller confirmed by', parsed.sellerConfirmedBy, false),
-    field('Buyer', isPO ? CURRENT_TRADER : parsed.buyerName, !isPO),
+    field('Buyer', parsed.buyerName),
     field('Buyer confirmed by', parsed.buyerConfirmedBy, false),
     field('Item', itemValue),
     field('Quantity', parsed.quantityMt ? formatQty(parsed.quantityMt) : ''),

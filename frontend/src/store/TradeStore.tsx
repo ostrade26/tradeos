@@ -34,6 +34,7 @@ import type { BuyBackInput } from '../lib/buyBack'
 import type { CloseOrderMethod } from '../lib/orderClosure'
 import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatQty, normalizeDateToIso, repairAmbiguousTradeDates } from '../lib/utils'
+import { formatPoRef, formatSoRef } from '../lib/tradeRefs'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
@@ -731,7 +732,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const getNextRef = useCallback((side: OrderSide) => {
     const key = side === 'purchase' ? 'po' : 'so'
     const next = data.counters[key] + 1
-    return side === 'purchase' ? `PO-${next}` : `SO-${next}`
+    return side === 'purchase' ? formatPoRef(next) : formatSoRef(next)
   }, [data.counters])
 
   const getOrderByRef = useCallback(

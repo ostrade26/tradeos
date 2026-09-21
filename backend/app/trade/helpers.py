@@ -264,7 +264,6 @@ def format_contract_rate(rate: float) -> str:
 
 MAX_RATE_PER_10_KG = 100_000
 MAX_ORDER_QTY_MT = 10_000
-ORDER_REF_RE = re.compile(r"^(PO|SO)-[A-Za-z0-9]{1,16}$")
 BROKER_CONTRACT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ./\-]{0,39}$")
 SPOT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.\-]{0,59}$")
 
@@ -277,10 +276,6 @@ def validate_order_input_fields(input_data: dict, *, check_ref: bool = True) -> 
         expected = "PO" if side == "purchase" else "SO"
         if not ref:
             raise ValueError(f"Enter a {expected} reference")
-        if not ORDER_REF_RE.match(ref) or not ref.upper().startswith(f"{expected}-"):
-            raise ValueError(
-                f"Use a short code like {expected}-12 (letters and numbers only, no spaces).",
-            )
 
     broker = (input_data.get("brokerContractRef") or "").strip()
     if broker and not BROKER_CONTRACT_RE.match(broker):
