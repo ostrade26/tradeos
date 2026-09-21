@@ -292,6 +292,240 @@ function resolveBrokerName(
   return candidates[0] ?? ''
 }
 
+function emptyRate() {
+  return {
+    ratePerMt: 0,
+    ratePerBasis: 0,
+    ratePerBasisFormatted: '',
+    rateBasis: 'PER 10 KG',
+    rateIncludesGst: false,
+    rateDisplay: '',
+    brand: '',
+  }
+}
+
+const DATE_VALUE_RE =
+  /^(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})$/i
+const CONTRACT_NO_RE = /^[A-Za-z]?\d{1,10}$/
+const QTY_RE = /([\d,]+(?:\.\d+)?)\s*TON/i
+const RATE_RE = /PER\s*(?:10\s*KG|MT|TON)\b/i
+const DELIVERY_RE = /(\d{1,2}-[A-Za-z]{3})\s*TO\s*(\d{1,2}-[A-Za-z]{3})/i
+const PAYMENT_RE = /^(ADVANCE|AGAINST|CREDIT)/i
+const BROKERAGE_RE = /([\d,]+(?:\.\d+)?)\s*RS\.?\s*PER\s*TON/i
+const REMARKS_HINT = /DUTY|CONDITION|RESELL|FIXED|FUXED|PATANJALI|RUCHI/i
+
+function looksLikeDateValue(line: string): boolean {
+  return DATE_VALUE_RE.test(line.trim())
+}
+
+function looksLikeContractNo(line: string): boolean {
+  return CONTRACT_NO_RE.test(line.trim())
+}
+
+function looksLikeMaterialLine(line: string): boolean {
+  const t = line.replace(/^REF\.\s*/i, '').trim()
+  if (!t || looksLikeDateValue(t) || looksLikeContractNo(t)) return false
+  if (looksLikeCompanyName(t) || isLikelyPersonName(t)) return false
+  if (QTY_RE.test(t) || RATE_RE.test(t) || DELIVERY_RE.test(t) || PAYMENT_RE.test(t) || BROKERAGE_RE.test(t)) {
+    return false
+  }
+  if (/^(READY|ADVANCE|AGAINST|CREDIT)$/i.test(t)) return false
+  return /^(R\.?\s*B\.?\s*D\.?|RBD|CRUDE|SOYA|PALM|SUN|COTTON|REF\.)/i.test(line)
+    || /\b(OIL|MEAL|SEED|OLEIN|OLINE|STEARIN|FAT|COMMODITY|PALM)\b/i.test(t)
+    || /^[A-Z][A-Z0-9\s./-]{2,60}$/.test(t)
+}
+
+function normalizeLabelKey(line: string): string {
+  return line
+    .replace(/^&\s*/i, '')
+    .replace(/\.+$/g, '')
+    .replace(/:$/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+}
+
+type LabeledKey =
+  | 'CONTRACT NO'
+  | 'CONTRACT DATE'
+  | 'SELLER NAME'
+  | 'SELLER CONFIRMED BY'
+  | 'BUYER NAME'
+  | 'BUYER CONFIRMED BY'
+  | 'MATERIAL'
+  | 'QUANTITY'
+  | 'RATE'
+  | 'DELIVERY PERIOD'
+  | 'PAYMENT'
+  | 'REMARKS'
+  | 'BROKERAGE'
+
+function matchLabeledKey(line: string, lastParty: 'seller' | 'buyer' | null): LabeledKey | null {
+  const key = normalizeLabelKey(line)
+  if (key === 'CONTRACT NO' || key === 'CONTRACT NUMBER' || key === 'DEAL NO') return 'CONTRACT NO'
+  if (key === 'CONTRACT DATE' || key === 'DEAL DATE' || key === 'DATE') return 'CONTRACT DATE'
+  if (key === 'SELLER NAME' || key === 'SELLER') return 'SELLER NAME'
+  if (key === 'BUYER NAME' || key === 'BUYER') return 'BUYER NAME'
+  if (key === 'MATERIAL' || key === 'ITEM' || key === 'COMMODITY' || key === 'PRODUCT') return 'MATERIAL'
+  if (key === 'QUANTITY' || key === 'QTY') return 'QUANTITY'
+  if (key === 'RATE' || key === 'PRICE') return 'RATE'
+  if (key === 'DELIVERY PERIOD' || key === 'DELIVERY') return 'DELIVERY PERIOD'
+  if (key === 'PAYMENT' || key === 'PAYMENT TERMS') return 'PAYMENT'
+  if (key === 'REMARKS' || key === 'REMARK' || key === 'NOTES') return 'REMARKS'
+  if (key === 'BROKERAGE' || key === 'BROKERAGE PER TON') return 'BROKERAGE'
+  if (key === 'CONFIRMED BY' || key === 'CONF BY' || key === 'CONF. BY') {
+    if (lastParty === 'buyer') return 'BUYER CONFIRMED BY'
+    return 'SELLER CONFIRMED BY'
+  }
+  return null
+}
+
+/**
+ * Amogh-style exports: labels first (CONTRACT NO.: …), then values in order until Other Terms.
+ * Empty confirmed-by / payment / remarks lines are often omitted — assign by value type, not blind index.
+ */
+function parseLabeledContractForm(normalized: string, brokerName: string): ParsedContractPdf | null {
+  const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean)
+  const labelOrder: LabeledKey[] = []
+  const labelIndexes: Partial<Record<LabeledKey, number>> = {}
+  let lastParty: 'seller' | 'buyer' | null = null
+
+  for (let i = 0; i < lines.length; i++) {
+    const key = matchLabeledKey(lines[i]!, lastParty)
+    if (!key) continue
+    // First occurrence wins for core labels; confirmed-by can appear twice.
+    if (labelIndexes[key] == null) {
+      labelIndexes[key] = i
+      labelOrder.push(key)
+    }
+    if (key === 'SELLER NAME') lastParty = 'seller'
+    if (key === 'BUYER NAME') lastParty = 'buyer'
+  }
+
+  if (labelIndexes['CONTRACT NO'] == null || labelIndexes['SELLER NAME'] == null || labelIndexes['BUYER NAME'] == null) {
+    return null
+  }
+
+  const lastLabelIdx = Math.max(...Object.values(labelIndexes).filter((n): n is number => n != null))
+  const otherTermsIdx = lines.findIndex((l, i) => i > lastLabelIdx && /^Other Terms:/i.test(l))
+  const valueEnd = otherTermsIdx >= 0 ? otherTermsIdx : lines.length
+  const valueLines = lines.slice(lastLabelIdx + 1, valueEnd).filter(l => l && l !== '.')
+
+  // Type-pick from the value block (tolerant of omitted empty slots).
+  const used = new Set<number>()
+  const take = (pred: (line: string) => boolean): string => {
+    const idx = valueLines.findIndex((l, i) => !used.has(i) && pred(l))
+    if (idx < 0) return ''
+    used.add(idx)
+    return valueLines[idx]!
+  }
+
+  const contractNoRaw = take(looksLikeContractNo) || take(l => /^\d+$/.test(l))
+  const contractNo = contractNoRaw.replace(/[^\w/-]/g, '')
+  const contractDateRaw = take(looksLikeDateValue)
+  const contractDate = contractDateRaw ? parseContractDate(contractDateRaw) : ''
+  const contractYear = contractDate ? parseInt(contractDate.slice(0, 4), 10) : new Date().getFullYear()
+
+  const companies = valueLines
+    .map((l, i) => ({ l, i }))
+    .filter(({ l, i }) => !used.has(i) && looksLikeCompanyName(l) && !looksLikeMaterialLine(l))
+  const sellerName = (companies[0]
+    ? (used.add(companies[0].i), companies[0].l.replace(/\s*,\s*/g, ', ').trim())
+    : '')
+  const buyerName = (companies[1]
+    ? (used.add(companies[1].i), companies[1].l.replace(/\s*,\s*/g, ', ').trim())
+    : '')
+
+  const materialRaw = take(looksLikeMaterialLine)
+  const itemName = materialRaw.replace(/^REF\.\s*/i, '').replace(/\s+/g, ' ').trim()
+
+  const quantityLine = take(l => QTY_RE.test(l))
+  const quantityMatch = quantityLine.match(QTY_RE)
+  const quantityMt = quantityMatch ? parseFloat(quantityMatch[1]!.replace(/,/g, '')) : 0
+
+  const rateLine = take(l => RATE_RE.test(l))
+  const rate = rateLine ? parseRate(rateLine) : emptyRate()
+
+  const deliveryRaw = take(l => DELIVERY_RE.test(l) || isReadyDeliveryLine(l))
+  const readyDelivery = isReadyDeliveryLine(deliveryRaw)
+  const deliveryType: DeliveryType = readyDelivery ? 'ready' : 'period'
+  let deliveryPeriodStart = ''
+  let deliveryPeriodEnd = ''
+  const deliveryMatch = deliveryRaw.match(DELIVERY_RE)
+  if (deliveryMatch) {
+    deliveryPeriodStart = parseDeliveryDate(deliveryMatch[1]!, contractYear)
+    deliveryPeriodEnd = parseDeliveryDate(deliveryMatch[2]!, contractYear)
+  } else if (deliveryType === 'ready') {
+    const readyDate = contractDate || new Date().toISOString().slice(0, 10)
+    deliveryPeriodStart = readyDate
+    deliveryPeriodEnd = readyDate
+  }
+
+  const paymentTerms = take(l => PAYMENT_RE.test(l))
+  const brokerageLine = take(l => BROKERAGE_RE.test(l))
+  const brokerageMatch = brokerageLine.match(BROKERAGE_RE)
+  const brokeragePerTon = brokerageMatch ? parseFloat(brokerageMatch[1]!.replace(/,/g, '')) : 0
+  // Before person names so plant/brand notes are not treated as confirmed-by.
+  const remarks = take(l => REMARKS_HINT.test(l) && !RATE_RE.test(l) && !QTY_RE.test(l))
+
+  // Confirmed-by lines are often omitted when blank — one leftover person is usually buyer confirmed.
+  const persons = valueLines
+    .map((l, i) => ({ l, i }))
+    .filter(({ l, i }) => !used.has(i) && isLikelyPersonName(l) && !looksLikeCompanyName(l))
+  let sellerConfirmedBy = ''
+  let buyerConfirmedBy = ''
+  if (persons.length >= 2) {
+    used.add(persons[0]!.i)
+    used.add(persons[1]!.i)
+    sellerConfirmedBy = persons[0]!.l.replace(PERSON_PREFIX, '').trim()
+    buyerConfirmedBy = persons[1]!.l.replace(PERSON_PREFIX, '').trim()
+  } else if (persons.length === 1) {
+    used.add(persons[0]!.i)
+    buyerConfirmedBy = persons[0]!.l.replace(PERSON_PREFIX, '').trim()
+  }
+
+  const gstSellerOnly = normalized.match(/GST#\s*Seller:\s*(\S+)/i)
+  const gstBoth = normalized.match(/GST#\s*Seller:\s*(\S+)\s*,?\s*Buyer:\s*(\S+)/i)
+
+  if (!contractNo && !sellerName && !buyerName) return null
+
+  return {
+    brokerContractRef: contractNo,
+    contractDate,
+    sellerName,
+    sellerConfirmedBy,
+    buyerName,
+    buyerConfirmedBy,
+    itemName,
+    quantityMt,
+    ratePerMt: rate.ratePerMt,
+    ratePerBasis: rate.ratePerBasis,
+    ratePerBasisFormatted: rate.ratePerBasisFormatted,
+    rateBasis: rate.rateBasis,
+    rateIncludesGst: rate.rateIncludesGst,
+    rateDisplay: rate.rateDisplay,
+    brand: rate.brand,
+    deliveryType,
+    deliveryPeriodStart,
+    deliveryPeriodEnd,
+    paymentTerms,
+    remarks,
+    brokeragePerTon,
+    sellerGst: (gstBoth?.[1] || gstSellerOnly?.[1] || '').replace(/,$/, ''),
+    buyerGst: (gstBoth?.[2] || '').replace(/,$/, ''),
+    brokerName,
+  }
+}
+
+function valuesBlockFromLegacyExport(normalized: string): string {
+  // Prefer values after the label block (REMARKS / BROKERAGE), not only BROKERAGE.
+  const afterBrokerage = normalized.match(/BROKERAGE:\s*\n+([\s\S]*?)\n\s*Other Terms:/i)?.[1]
+  if (afterBrokerage?.trim()) return afterBrokerage
+  const afterRemarks = normalized.match(/REMARKS:\s*\n+([\s\S]*?)\n\s*Other Terms:/i)?.[1]
+  if (afterRemarks?.trim()) return afterRemarks
+  return ''
+}
+
 export function parseContractText(
   text: string,
   _headerLines: string[] = [],
@@ -299,7 +533,10 @@ export function parseContractText(
 ): ParsedContractPdf {
   const normalized = normalizeText(text)
 
-  const valuesBlock = normalized.match(/BROKERAGE:\s*\n+([\s\S]*?)\n\s*Other Terms:/i)?.[1] ?? ''
+  const labeled = parseLabeledContractForm(normalized, brokerName)
+  if (labeled) return labeled
+
+  const valuesBlock = valuesBlockFromLegacyExport(normalized)
   const rawLines = valuesBlock.split('\n').map(l => l.trim()).filter(Boolean)
   const lines = mergeBrokenLines(rawLines)
 
@@ -311,8 +548,8 @@ export function parseContractText(
   const remarksLine = lines.find(l => l === 'FIXED DUTY' || (l.toUpperCase().includes('DUTY') && !l.match(/PER\s/i)))
   const brokerageLine = lines.find(l => /RS\.?\s*PER\s*TON/i.test(l))
 
-  const contractNo = lines.find(l => /^\d+$/.test(l)) ?? normalized.match(/CONTRACT NO\.:\s*(\d+)/i)?.[1] ?? ''
-  const dateLine = lines.find(l => /^\d{2}-\d{2}-\d{4}$/.test(l)) ?? ''
+  const contractNo = lines.find(l => CONTRACT_NO_RE.test(l)) ?? normalized.match(/CONTRACT NO\.:\s*(\S+)/i)?.[1] ?? ''
+  const dateLine = lines.find(l => looksLikeDateValue(l)) ?? ''
   const contractDate = dateLine ? parseContractDate(dateLine) : ''
   const contractYear = contractDate ? parseInt(contractDate.slice(0, 4), 10) : new Date().getFullYear()
 
@@ -328,34 +565,26 @@ export function parseContractText(
     l !== brokerageLine,
   )
 
-  const materialIndex = structuredLines.findIndex(l => /^(REF\.|RBD|CRUDE|SOYA|PALM|SUN|COTTON)/i.test(l))
+  const materialIndex = structuredLines.findIndex(l => looksLikeMaterialLine(l) || /^(REF\.|RBD|CRUDE|SOYA|PALM|SUN|COTTON)/i.test(l))
   const partyLines = materialIndex >= 0 ? structuredLines.slice(0, materialIndex) : structuredLines.slice(0, 4)
   const itemName = materialIndex >= 0
-    ? structuredLines[materialIndex].replace(/^REF\.\s*/i, '').trim()
+    ? structuredLines[materialIndex]!.replace(/^REF\.\s*/i, '').trim()
     : structuredLines.find(l => /OIL|MEAL|SEED|COMMODITY/i.test(l))?.replace(/^REF\.\s*/i, '').trim() ?? ''
 
   const { sellerName, sellerConfirmedBy, buyerName, buyerConfirmedBy } = parsePartyFields(partyLines)
 
   const quantityMatch = quantityLine?.match(/([\d,]+(?:\.\d+)?)\s*TON/i)
-  const quantityMt = quantityMatch ? parseFloat(quantityMatch[1].replace(/,/g, '')) : 0
+  const quantityMt = quantityMatch ? parseFloat(quantityMatch[1]!.replace(/,/g, '')) : 0
 
-  const rate = rateLine ? parseRate(rateLine) : {
-    ratePerMt: 0,
-    ratePerBasis: 0,
-    ratePerBasisFormatted: '',
-    rateBasis: 'PER 10 KG',
-    rateIncludesGst: false,
-    rateDisplay: '',
-    brand: '',
-  }
+  const rate = rateLine ? parseRate(rateLine) : emptyRate()
 
   const deliveryType: DeliveryType = readyDeliveryLine ? 'ready' : 'period'
   let deliveryPeriodStart = ''
   let deliveryPeriodEnd = ''
   const deliveryMatch = deliveryLine?.match(/(\d{1,2}-[A-Za-z]{3})\s*TO\s*(\d{1,2}-[A-Za-z]{3})/i)
   if (deliveryMatch) {
-    deliveryPeriodStart = parseDeliveryDate(deliveryMatch[1], contractYear)
-    deliveryPeriodEnd = parseDeliveryDate(deliveryMatch[2], contractYear)
+    deliveryPeriodStart = parseDeliveryDate(deliveryMatch[1]!, contractYear)
+    deliveryPeriodEnd = parseDeliveryDate(deliveryMatch[2]!, contractYear)
   } else if (deliveryType === 'ready') {
     const readyDate = contractDate || new Date().toISOString().slice(0, 10)
     deliveryPeriodStart = readyDate
@@ -363,9 +592,10 @@ export function parseContractText(
   }
 
   const brokerageMatch = brokerageLine?.match(/([\d,]+(?:\.\d+)?)\s*RS\.?\s*PER\s*TON/i)
-  const brokeragePerTon = brokerageMatch ? parseFloat(brokerageMatch[1].replace(/,/g, '')) : 0
+  const brokeragePerTon = brokerageMatch ? parseFloat(brokerageMatch[1]!.replace(/,/g, '')) : 0
 
   const gstMatch = normalized.match(/GST#\s*Seller:\s*(\S+)\s*,?\s*Buyer:\s*(\S+)/i)
+  const gstSellerOnly = normalized.match(/GST#\s*Seller:\s*(\S+)/i)
 
   return {
     brokerContractRef: contractNo,
@@ -389,8 +619,8 @@ export function parseContractText(
     paymentTerms: paymentLine ?? '',
     remarks: remarksLine ?? '',
     brokeragePerTon,
-    sellerGst: gstMatch?.[1]?.replace(/,$/, '') ?? '',
-    buyerGst: gstMatch?.[2]?.replace(/,$/, '') ?? '',
+    sellerGst: (gstMatch?.[1] || gstSellerOnly?.[1] || '').replace(/,$/, ''),
+    buyerGst: (gstMatch?.[2] || '').replace(/,$/, ''),
     brokerName,
   }
 }

@@ -25,6 +25,12 @@ export function isBrokerFirmLine(line: string): boolean {
   }
 
   if (/\bBROKER'S\b/i.test(cleaned) || /\bBROKERS\b/i.test(cleaned)) return true
+  if (/\bTRADERS?\b/i.test(cleaned) && /brokerage|trading\s*&\s*brokerage/i.test(cleaned)) return true
+  // Letterhead firm names like "GADODIA TRADERS" / "DALAL RAMESH TRADERS" above CONTRACT CONFIRMATION
+  if (/\b(TRADERS?|BROKERS?)\b/i.test(cleaned) && !/software|services|amogh|paragi/i.test(cleaned)) {
+    const words = cleaned.split(/\s+/).filter(Boolean)
+    if (words.length >= 2 && words.length <= 8 && cleaned === cleaned.toUpperCase()) return true
+  }
   if (/gurukrupa/i.test(cleaned) && /broker/i.test(cleaned)) return true
   if (/\bbroker\b/i.test(cleaned) && /\b(shree|shri|m\/s|guru|krupa)\b/i.test(cleaned)) return true
   if (/\bbroker\b/i.test(cleaned) && /^[A-Z0-9\s&.'-]+$/i.test(cleaned) && cleaned.length >= 10) {
