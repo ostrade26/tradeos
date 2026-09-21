@@ -36,7 +36,7 @@ import { isGroupedPoRawRows, tryParseGroupedPoRawRows } from './groupedPoImport'
 import { buildSeedData } from '../data/seedData'
 import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts, normalizeLiftOrderRefs } from './inferImportLinks'
 import { ensureDirectoryFromOrders } from './ensureDirectoryFromOrders'
-import { normalizeDateToIso } from './utils'
+import { normalizeDateToIso, excelFormatPrefersMonthFirst } from './utils'
 
 const PO_EXPORT_HEADERS = [
   'Purchase Ref#',
@@ -740,13 +740,31 @@ function cellLooksLikeExcelDate(cell: import('xlsx').CellObject): boolean {
   return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(w)
 }
 
+function headerLooksLikeDateField(header: string): boolean {
+  return /date|delivery\s*(from|to|start|end)|delivered|^from$|^to$/i.test(header.trim())
+}
+
+function isExcelSerialValue(value: unknown): value is number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 20000 && value < 60000
+  }
+  if (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value.trim())) {
+    const n = parseFloat(value)
+    return n > 20000 && n < 60000
+  }
+  return false
+}
+
 /**
  * Convert an Excel date cell to YYYY-MM-DD from the serial / Date value.
- * Never use locale-formatted `cell.w` (MM/DD on Windows vs DD/MM on India) — that swaps day/month.
+ * Never prefer locale-formatted `cell.w` alone — US MM/DD vs India DD/MM swaps day/month.
  */
 function excelDateCellToIso(cell: import('xlsx').CellObject): string {
   if (typeof cell.v === 'number' && Number.isFinite(cell.v)) {
     return normalizeDateToIso(cell.v)
+  }
+  if (typeof cell.v === 'string' && isExcelSerialValue(cell.v)) {
+    return normalizeDateToIso(parseFloat(cell.v))
   }
   if (cell.t === 'd' && cell.v instanceof Date && !Number.isNaN(cell.v.getTime())) {
     // SheetJS Date values are UTC midnight for the calendar day — use UTC parts.
@@ -756,7 +774,9 @@ function excelDateCellToIso(cell: import('xlsx').CellObject): string {
     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
   const display = typeof cell.w === 'string' ? cell.w.trim() : ''
-  return display ? normalizeDateToIso(display) : ''
+  if (!display) return ''
+  const z = typeof cell.z === 'string' ? cell.z : ''
+  return normalizeDateToIso(display, { preferMonthFirst: excelFormatPrefersMonthFirst(z) })
 }
 
 function sheetToJsonPreferDateText(
@@ -785,7 +805,11 @@ function sheetToJsonPreferDateText(
       const header = headers[c - range.s.c]
       if (!header) continue
       const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
-      if (!cell || !cellLooksLikeExcelDate(cell)) continue
+      if (!cell) continue
+      const treatAsDate =
+        cellLooksLikeExcelDate(cell)
+        || (headerLooksLikeDateField(header) && isExcelSerialValue(cell.v))
+      if (!treatAsDate) continue
       const iso = excelDateCellToIso(cell)
       if (iso) next[header] = iso
     }
@@ -802,12 +826,18 @@ function sheetToAoAPreferDateText(
   if (!ref || raw.length === 0) return raw
 
   const range = XLSX.utils.decode_range(ref)
+  const headerRow = raw[0] ?? []
   return raw.map((row, rowIndex) => {
     const excelRow = range.s.r + rowIndex
     const next = [...row]
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })]
-      if (!cell || !cellLooksLikeExcelDate(cell)) continue
+      if (!cell) continue
+      const header = rowIndex === 0 ? '' : String(headerRow[c - range.s.c] ?? '')
+      const treatAsDate =
+        cellLooksLikeExcelDate(cell)
+        || (headerLooksLikeDateField(header) && isExcelSerialValue(cell.v))
+      if (!treatAsDate) continue
       const iso = excelDateCellToIso(cell)
       if (iso) next[c - range.s.c] = iso
     }

@@ -67,24 +67,6 @@ function ymdToIso(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-/**
- * Parse numeric slash/dash dates as DD/MM/YYYY (India).
- * Ambiguous values like 08/10/2026 prefer day-first; only fall back to
- * month-first when day-first is an invalid calendar date (e.g. 08/19/2026).
- */
-function parseDayMonthYearText(text: string): string {
-  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s+.*)?$/)
-  if (!match) return ''
-
-  const a = parseInt(match[1]!, 10)
-  const b = parseInt(match[2]!, 10)
-  const year = expandTwoDigitYear(parseInt(match[3]!, 10))
-
-  if (isValidCalendarDate(year, b, a)) return ymdToIso(year, b, a)
-  if (isValidCalendarDate(year, a, b)) return ymdToIso(year, a, b)
-  return ''
-}
-
 /** Parse `8 Dec 2026`, `08-Dec-2026`, `8 December 2026`. */
 function parseNamedMonthDateText(text: string): string {
   const match = text.match(
@@ -108,11 +90,121 @@ function parseNamedMonthDateText(text: string): string {
 
 function dateObjectToIso(value: Date): string {
   if (Number.isNaN(value.getTime())) return ''
+  // SheetJS / date-only values are UTC midnight — use UTC parts to avoid US TZ off-by-one.
+  if (
+    value.getUTCHours() === 0
+    && value.getUTCMinutes() === 0
+    && value.getUTCSeconds() === 0
+    && value.getUTCMilliseconds() === 0
+  ) {
+    return ymdToIso(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate())
+  }
   return ymdToIso(value.getFullYear(), value.getMonth() + 1, value.getDate())
 }
 
+/**
+ * Parse numeric slash/dash dates as DD/MM/YYYY (India) by default.
+ * Ambiguous values like 08/10/2026 prefer day-first; only fall back to
+ * month-first when day-first is an invalid calendar date (e.g. 08/19/2026).
+ * Pass `preferMonthFirst` when Excel's number format is m/d/y.
+ */
+function parseDayMonthYearText(text: string, preferMonthFirst = false): string {
+  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s+.*)?$/)
+  if (!match) return ''
+
+  const a = parseInt(match[1]!, 10)
+  const b = parseInt(match[2]!, 10)
+  const year = expandTwoDigitYear(parseInt(match[3]!, 10))
+
+  const dayFirst = isValidCalendarDate(year, b, a) ? ymdToIso(year, b, a) : ''
+  const monthFirst = isValidCalendarDate(year, a, b) ? ymdToIso(year, a, b) : ''
+  if (preferMonthFirst) return monthFirst || dayFirst
+  return dayFirst || monthFirst
+}
+
+/** True when Excel format code is month-first (US m/d/y), not day-first (d/m/y). */
+export function excelFormatPrefersMonthFirst(z: string): boolean {
+  const fmt = z.toLowerCase().replace(/\[[^\]]*\]/g, '')
+  if (/d\s*[/.-]\s*m/.test(fmt) || /\bdd?\b.*\bmm?\b/.test(fmt)) return false
+  if (/m\s*[/.-]\s*d/.test(fmt)) return true
+  return false
+}
+
+/** Swap day/month on an ISO date when both parts are ≤12 (ambiguous import). */
+export function swapAmbiguousIsoDayMonth(iso: string): string {
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return iso
+  const year = parseInt(match[1]!, 10)
+  const month = parseInt(match[2]!, 10)
+  const day = parseInt(match[3]!, 10)
+  if (month === day || day > 12 || month > 12) return iso
+  if (!isValidCalendarDate(year, day, month)) return iso
+  return ymdToIso(year, day, month)
+}
+
+function isoInInclusiveRange(iso: string, start: string, end: string): boolean {
+  return Boolean(iso && start && end && iso >= start && iso <= end)
+}
+
+/**
+ * Fix dates corrupted by US MM/DD display text parsed as DD/MM.
+ * Repairs inverted delivery periods and order dates that fall outside the period
+ * when a day/month swap lands inside.
+ */
+export function repairAmbiguousTradeDates<T extends {
+  date?: string
+  deliveryPeriodStart?: string
+  deliveryPeriodEnd?: string
+  deliveredAt?: string
+}>(row: T): T {
+  let date = row.date ?? ''
+  let start = row.deliveryPeriodStart ?? ''
+  let end = row.deliveryPeriodEnd ?? ''
+  let deliveredAt = row.deliveredAt ?? ''
+
+  if (start && end && start > end) {
+    const swapStart = swapAmbiguousIsoDayMonth(start)
+    const swapEnd = swapAmbiguousIsoDayMonth(end)
+    if (swapStart !== start && swapStart <= end) start = swapStart
+    else if (swapEnd !== end && start <= swapEnd) end = swapEnd
+    else if (swapStart !== start && swapEnd !== end && swapStart <= swapEnd) {
+      start = swapStart
+      end = swapEnd
+    }
+  }
+
+  if (date && start && end && !isoInInclusiveRange(date, start, end)) {
+    const swapped = swapAmbiguousIsoDayMonth(date)
+    if (swapped !== date && isoInInclusiveRange(swapped, start, end)) date = swapped
+  } else if (date && start && date !== start && swapAmbiguousIsoDayMonth(date) === start) {
+    date = start
+  }
+
+  if (deliveredAt && start && end && !isoInInclusiveRange(deliveredAt, start, end)) {
+    const swapped = swapAmbiguousIsoDayMonth(deliveredAt)
+    if (swapped !== deliveredAt && isoInInclusiveRange(swapped, start, end)) deliveredAt = swapped
+  }
+
+  if (
+    date === (row.date ?? '')
+    && start === (row.deliveryPeriodStart ?? '')
+    && end === (row.deliveryPeriodEnd ?? '')
+    && deliveredAt === (row.deliveredAt ?? '')
+  ) {
+    return row
+  }
+
+  return {
+    ...row,
+    ...(row.date !== undefined ? { date } : {}),
+    ...(row.deliveryPeriodStart !== undefined ? { deliveryPeriodStart: start } : {}),
+    ...(row.deliveryPeriodEnd !== undefined ? { deliveryPeriodEnd: end } : {}),
+    ...(row.deliveredAt !== undefined ? { deliveredAt: deliveredAt || undefined } : {}),
+  }
+}
+
 /** Normalize spreadsheet / user date input to `YYYY-MM-DD`, or empty when unparseable. */
-export function normalizeDateToIso(value: unknown): string {
+export function normalizeDateToIso(value: unknown, opts?: { preferMonthFirst?: boolean }): string {
   if (value == null || value === '') return ''
   if (value instanceof Date) return dateObjectToIso(value)
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -133,7 +225,7 @@ export function normalizeDateToIso(value: unknown): string {
     if (isValidCalendarDate(year, month, day)) return ymdToIso(year, month, day)
   }
 
-  const dmy = parseDayMonthYearText(text)
+  const dmy = parseDayMonthYearText(text, opts?.preferMonthFirst === true)
   if (dmy) return dmy
 
   const named = parseNamedMonthDateText(text)

@@ -33,7 +33,7 @@ import { liftTouchesRef } from '../lib/liftAllocations'
 import type { BuyBackInput } from '../lib/buyBack'
 import type { CloseOrderMethod } from '../lib/orderClosure'
 import { formatDeletionDate } from '../lib/orderDeletion'
-import { formatQty, normalizeDateToIso } from '../lib/utils'
+import { formatQty, normalizeDateToIso, repairAmbiguousTradeDates } from '../lib/utils'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
@@ -253,23 +253,29 @@ function coerceIsoDate(value: unknown, fallback = ''): string {
 
 function normalizeTradeState(state: Partial<TradeData> | null | undefined): TradeData {
   if (!state || typeof state !== 'object') return { ...defaultData }
-  const tradeOrders = (Array.isArray(state.tradeOrders) ? state.tradeOrders : []).map(order => ({
-    ...order,
-    date: coerceIsoDate(order.date),
-    deliveryPeriodStart: coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date)),
-    deliveryPeriodEnd: coerceIsoDate(order.deliveryPeriodEnd, coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date))),
-  }))
-  const lifts = (Array.isArray(state.lifts) ? state.lifts : []).map(lift => ({
-    ...lift,
-    date: coerceIsoDate(lift.date),
-    deliveredAt: lift.deliveredAt ? coerceIsoDate(lift.deliveredAt) || lift.deliveredAt : lift.deliveredAt,
-    deliveryPeriodStart: lift.deliveryPeriodStart
-      ? coerceIsoDate(lift.deliveryPeriodStart) || lift.deliveryPeriodStart
-      : lift.deliveryPeriodStart,
-    deliveryPeriodEnd: lift.deliveryPeriodEnd
-      ? coerceIsoDate(lift.deliveryPeriodEnd) || lift.deliveryPeriodEnd
-      : lift.deliveryPeriodEnd,
-  }))
+  const tradeOrders = (Array.isArray(state.tradeOrders) ? state.tradeOrders : []).map(order => {
+    const coerced = {
+      ...order,
+      date: coerceIsoDate(order.date),
+      deliveryPeriodStart: coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date)),
+      deliveryPeriodEnd: coerceIsoDate(order.deliveryPeriodEnd, coerceIsoDate(order.deliveryPeriodStart, coerceIsoDate(order.date))),
+    }
+    return repairAmbiguousTradeDates(coerced)
+  })
+  const lifts = (Array.isArray(state.lifts) ? state.lifts : []).map(lift => {
+    const coerced = {
+      ...lift,
+      date: coerceIsoDate(lift.date),
+      deliveredAt: lift.deliveredAt ? coerceIsoDate(lift.deliveredAt) || lift.deliveredAt : lift.deliveredAt,
+      deliveryPeriodStart: lift.deliveryPeriodStart
+        ? coerceIsoDate(lift.deliveryPeriodStart) || lift.deliveryPeriodStart
+        : lift.deliveryPeriodStart,
+      deliveryPeriodEnd: lift.deliveryPeriodEnd
+        ? coerceIsoDate(lift.deliveryPeriodEnd) || lift.deliveryPeriodEnd
+        : lift.deliveryPeriodEnd,
+    }
+    return repairAmbiguousTradeDates(coerced)
+  })
   const lots = (Array.isArray(state.lots) ? state.lots : []).map(lot => ({
     ...lot,
     purchaseDate: coerceIsoDate(lot.purchaseDate, lot.purchaseDate),
@@ -387,6 +393,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const skipTradeLoad = isPlatformAdminRoute || !!session?.isPlatformAdmin
   const tradeContextKey = `${session?.userId ?? ''}:${session?.organisationId ?? ''}:${session?.token?.slice(0, 8) ?? ''}`
   const loadSeq = useRef(0)
+  const dateRepairPersistSeq = useRef(0)
 
   const [data, setData] = useState<TradeData>(defaultData)
   const [ready, setReady] = useState(false)
@@ -413,7 +420,44 @@ export function TradeProvider({ children }: { children: ReactNode }) {
         }
       }
       if (seq !== loadSeq.current) return
-      setData(normalizeTradeState(state))
+      const normalized = normalizeTradeState(state)
+      setData(normalized)
+
+      // Persist day/month swap repairs so Windows/Mac accounts converge after refresh.
+      const prevOrders = new Map(state.tradeOrders.map(o => [o.id, o]))
+      const prevLifts = new Map(state.lifts.map(l => [l.id, l]))
+      const repaired =
+        normalized.tradeOrders.some(order => {
+          const prev = prevOrders.get(order.id)
+          return (
+            prev
+            && (prev.date !== order.date
+              || prev.deliveryPeriodStart !== order.deliveryPeriodStart
+              || prev.deliveryPeriodEnd !== order.deliveryPeriodEnd)
+          )
+        })
+        || normalized.lifts.some(lift => {
+          const prev = prevLifts.get(lift.id)
+          return (
+            prev
+            && (prev.date !== lift.date
+              || prev.deliveryPeriodStart !== lift.deliveryPeriodStart
+              || prev.deliveryPeriodEnd !== lift.deliveryPeriodEnd
+              || prev.deliveredAt !== lift.deliveredAt)
+          )
+        })
+      if (repaired) {
+        const persistSeq = ++dateRepairPersistSeq.current
+        void tradeApi
+          .importState({ data: normalized })
+          .then(response => {
+            if (persistSeq !== dateRepairPersistSeq.current || seq !== loadSeq.current) return
+            if (response?.data) setData(normalizeTradeState(response.data))
+          })
+          .catch(() => {
+            // Import may require admin — in-memory repair still applies for this session.
+          })
+      }
     } catch (err) {
       if (seq !== loadSeq.current) return
       setError(err instanceof Error ? err.message : 'Could not load data from server')
