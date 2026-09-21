@@ -75,9 +75,8 @@ export function LiftAllocationsForm({
   excludeLiftId,
   disabled,
 }: LiftAllocationsFormProps) {
-  const pendingSOs = orders.filter(o =>
+  const eligibleSOs = orders.filter(o =>
     o.side === 'sale'
-    && o.status !== 'completed'
     && o.status !== 'cancelled'
     && (!itemFilter || o.itemName === itemFilter)
     && soMatchesSellerFilter(o, sellerFilter, orders),
@@ -89,7 +88,11 @@ export function LiftAllocationsForm({
 
   const setSo = (row: LiftAllocationDraft, soRef: string) => {
     const so = orders.find(o => o.ref === soRef && o.side === 'sale')
-    const pool = so ? poolPOsForSo(so, orders) : []
+    const pool = so
+      ? poolPOsForSo(so, orders).filter(p =>
+        p.ref === row.poRef || remainingOnOrder(p, lifts, excludeLiftId) > 0,
+      )
+      : []
     const poRef = pool.some(p => p.ref === row.poRef)
       ? row.poRef
       : (pool.find(p => p.ref === so?.poRef) ?? pool[0])?.ref ?? ''
@@ -118,12 +121,12 @@ export function LiftAllocationsForm({
 
   const addRow = () => {
     const used = new Set(rows.map(r => r.soRef).filter(Boolean))
-    const next = pendingSOs.find(s => !used.has(s.ref) && remainingOnOrder(s, lifts, excludeLiftId) > 0)
+    const next = eligibleSOs.find(s => !used.has(s.ref) && remainingOnOrder(s, lifts, excludeLiftId) > 0)
     if (!next) {
       onChange([...rows, newAllocationDraft()])
       return
     }
-    const pool = poolPOsForSo(next, orders)
+    const pool = poolPOsForSo(next, orders).filter(p => remainingOnOrder(p, lifts, excludeLiftId) > 0)
     const po = pool.find(p => p.ref === next.poRef) ?? pool[0]
     const soLeft = remainingOnOrder(next, lifts, excludeLiftId)
     const poLeft = po
@@ -154,12 +157,32 @@ export function LiftAllocationsForm({
         {rows.map((row, index) => {
           const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
           const usedSos = new Set(rows.filter(r => r.id !== row.id).map(r => r.soRef).filter(Boolean))
-          const soOptions = pendingSOs.filter(s => {
-            if (s.ref === row.soRef) return true
-            if (usedSos.has(s.ref)) return false
-            return remainingOnOrder(s, lifts, excludeLiftId) > 0
-          })
-          const poPool = so ? poolPOsForSo(so, orders) : []
+          const soOptions = (() => {
+            const opts = eligibleSOs.filter(s => {
+              if (s.ref === row.soRef) return true
+              if (usedSos.has(s.ref)) return false
+              return remainingOnOrder(s, lifts, excludeLiftId) > 0
+            })
+            // Keep current SO visible even if filters hide it (legacy bad / missing link repair).
+            if (row.soRef && !opts.some(s => s.ref === row.soRef)) {
+              const currentSo = orders.find(o => o.ref === row.soRef && o.side === 'sale' && o.status !== 'cancelled')
+              if (currentSo) opts.unshift(currentSo)
+            }
+            return opts
+          })()
+          const poPool = (() => {
+            const pool = so
+              ? poolPOsForSo(so, orders).filter(p =>
+                p.ref === row.poRef || remainingOnOrder(p, lifts, excludeLiftId) > 0,
+              )
+              : []
+            // Keep current PO visible even if it is not in the seller pool (legacy bad link).
+            if (row.poRef && !pool.some(p => p.ref === row.poRef)) {
+              const currentPo = orders.find(o => o.ref === row.poRef && o.side === 'purchase' && o.status !== 'cancelled')
+              if (currentPo) pool.unshift(currentPo)
+            }
+            return pool
+          })()
           const soLeft = so
             ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id)
             : 0
@@ -217,7 +240,7 @@ export function LiftAllocationsForm({
                         Math.max(0, remainingOnOrder(s, lifts, excludeLiftId) - qtyOnOtherRows(rows, s.ref, 'soRef', row.id)),
                         [s.poRef ? `Lot ${formatPoRef(s.poRef)}` : 'No PO linked'],
                       ))
-                      : [{ value: '', label: itemFilter ? `No pending SO for ${itemFilter}` : 'No pending SO' }]}
+                      : [{ value: '', label: itemFilter ? `No SO for ${itemFilter}` : 'No SO available' }]}
                     value={row.soRef}
                     onChange={e => setSo(row, e.target.value)}
                     disabled={disabled}

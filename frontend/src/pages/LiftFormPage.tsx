@@ -402,7 +402,6 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     : 0
   const balanceApplied = singlePair ? (parseFloat(balanceAppliedQty) || 0) : 0
   const totalPlanned = totalActualQtyFromForm(tankers)
-  const ordersLocked = isEdit && editingLift?.status === 'delivered'
 
   useEffect(() => {
     const so = store.tradeOrders.find(s => s.ref === firstSoRef && s.side === 'sale')
@@ -561,7 +560,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
   const pageTitle = isEdit ? `Edit ${formatLiftRef(editLiftRef!)}` : 'Record Lift'
   const pageSubtitle = isEdit
     ? editingLift?.status === 'delivered'
-      ? 'Update actual weighed quantities — changes sync to PO, SO, and inventory'
+      ? 'Correct SO/PO links and actual weighed quantities — changes sync to orders and inventory'
       : isStockMode
         ? 'Update tanker details for stock received from PO'
         : 'Update tanker details and split quantity across SOs while in transit'
@@ -656,7 +655,6 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                 itemFilter={itemFilter}
                 sellerFilter={sellerFilter}
                 excludeLiftId={editingLift?.id}
-                disabled={ordersLocked}
               />
             ) : (
               <LiftAllocationsForm
@@ -667,7 +665,6 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                 itemFilter={itemFilter}
                 sellerFilter={sellerFilter}
                 excludeLiftId={editingLift?.id}
-                disabled={ordersLocked}
               />
             )}
 

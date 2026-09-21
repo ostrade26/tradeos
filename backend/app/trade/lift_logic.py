@@ -227,9 +227,9 @@ def _linked_purchase_order(so: dict, orders: list[dict]) -> dict | None:
 def can_lift_so_against_po(so: dict, po: dict, orders: list[dict]) -> bool:
     if so.get("side") != "sale" or po.get("side") != "purchase":
         return False
-    if so.get("status") in ("completed", "cancelled"):
-        return False
-    if po.get("status") in ("completed", "cancelled"):
+    # Cancelled only — completed is allowed so delivered lifts can be relinked / kept
+    # after legacy import (capacity still gated by remaining_on_order + exclude_lift_id).
+    if so.get("status") == "cancelled" or po.get("status") == "cancelled":
         return False
     if so.get("itemName") != po.get("itemName"):
         return False
@@ -332,6 +332,8 @@ def validate_stock_lift_allocations(
     po = next((o for o in orders if o.get("ref") == a["poRef"] and o.get("side") == "purchase"), None)
     if not po:
         return "PO not found"
+    if po.get("status") == "cancelled":
+        return f"{a['poRef']} is cancelled"
     remaining = remaining_on_order(po, lifts, exclude_lift_id)
     if a["qtyMt"] > remaining:
         return f"{a['poRef']} only has {format_qty(remaining)} left to lift"

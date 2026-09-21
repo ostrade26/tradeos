@@ -5,7 +5,6 @@ import { orderDropdownOption } from '../../lib/orderSelectOptions'
 import { remainingOnOrder } from '../../lib/liftAllocations'
 import { STOCK_LIFT_LABEL } from '../../lib/stockLift'
 import type { Lift, TradeOrder } from '../../data/mockData'
-import { toBeLifted } from '../../data/mockData'
 
 export type StockLiftDraft = {
   poRef: string
@@ -33,13 +32,15 @@ export function StockLiftForm({
   excludeLiftId,
   disabled,
 }: StockLiftFormProps) {
-  const pendingPOs = orders.filter(o =>
+  const eligiblePOs = orders.filter(o =>
     o.side === 'purchase'
-    && o.status !== 'completed'
     && o.status !== 'cancelled'
-    && toBeLifted(o) > 0
     && (!itemFilter || o.itemName === itemFilter)
     && (!sellerFilter || (o.sellerName || o.partyName) === sellerFilter),
+  )
+
+  const poOptions = eligiblePOs.filter(o =>
+    o.ref === value.poRef || remainingOnOrder(o, lifts, excludeLiftId) > 0,
   )
 
   const po = orders.find(o => o.ref === value.poRef && o.side === 'purchase')
@@ -71,7 +72,7 @@ export function StockLiftForm({
           disabled={disabled}
           options={[
             { value: '', label: 'Select PO…' },
-            ...pendingPOs.map(o => orderDropdownOption(o, remainingOnOrder(o, lifts, excludeLiftId))),
+            ...poOptions.map(o => orderDropdownOption(o, remainingOnOrder(o, lifts, excludeLiftId))),
           ]}
           value={value.poRef}
           onChange={e => setPo(e.target.value)}

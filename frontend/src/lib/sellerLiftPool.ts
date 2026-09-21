@@ -1,4 +1,4 @@
-import { toBeLifted, type TradeOrder } from '../data/mockData'
+import { type TradeOrder } from '../data/mockData'
 import { normalizeCompanyName } from './companyResolution'
 import { formatPoRef, formatSoRef } from './tradeRefs'
 
@@ -48,8 +48,8 @@ export function crossPoAllocationSummary(
 /** SO may lift against this PO: exact booking, unlinked SO, or another PO from the same seller+item. */
 export function canLiftSoAgainstPo(so: TradeOrder, po: TradeOrder, orders: TradeOrder[]): boolean {
   if (so.side !== 'sale' || po.side !== 'purchase') return false
-  if (so.status === 'completed' || so.status === 'cancelled') return false
-  if (po.status === 'completed' || po.status === 'cancelled') return false
+  // Cancelled only — completed allowed for delivered-lift relink / legacy cleanup.
+  if (so.status === 'cancelled' || po.status === 'cancelled') return false
   if (so.itemName !== po.itemName) return false
   if (!so.poRef || so.poRef === po.ref) return true
   const booked = linkedPurchaseOrder(so, orders)
@@ -63,16 +63,16 @@ function byPoSequence(a: TradeOrder, b: TradeOrder): number {
   return a.ref.localeCompare(b.ref, undefined, { numeric: true })
 }
 
-/** Pending POs this SO can dispatch against (same seller + item). */
+/** Non-cancelled POs this SO can dispatch against (same seller + item). Capacity filtered by callers. */
 export function poolPOsForSo(so: TradeOrder, orders: TradeOrder[]): TradeOrder[] {
-  const pending = orders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled')
-  return pending.filter(po => canLiftSoAgainstPo(so, po, orders) && toBeLifted(po) > 0).sort(byPoSequence)
+  const candidates = orders.filter(o => o.side === 'purchase' && o.status !== 'cancelled')
+  return candidates.filter(po => canLiftSoAgainstPo(so, po, orders)).sort(byPoSequence)
 }
 
-/** Pending SOs that can dispatch from this PO (booked here or on another PO from the same seller). */
+/** Non-cancelled SOs that can dispatch from this PO. Capacity filtered by callers. */
 export function poolSOsForPo(po: TradeOrder, orders: TradeOrder[]): TradeOrder[] {
-  const pending = orders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled')
-  return pending.filter(so => canLiftSoAgainstPo(so, po, orders) && toBeLifted(so) > 0)
+  const candidates = orders.filter(o => o.side === 'sale' && o.status !== 'cancelled')
+  return candidates.filter(so => canLiftSoAgainstPo(so, po, orders))
 }
 
 export function liftPoolMismatchMessage(so: TradeOrder, po: TradeOrder, orders: TradeOrder[]): string {

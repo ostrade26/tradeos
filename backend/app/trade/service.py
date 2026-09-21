@@ -1088,7 +1088,16 @@ class TradeService:
             else:
                 allocations = get_lift_allocations(existing)
         else:
-            allocations = scale_allocations(get_lift_allocations(existing), tanker_qty)
+            # Delivered: accept allocation identity fixes (legacy cleanup); else scale existing.
+            if input_data.get("allocations"):
+                allocations = []
+                for a in input_data["allocations"]:
+                    entry = {"poRef": a["poRef"].strip(), "qtyMt": round_qty_mt(a["qtyMt"])}
+                    if not stock_lift:
+                        entry["soRef"] = a["soRef"].strip()
+                    allocations.append(entry)
+            else:
+                allocations = scale_allocations(get_lift_allocations(existing), tanker_qty)
 
         balance_applied = (
             round_qty_mt(input_data.get("balanceAppliedQtyMt") or existing.get("balanceAppliedQtyMt") or 0)
@@ -1096,31 +1105,34 @@ class TradeService:
             else 0
         )
 
-        if existing.get("status") == "pending":
+        # When allocations are supplied (pending or delivered), tanker qty must match the lines.
+        allocations_supplied = bool(input_data.get("allocations"))
+        if existing.get("status") == "pending" or allocations_supplied:
             alloc_sum = allocation_total(allocations)
             if tanker_qty != alloc_sum:
                 raise ValueError(
                     f"Tanker qty ({format_qty(tanker_qty)}) must match the {'PO' if stock_lift else 'SO'} total ({format_qty(alloc_sum)})"
                 )
-            if balance_applied < 0:
-                raise ValueError("Balance adjustment cannot be negative")
-            if balance_applied > 0:
-                po_for_balance = next(
-                    o for o in data["tradeOrders"] if o["ref"] == allocations[0]["poRef"] and o["side"] == "purchase"
-                )
-                seller_name = po_for_balance.get("sellerName") or po_for_balance.get("partyName") or ""
-                outstanding = get_seller_outstanding_balance(
-                    data["lifts"],
-                    data["tradeOrders"],
-                    seller_name,
-                    data.get("balanceSettlements"),
-                    exclude_lift_id=lift_id,
-                )
-                if balance_applied > outstanding:
-                    raise ValueError(
-                        f"Balance adjustment cannot exceed {format_qty(outstanding)} outstanding for this seller"
+            if existing.get("status") == "pending":
+                if balance_applied < 0:
+                    raise ValueError("Balance adjustment cannot be negative")
+                if balance_applied > 0:
+                    po_for_balance = next(
+                        o for o in data["tradeOrders"] if o["ref"] == allocations[0]["poRef"] and o["side"] == "purchase"
                     )
-                allocations = [{**allocations[0], "qtyMt": round_qty_mt(allocations[0]["qtyMt"] + balance_applied)}]
+                    seller_name = po_for_balance.get("sellerName") or po_for_balance.get("partyName") or ""
+                    outstanding = get_seller_outstanding_balance(
+                        data["lifts"],
+                        data["tradeOrders"],
+                        seller_name,
+                        data.get("balanceSettlements"),
+                        exclude_lift_id=lift_id,
+                    )
+                    if balance_applied > outstanding:
+                        raise ValueError(
+                            f"Balance adjustment cannot exceed {format_qty(outstanding)} outstanding for this seller"
+                        )
+                    allocations = [{**allocations[0], "qtyMt": round_qty_mt(allocations[0]["qtyMt"] + balance_applied)}]
 
         if stock_lift:
             alloc_error = validate_stock_lift_allocations(allocations, data["tradeOrders"], data["lifts"], lift_id)
@@ -1188,7 +1200,20 @@ class TradeService:
             inv = (input_data.get("salesInvoiceNo") or "").strip()
             updated["salesInvoiceNo"] = inv or existing.get("salesInvoiceNo")
 
-        title = "Lift PO reassigned" if first["poRef"] != existing.get("poRef") else "Lift quantity updated"
+        title = "Lift quantity updated"
+        existing_allocs = get_lift_allocations(existing)
+        links_changed = (
+            first["poRef"] != existing.get("poRef")
+            or ("" if stock_lift else so_ref) != ("" if existing.get("stockLift") else (existing.get("soRef") or ""))
+            or stock_lift != bool(existing.get("stockLift", False))
+            or len(allocations) != len(existing_allocs)
+            or any(
+                a.get("poRef") != b.get("poRef") or (a.get("soRef") or "") != (b.get("soRef") or "")
+                for a, b in zip(allocations, existing_allocs)
+            )
+        )
+        if links_changed:
+            title = "Lift orders updated"
         next_data = apply_lift_totals(
             {
                 **data,
