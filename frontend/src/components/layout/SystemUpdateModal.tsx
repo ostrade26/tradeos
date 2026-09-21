@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, CheckCircle2, Circle, Loader2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { AnnouncementModalShell } from '../feedback/AnnouncementModalShell'
-import { announcementVariantFromKind } from '../../lib/announcementTheme'
 import { cn } from '../../lib/utils'
 import { releaseCategoryLabel } from '../../lib/releaseVersion'
 import type { UserNotification } from '../../api/platformApi'
@@ -120,7 +119,6 @@ export function SystemUpdateModal({
   const [percent, setPercent] = useState(0)
   const [error, setError] = useState('')
   const [phase, setPhase] = useState<'running' | 'failed' | 'success'>('running')
-  const [reloadIn, setReloadIn] = useState<number | null>(null)
   const appliedOnce = useRef(false)
 
   useEffect(() => {
@@ -130,7 +128,6 @@ export function SystemUpdateModal({
     setPercent(0)
     setError('')
     setPhase('running')
-    setReloadIn(null)
 
     let cancelled = false
     const run = async () => {
@@ -166,7 +163,6 @@ export function SystemUpdateModal({
       if (cancelled) return
       setPercent(100)
       setPhase('success')
-      setReloadIn(4)
     }
     void run()
     return () => {
@@ -175,146 +171,106 @@ export function SystemUpdateModal({
   }, [open, notification, steps])
 
   useEffect(() => {
-    if (!open) {
-      appliedOnce.current = false
-      setReloadIn(null)
-    }
+    if (!open) appliedOnce.current = false
   }, [open])
 
-  useEffect(() => {
-    if (phase !== 'success' || reloadIn == null) return
-    if (reloadIn <= 0) {
-      window.location.reload()
-      return
-    }
-    const timer = window.setTimeout(() => setReloadIn(value => (value == null ? value : value - 1)), 1000)
-    return () => window.clearTimeout(timer)
-  }, [phase, reloadIn])
-
   const reloadNow = () => {
-    setReloadIn(null)
     window.location.reload()
   }
 
-  const activeIndex = statuses.findIndex(status => status === 'active' || status === 'error')
-  const activeStep = activeIndex >= 0 ? steps[activeIndex] : steps[steps.length - 1]
-  const dismissible = phase === 'failed'
-  const featureCount = steps.filter(step => step.kind === 'feature').length
   const version = notification ? payloadText(notification.payload, 'version') : ''
-  const title = phase === 'success'
-    ? version ? `Version ${version} applied` : 'Update complete'
-    : phase === 'failed'
-      ? 'Update failed'
-      : version ? `Updating to ${version}` : 'Updating Tradeal'
-  const subtitle = phase === 'success'
-    ? `${featureCount} ${featureCount === 1 ? 'item' : 'items'} applied to this account`
-    : notification?.title || 'Applying this update to your workspace'
+  const title = phase === 'failed'
+    ? 'Update failed'
+    : version
+      ? `New Tradeal ${version}`
+      : 'Product update'
 
-  const variant = notification ? announcementVariantFromKind(notification.kind) : 'update'
+  const dismissible = phase === 'failed' || phase === 'success'
 
   return (
     <AnnouncementModalShell
       open={open}
       onClose={dismissible ? onClose : () => undefined}
       dismissible={dismissible}
-      variant={variant}
+      variant="productUpdate"
       title={title}
-      subtitle={subtitle}
-      version={version || undefined}
-      maxWidthClass="max-w-2xl"
+      progress={phase === 'running' || phase === 'failed' ? percent : undefined}
+      progressTone={phase === 'failed' ? 'danger' : 'accent'}
+      status={
+        phase === 'success' ? (
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-accent">
+            <CheckCircle2 className="h-5 w-5" aria-hidden />
+            Updates Applied
+          </span>
+        ) : phase === 'failed' ? (
+          <div className="space-y-1 text-center">
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-danger">
+              <AlertCircle className="h-5 w-5" aria-hidden />
+              Could not finish
+            </span>
+            {error ? (
+              <p className="text-xs text-danger" aria-live="polite">{error}</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm font-medium tabular-nums text-heading/80">
+            Updating {percent}%
+          </p>
+        )
+      }
       footer={
         phase === 'failed' ? (
           <Button type="button" variant="outline" className="min-h-11" onClick={onClose}>
             Close
           </Button>
         ) : phase === 'success' ? (
-          <>
-            <p className="text-sm text-muted tabular-nums sm:mr-auto">
-              {reloadIn == null ? 'Reloading…' : `Reloading in ${reloadIn}s`}
-            </p>
-            <Button type="button" className="min-h-11 px-8 font-semibold" onClick={reloadNow}>
-              Reload now
-            </Button>
-          </>
+          <Button type="button" className="min-h-11 px-8 font-semibold" onClick={reloadNow}>
+            Got it
+          </Button>
         ) : (
           <p className="w-full text-center text-sm text-muted sm:text-left">
             Keep this window open until the update finishes.
           </p>
         )
       }
-      footerClassName={phase === 'success' ? 'items-center sm:justify-between' : undefined}
     >
       <div className="space-y-5">
-        {phase === 'success' ? (
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-6 w-6 shrink-0 text-accent" aria-hidden />
-            <div>
-              <p className="text-sm font-semibold text-heading">All updates applied</p>
-              <p className="text-xs text-muted mt-1 leading-relaxed">
-                This account now has the features below. Reload Tradeal to start using them.
-              </p>
-            </div>
-          </div>
-        ) : null}
         <div>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Progress</p>
-            <p className="text-sm font-semibold tabular-nums text-heading">{percent}%</p>
-          </div>
-          <div
-            className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent}
-            aria-label="Update progress"
-          >
-            <div
-              className="h-full bg-accent transition-[width] duration-300 ease-out"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted mt-2" aria-live="polite">
-            {phase === 'failed'
-              ? error
-              : phase === 'success'
-                ? 'Finished'
-                : activeStep
-                  ? `Now: ${activeStep.title}`
-                  : 'Preparing update'}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Included in this update</p>
-          <ul className="mt-3 space-y-3">
+          <p className="text-xs font-medium text-muted">Included in this update</p>
+          <ul className="relative mt-4 space-y-0">
             {steps.map((step, index) => {
-              const status = statuses[index] ?? 'pending'
+              const status = phase === 'success' ? 'done' : (statuses[index] ?? 'pending')
+              const isLast = index === steps.length - 1
               return (
-                <li key={step.id} className="flex items-start gap-3">
+                <li key={step.id} className="relative flex gap-3 pb-5 last:pb-0">
+                  {!isLast ? (
+                    <span
+                      className="absolute left-[9px] top-5 bottom-0 w-px bg-gray-200 dark:bg-gray-700"
+                      aria-hidden
+                    />
+                  ) : null}
                   <span
                     className={cn(
-                      'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                      'relative z-[1] mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full',
                       status === 'done' && 'bg-accent text-white',
-                      status === 'active' && 'text-accent',
-                      status === 'error' && 'text-danger',
-                      status === 'pending' && 'text-muted',
+                      status === 'active' && 'bg-accent/15 text-accent',
+                      status === 'error' && 'bg-danger/15 text-danger',
+                      status === 'pending' && 'bg-gray-100 text-muted dark:bg-gray-800',
                     )}
                     aria-hidden
                   >
-                    {status === 'done' ? <Check className="h-3.5 w-3.5" /> : null}
-                    {status === 'active' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {status === 'error' ? <AlertCircle className="h-4 w-4" /> : null}
-                    {status === 'pending' ? <Circle className="h-3.5 w-3.5" /> : null}
+                    {status === 'done' ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                    {status === 'active' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    {status === 'error' ? <AlertCircle className="h-3 w-3" /> : null}
+                    {status === 'pending' ? <Circle className="h-2.5 w-2.5" /> : null}
                   </span>
-                  <div className="min-w-0">
-                    <p className={cn(
-                      'text-sm font-medium text-heading',
-                      status === 'pending' && 'text-muted',
-                    )}>
+                  <div className="min-w-0 pt-px">
+                    <p className={cn('text-sm font-semibold text-heading', status === 'pending' && 'text-muted')}>
                       {step.title}
                     </p>
-                    <p className="text-xs text-muted mt-0.5 leading-relaxed">{step.detail}</p>
+                    {step.detail ? (
+                      <p className="mt-0.5 text-sm leading-relaxed text-muted">{step.detail}</p>
+                    ) : null}
                   </div>
                 </li>
               )
