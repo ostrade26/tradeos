@@ -243,7 +243,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [licenceSort, setLicenceSort] = useState(() => loadRegisterSort('platform-licenses', 'licence_number'))
   const [amcSort, setAmcSort] = useState(() => loadRegisterSort('platform-amcs', 'end_date'))
   const [paymentSort, setPaymentSort] = useState(() => loadRegisterSort('platform-payments', 'payment_date'))
-  const [releaseSort, setReleaseSort] = useState(() => loadRegisterSort('platform-releases', 'version'))
+  const [releaseSort, setReleaseSort] = useState(() => loadRegisterSort('platform-releases-v2', 'id'))
   const [auditSort, setAuditSort] = useState(() => loadRegisterSort('platform-audit', 'created_at'))
   const [seatRequests, setSeatRequests] = useState<SeatRequest[]>([])
   const [addOnsOpenAccess, setAddOnsOpenAccess] = useState(0)
@@ -693,7 +693,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const handleReleaseSortChange = useCallback((key: string) => {
     setReleaseSort(prev => {
       const next = toggleSort(prev, key)
-      saveRegisterSort('platform-releases', next)
+      saveRegisterSort('platform-releases-v2', next)
       return next
     })
   }, [])
@@ -976,7 +976,14 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     [latestReleaseId],
   )
   const sortedReleases = useMemo(
-    () => sortPlatformRows(releases, releaseSort, relColumns),
+    () => {
+      // Default / "latest" view: highest id first (newest release on top).
+      if (releaseSort.key === 'id') {
+        const dir = releaseSort.direction === 'asc' ? 1 : -1
+        return [...releases].sort((a, b) => (a.id - b.id) * dir)
+      }
+      return sortPlatformRows(releases, releaseSort, relColumns)
+    },
     [releases, releaseSort, relColumns],
   )
 

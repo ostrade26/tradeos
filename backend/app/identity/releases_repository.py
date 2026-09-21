@@ -14,16 +14,25 @@ from .repository import append_audit_log
 
 RELEASE_CATEGORIES = frozenset(
     {
+        "bug_fix",
+        "design_improvements",
         "ui_and_fixes",
         "feature_enhancement",
-        "bug_fix",
         "improvement",
         "cosmetic",
         "new_feature",
         "product_update",
     }
 )
-INFORM_CATEGORIES = frozenset({"ui_and_fixes", "bug_fix", "improvement", "cosmetic"})
+INFORM_CATEGORIES = frozenset(
+    {
+        "bug_fix",
+        "design_improvements",
+        "ui_and_fixes",
+        "improvement",
+        "cosmetic",
+    }
+)
 GATED_CATEGORIES = frozenset({"feature_enhancement", "new_feature", "product_update"})
 
 
@@ -128,14 +137,22 @@ def infer_category_from_commit_subject(subject: str) -> str:
     text = (subject or "").strip()
     lower = text.lower()
     if not text:
-        return "ui_and_fixes"
-    if lower.startswith("fix") or lower.startswith("bugfix") or lower.startswith("ui:") or lower.startswith("style"):
-        return "ui_and_fixes"
+        return "bug_fix"
+    if lower.startswith("fix") or lower.startswith("bugfix") or lower.startswith("bug"):
+        return "bug_fix"
+    if (
+        lower.startswith("ui:")
+        or lower.startswith("style")
+        or lower.startswith("design")
+        or "polish" in lower
+        or "layout" in lower
+    ):
+        return "design_improvements"
     if "[feature]" in lower or lower.startswith("feat") or "[enhancement]" in lower:
         return "feature_enhancement"
     if lower.startswith("chore") or lower.startswith("docs") or lower.startswith("ci") or lower.startswith("test"):
-        return "ui_and_fixes"
-    return "ui_and_fixes"
+        return "bug_fix"
+    return "bug_fix"
 
 
 def _summary_from_items(items: list[dict[str, Any]], *, env: str, sha: str) -> str:
@@ -152,8 +169,13 @@ def _summary_from_items(items: list[dict[str, Any]], *, env: str, sha: str) -> s
 _ADMIN_DRAFT_FOOTER = "Review this draft, then publish to organisations when ready."
 
 
+def _strip_html(text: str) -> str:
+    cleaned = re.sub(r"<[^>]+>", " ", text or "")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _org_notice_body(summary: Any, fallback_lines: list[str]) -> str:
-    text = str(summary or "").strip()
+    text = _strip_html(str(summary or ""))
     if text:
         cleaned = [
             line
@@ -750,9 +772,10 @@ def publish_release(
 
 def _category_label(category: str) -> str:
     return {
+        "bug_fix": "Bug Fix",
+        "design_improvements": "Design Improvements",
         "ui_and_fixes": "Bug fix & UI uplift",
-        "feature_enhancement": "Feature enhancement",
-        "bug_fix": "Bug fix",
+        "feature_enhancement": "Marketplace feature",
         "improvement": "Improvement",
         "cosmetic": "Cosmetic",
         "new_feature": "New feature",

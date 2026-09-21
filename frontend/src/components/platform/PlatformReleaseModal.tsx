@@ -7,6 +7,7 @@ import { Select } from '../ui/Select'
 import {
   RELEASE_CATEGORIES,
   isGatedReleaseCategory,
+  releaseCategorySelectOptions,
   suggestNextVersion,
   type ReleaseCategory,
 } from '../../lib/releaseVersion'
@@ -20,7 +21,7 @@ export type ReleaseFormPayload = {
 }
 
 function emptyItem(): ReleaseFormPayload['items'][number] {
-  return { category: 'ui_and_fixes', title: '', detail: '', feature_key: '' }
+  return { category: 'bug_fix', title: '', detail: '', feature_key: '' }
 }
 
 function formFromRelease(release: PlatformRelease | null, nextVersion: string): ReleaseFormPayload {
@@ -95,7 +96,7 @@ export function PlatformReleaseModal({
       open={open}
       onClose={onClose}
       title={release ? `Edit ${release.version}` : 'New release'}
-      subtitle="Customers see this copy. Version is unique. Publish sends the notice to organisations."
+      subtitle="Customers see this copy. Version is assigned automatically. Publish sends the notice to organisations."
       size="lg"
       footer={
         <div className="flex flex-wrap justify-end gap-2">
@@ -122,7 +123,8 @@ export function PlatformReleaseModal({
         <Input
           label="Version"
           value={form.version}
-          onChange={e => setForm(f => ({ ...f, version: e.target.value }))}
+          readOnly
+          disabled
           placeholder={suggested || '1.0.0'}
         />
         <Input
@@ -136,8 +138,8 @@ export function PlatformReleaseModal({
           <textarea
             value={form.summary}
             onChange={e => setForm(f => ({ ...f, summary: e.target.value }))}
-            rows={3}
-            className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
+            rows={5}
+            className="min-h-[7rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2.5 text-sm leading-relaxed text-heading"
             placeholder="Short note for the recipient notice."
           />
         </label>
@@ -168,7 +170,7 @@ export function PlatformReleaseModal({
               label="Category"
               value={item.category}
               onChange={e => setItem(index, { category: e.target.value as ReleaseCategory })}
-              options={RELEASE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))}
+              options={releaseCategorySelectOptions(item.category)}
             />
             <div className="flex items-end gap-2">
               <div className="flex-1 min-w-0">
@@ -196,8 +198,8 @@ export function PlatformReleaseModal({
               <textarea
                 value={item.detail}
                 onChange={e => setItem(index, { detail: e.target.value })}
-                rows={2}
-                className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2 text-sm text-heading"
+                rows={5}
+                className="min-h-[7rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2.5 text-sm leading-relaxed text-heading"
               />
             </label>
             {isGatedReleaseCategory(item.category) ? (

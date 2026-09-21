@@ -376,9 +376,10 @@ export interface UserNotification {
 }
 
 export type ReleaseCategory =
+  | 'bug_fix'
+  | 'design_improvements'
   | 'ui_and_fixes'
   | 'feature_enhancement'
-  | 'bug_fix'
   | 'improvement'
   | 'cosmetic'
   | 'new_feature'

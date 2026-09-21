@@ -1,7 +1,9 @@
 export type ReleaseCategory =
+  | 'bug_fix'
+  | 'design_improvements'
+  /** @deprecated kept for existing releases */
   | 'ui_and_fixes'
   | 'feature_enhancement'
-  | 'bug_fix'
   | 'improvement'
   | 'cosmetic'
   | 'new_feature'
@@ -10,41 +12,59 @@ export type ReleaseCategory =
 /** Primary categories for new releases (platform admin). */
 export const RELEASE_CATEGORIES: { value: ReleaseCategory; label: string; hint: string }[] = [
   {
-    value: 'ui_and_fixes',
-    label: 'Bug fix & UI uplift',
-    hint: 'Notify users what changed. Ships with production — publish from Releases.',
+    value: 'bug_fix',
+    label: 'Bug Fix',
+    hint: 'Fixes for issues users may have hit. Ships with production — publish from Releases.',
   },
   {
-    value: 'feature_enhancement',
-    label: 'Marketplace feature',
-    hint: 'Creates a draft on Features & Access. Tradeal sets free/paid and publishes to orgs from there.',
+    value: 'design_improvements',
+    label: 'Design Improvements',
+    hint: 'UI polish and layout improvements. Ships with production — publish from Releases.',
   },
 ]
 
-const LEGACY_INFORM: ReleaseCategory[] = ['bug_fix', 'improvement', 'cosmetic']
-const LEGACY_GATED: ReleaseCategory[] = ['new_feature', 'product_update']
+/** Legacy gated categories (marketplace features). Kept for existing rows only. */
+const LEGACY_GATED: ReleaseCategory[] = ['feature_enhancement', 'new_feature', 'product_update']
+const LEGACY_INFORM: ReleaseCategory[] = ['ui_and_fixes', 'improvement', 'cosmetic']
 
-export const GATED_RELEASE_CATEGORIES: ReleaseCategory[] = ['feature_enhancement', ...LEGACY_GATED]
+export const GATED_RELEASE_CATEGORIES: ReleaseCategory[] = [...LEGACY_GATED]
 
 export function isGatedReleaseCategory(category: string): boolean {
   return GATED_RELEASE_CATEGORIES.includes(category as ReleaseCategory)
 }
 
 export function isInformReleaseCategory(category: string): boolean {
-  return category === 'ui_and_fixes' || LEGACY_INFORM.includes(category as ReleaseCategory)
+  return (
+    category === 'bug_fix' ||
+    category === 'design_improvements' ||
+    LEGACY_INFORM.includes(category as ReleaseCategory)
+  )
 }
 
 export function releaseCategoryLabel(category: string): string {
   const primary = RELEASE_CATEGORIES.find(c => c.value === category)
   if (primary) return primary.label
   const legacy: Record<string, string> = {
-    bug_fix: 'Bug fix',
+    ui_and_fixes: 'Bug fix & UI uplift',
+    feature_enhancement: 'Marketplace feature',
     improvement: 'Improvement',
     cosmetic: 'Cosmetic',
     new_feature: 'New feature',
     product_update: 'Product update',
   }
   return legacy[category] ?? category.replace(/_/g, ' ')
+}
+
+/** Options for the category select — primary list plus current value if legacy. */
+export function releaseCategorySelectOptions(current?: string): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = RELEASE_CATEGORIES.map(c => ({
+    value: c.value,
+    label: c.label,
+  }))
+  if (current && !options.some(o => o.value === current)) {
+    options.push({ value: current, label: releaseCategoryLabel(current) })
+  }
+  return options
 }
 
 export function parseSemver(value: string): [number, number, number] {
