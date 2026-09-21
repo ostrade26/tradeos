@@ -758,8 +758,23 @@ function isExcelSerialValue(value: unknown): value is number {
 /**
  * Convert an Excel date cell to YYYY-MM-DD from the serial / Date value.
  * Never prefer locale-formatted `cell.w` alone — US MM/DD vs India DD/MM swaps day/month.
+ *
+ * Exception: when Excel has already converted typed India DD/MM text into a date serial
+ * (common on US-locale Excel), `cell.w` still shows the typed digits (e.g. "10/5/26" for
+ * 10 May). Prefer parsing that display as DD/MM so we recover the trader's date instead of
+ * the US-interpreted serial (which would be 5 Oct).
  */
 function excelDateCellToIso(cell: import('xlsx').CellObject): string {
+  const display = typeof cell.w === 'string' ? cell.w.trim().replace(/\u00a0/g, ' ') : ''
+  // Slash/dash display with day+month(+year) — India trade registers always mean DD/MM.
+  if (display && /^\d{1,2}[/.-]\d{1,2}([/.-]\d{2,4})?$/.test(display)) {
+    // Bare "10/5" has no year — fall through to serial/Date which has the year.
+    if (/[/.-]\d{2,4}$/.test(display)) {
+      const fromDisplay = normalizeDateToIso(display, { preferMonthFirst: false })
+      if (fromDisplay) return fromDisplay
+    }
+  }
+
   if (typeof cell.v === 'number' && Number.isFinite(cell.v)) {
     return normalizeDateToIso(cell.v)
   }
@@ -768,12 +783,23 @@ function excelDateCellToIso(cell: import('xlsx').CellObject): string {
   }
   if (cell.t === 'd' && cell.v instanceof Date && !Number.isNaN(cell.v.getTime())) {
     // SheetJS Date values are UTC midnight for the calendar day — use UTC parts.
-    const y = cell.v.getUTCFullYear()
-    const m = cell.v.getUTCMonth() + 1
-    const d = cell.v.getUTCDate()
+    // Some files store local-midnight offsets (e.g. IST → previous day 18:30Z); use local parts then.
+    const asUtcMidnight =
+      cell.v.getUTCHours() === 0
+      && cell.v.getUTCMinutes() === 0
+      && cell.v.getUTCSeconds() === 0
+      && cell.v.getUTCMilliseconds() === 0
+    if (asUtcMidnight) {
+      const y = cell.v.getUTCFullYear()
+      const m = cell.v.getUTCMonth() + 1
+      const d = cell.v.getUTCDate()
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+    const y = cell.v.getFullYear()
+    const m = cell.v.getMonth() + 1
+    const d = cell.v.getDate()
     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
-  const display = typeof cell.w === 'string' ? cell.w.trim() : ''
   if (!display) return ''
   const z = typeof cell.z === 'string' ? cell.z : ''
   return normalizeDateToIso(display, { preferMonthFirst: excelFormatPrefersMonthFirst(z) })
