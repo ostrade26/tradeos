@@ -33,6 +33,14 @@ import { lockedAccountPartyFields, displayPartyConfirmedBy } from '../lib/accoun
 import { useAccountTrader } from '../lib/useAccountTrader'
 import { parseIndianAmount, formatIndianAmount } from '../lib/indianAmount'
 import { formatContractRate, orderLineAmount, parseRateNumber, rateInputLabel, syncedRateFields } from '../lib/orderRate'
+import {
+  validateBrokerContractRef,
+  validateOrderQuantity,
+  validateOrderRatePer10Kg,
+  validateOrderRef,
+  validateSpot,
+  validateTaxRate,
+} from '../lib/orderFieldValidation'
 import { brokerageTypeFromOrder, orderToFormValues } from '../lib/orderForm'
 import {
   brokerageTermsToFormPatch,
@@ -59,7 +67,17 @@ type FormApi = Record<string, string> & {
 }
 
 type OrderFieldErrors = Partial<Record<
-  'partyName' | 'itemName' | 'quantity' | 'rate' | 'date' | 'deliveryPeriodStart' | 'deliveryPeriodEnd',
+  | 'partyName'
+  | 'itemName'
+  | 'quantity'
+  | 'rate'
+  | 'date'
+  | 'deliveryPeriodStart'
+  | 'deliveryPeriodEnd'
+  | 'ref'
+  | 'brokerContractRef'
+  | 'spot'
+  | 'taxRate',
   string
 >>
 
@@ -436,18 +454,33 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     setFieldErrors({})
     const errors: OrderFieldErrors = {}
 
+    const refError = validateOrderRef(form.ref, side)
+    if (refError) errors.ref = refError
+
+    const brokerRefError = validateBrokerContractRef(form.brokerContractRef)
+    if (brokerRefError) errors.brokerContractRef = brokerRefError
+
     if (!form.partyName.trim()) {
       errors.partyName = `${isPO ? 'Seller' : 'Buyer'} name is required`
     }
     if (!form.itemName.trim()) {
       errors.itemName = 'Item name is required'
     }
-    if (!form.quantity || parseFloat(form.quantity) <= 0) {
-      errors.quantity = errors.quantity ?? 'Enter a valid quantity'
-    }
-    if (!form.rate || parseRateNumber(form.rate) <= 0) {
-      errors.rate = 'Enter a valid rate'
-    }
+
+    const spotError = validateSpot(form.spot)
+    if (spotError) errors.spot = spotError
+
+    const qty = parseFloat(form.quantity)
+    const qtyError = validateOrderQuantity(qty)
+    if (qtyError) errors.quantity = qtyError
+
+    const ratePer10 = parseRateNumber(form.rate)
+    const rateError = validateOrderRatePer10Kg(ratePer10)
+    if (rateError) errors.rate = rateError
+
+    const tax = form.taxRate.trim() === '' ? 0 : parseFloat(form.taxRate)
+    const taxError = validateTaxRate(Number.isFinite(tax) ? tax : NaN)
+    if (taxError) errors.taxRate = taxError
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -1102,7 +1135,16 @@ function OrderFormFields({
 
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label={`${shortLabel} Ref. No.`} value={form.ref} readOnly={isEdit} onChange={e => form.set('ref', e.target.value)} />
+          <Input
+            label={`${shortLabel} Ref. No.`}
+            value={form.ref}
+            readOnly={isEdit}
+            error={fieldErrors.ref}
+            onChange={e => {
+              onFieldEdit?.('ref')
+              form.set('ref', e.target.value)
+            }}
+          />
           <DatePicker
             label="Date"
             value={form.date}
@@ -1112,7 +1154,16 @@ function OrderFormFields({
               form.set('date', next)
             }}
           />
-          <Input label="Broker Contract #" value={form.brokerContractRef} onChange={e => form.set('brokerContractRef', e.target.value)} placeholder="e.g. 713" />
+          <Input
+            label="Broker Contract #"
+            value={form.brokerContractRef}
+            error={fieldErrors.brokerContractRef}
+            onChange={e => {
+              onFieldEdit?.('brokerContractRef')
+              form.set('brokerContractRef', e.target.value)
+            }}
+            placeholder="e.g. 713"
+          />
         </div>
       </Card>
 
@@ -1189,15 +1240,24 @@ function OrderFormFields({
             options={stringsToOptions(spots)}
             value={form.spot}
             displayLabel={form.spot}
+            error={fieldErrors.spot}
             allowCreate
             createLabel="Add new spot"
             onCreate={async (name) => {
+              const spotError = validateSpot(name)
+              if (spotError) {
+                toast.error(spotError)
+                throw new Error(spotError)
+              }
               const spot = await store.addSpot(name)
               toast.success('Spot added', { description: spot })
               return { value: spot, label: spot }
             }}
             emptyMessage="No saved spots — add one below"
-            onValueChange={(_, label) => form.set('spot', label)}
+            onValueChange={(_, label) => {
+              onFieldEdit?.('spot')
+              form.set('spot', label)
+            }}
           />
         </div>
       </CaptionCard>
@@ -1233,7 +1293,15 @@ function OrderFormFields({
               }))
             }}
           />
-          <Input label="Tax Rate (%)" value={form.taxRate} onChange={e => form.set('taxRate', e.target.value)} />
+          <Input
+            label="Tax Rate (%)"
+            value={form.taxRate}
+            error={fieldErrors.taxRate}
+            onChange={e => {
+              onFieldEdit?.('taxRate')
+              form.set('taxRate', e.target.value)
+            }}
+          />
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-600 dark:text-gray-300">{shortLabel} Amount</label>
             <div className="h-9 flex items-center px-3 rounded-md border border-transparent bg-gray-100 dark:bg-gray-700/50 text-sm font-semibold tabular-nums">

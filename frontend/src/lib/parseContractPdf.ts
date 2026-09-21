@@ -287,12 +287,156 @@ function resolveBrokerName(
   return candidates[0] ?? ''
 }
 
+function emptyRate() {
+  return {
+    ratePerMt: 0,
+    ratePerBasis: 0,
+    ratePerBasisFormatted: '',
+    rateBasis: 'PER 10 KG',
+    rateIncludesGst: false,
+    rateDisplay: '',
+    brand: '',
+  }
+}
+
+const LABELED_FORM_KEYS = [
+  'CONTRACT NO',
+  'CONTRACT DATE',
+  'SELLER NAME',
+  'BUYER NAME',
+  'MATERIAL',
+  'QUANTITY',
+  'RATE',
+  'DELIVERY PERIOD',
+  'PAYMENT',
+  'REMARKS',
+] as const
+
+type LabeledFormKey = (typeof LABELED_FORM_KEYS)[number]
+
+function normalizeLabelLine(line: string): string {
+  return line.replace(/:$/, '').replace(/\.$/, '').trim().toUpperCase()
+}
+
+/**
+ * Amogh Paragi / similar exports: labels first, then values in the same order
+ * (CONTRACT NO.: … REMARKS.: then 2086, date, seller, …).
+ */
+function parseLabeledContractForm(normalized: string): ParsedContractPdf | null {
+  const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean)
+  const labelIndexes: Partial<Record<LabeledFormKey, number>> = {}
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = normalizeLabelLine(lines[i])
+    for (const key of LABELED_FORM_KEYS) {
+      if (line === key) {
+        labelIndexes[key] = i
+      }
+    }
+  }
+
+  // Need the core identity labels — without them this isn't the labeled form.
+  if (
+    labelIndexes['CONTRACT NO'] == null ||
+    labelIndexes['SELLER NAME'] == null ||
+    labelIndexes['BUYER NAME'] == null
+  ) {
+    return null
+  }
+
+  const lastLabelIdx = Math.max(
+    ...LABELED_FORM_KEYS.map(k => labelIndexes[k]).filter((n): n is number => n != null),
+  )
+  const otherTermsIdx = lines.findIndex((l, i) => i > lastLabelIdx && /^Other Terms:/i.test(l))
+  const valueEnd = otherTermsIdx >= 0 ? otherTermsIdx : lines.length
+  const valueLines = lines.slice(lastLabelIdx + 1, valueEnd)
+
+  const orderedKeys = LABELED_FORM_KEYS.filter(k => labelIndexes[k] != null)
+  const byLabel: Partial<Record<LabeledFormKey, string>> = {}
+  orderedKeys.forEach((key, i) => {
+    byLabel[key] = valueLines[i]?.trim() ?? ''
+  })
+
+  const contractNo = (byLabel['CONTRACT NO'] || '').replace(/\D/g, '') || (
+    normalized.match(/CONTRACT NO\.:?\s*\n+(\d+)/i)?.[1] ?? ''
+  )
+  const dateRaw = byLabel['CONTRACT DATE'] || ''
+  const contractDate = dateRaw ? parseContractDate(dateRaw) : ''
+  const contractYear = contractDate ? parseInt(contractDate.slice(0, 4), 10) : new Date().getFullYear()
+
+  const sellerName = (byLabel['SELLER NAME'] || '').replace(/\s*,\s*/g, ', ')
+  const buyerName = (byLabel['BUYER NAME'] || '').replace(/\s*,\s*/g, ', ')
+  const itemName = (byLabel['MATERIAL'] || '').replace(/^REF\.\s*/i, '').trim()
+
+  const quantityLine = byLabel['QUANTITY'] || ''
+  const quantityMatch = quantityLine.match(/([\d,]+(?:\.\d+)?)\s*TON/i)
+  const quantityMt = quantityMatch ? parseFloat(quantityMatch[1].replace(/,/g, '')) : 0
+
+  const rateLine = byLabel['RATE'] || ''
+  const rate = rateLine ? parseRate(rateLine) : emptyRate()
+
+  const deliveryRaw = byLabel['DELIVERY PERIOD'] || ''
+  const readyDelivery = isReadyDeliveryLine(deliveryRaw)
+  const deliveryType: DeliveryType = readyDelivery ? 'ready' : 'period'
+  let deliveryPeriodStart = ''
+  let deliveryPeriodEnd = ''
+  const deliveryMatch = deliveryRaw.match(/(\d{1,2}-[A-Za-z]{3})\s*TO\s*(\d{1,2}-[A-Za-z]{3})/i)
+  if (deliveryMatch) {
+    deliveryPeriodStart = parseDeliveryDate(deliveryMatch[1], contractYear)
+    deliveryPeriodEnd = parseDeliveryDate(deliveryMatch[2], contractYear)
+  } else if (deliveryType === 'ready') {
+    const readyDate = contractDate || new Date().toISOString().slice(0, 10)
+    deliveryPeriodStart = readyDate
+    deliveryPeriodEnd = readyDate
+  }
+
+  const paymentTerms = byLabel['PAYMENT'] || ''
+  const remarks = byLabel['REMARKS'] || ''
+
+  const gstSellerOnly = normalized.match(/GST#\s*Seller:\s*(\S+)/i)
+  const gstBoth = normalized.match(/GST#\s*Seller:\s*(\S+)\s*,?\s*Buyer:\s*(\S+)/i)
+
+  if (!contractNo && !sellerName && !buyerName) return null
+
+  return {
+    brokerContractRef: contractNo,
+    contractDate,
+    sellerName,
+    sellerConfirmedBy: '',
+    buyerName,
+    buyerConfirmedBy: '',
+    itemName,
+    quantityMt,
+    ratePerMt: rate.ratePerMt,
+    ratePerBasis: rate.ratePerBasis,
+    ratePerBasisFormatted: rate.ratePerBasisFormatted,
+    rateBasis: rate.rateBasis,
+    rateIncludesGst: rate.rateIncludesGst,
+    rateDisplay: rate.rateDisplay,
+    brand: rate.brand,
+    deliveryType,
+    deliveryPeriodStart,
+    deliveryPeriodEnd,
+    paymentTerms,
+    remarks,
+    brokeragePerTon: 0,
+    sellerGst: (gstBoth?.[1] || gstSellerOnly?.[1] || '').replace(/,$/, ''),
+    buyerGst: (gstBoth?.[2] || '').replace(/,$/, ''),
+    brokerName: '',
+  }
+}
+
 export function parseContractText(
   text: string,
   _headerLines: string[] = [],
   brokerName = '',
 ): ParsedContractPdf {
   const normalized = normalizeText(text)
+
+  const labeled = parseLabeledContractForm(normalized)
+  if (labeled) {
+    return { ...labeled, brokerName: brokerName || labeled.brokerName }
+  }
 
   const valuesBlock = normalized.match(/BROKERAGE:\s*\n+([\s\S]*?)\n\s*Other Terms:/i)?.[1] ?? ''
   const rawLines = valuesBlock.split('\n').map(l => l.trim()).filter(Boolean)
@@ -303,7 +447,9 @@ export function parseContractText(
   const deliveryLine = lines.find(l => /\d{1,2}-[A-Za-z]{3}\s*TO\s*\d{1,2}-[A-Za-z]{3}/i.test(l))
   const readyDeliveryLine = lines.find(isReadyDeliveryLine)
   const paymentLine = lines.find(l => /^(ADVANCE|AGAINST|CREDIT)/i.test(l))
-  const remarksLine = lines.find(l => l === 'FIXED DUTY' || (l.toUpperCase().includes('DUTY') && !l.match(/PER\s/i)))
+  const remarksLine = lines.find(l =>
+    /^FIX(?:ED)?\s+DUTY$/i.test(l) || (l.toUpperCase().includes('DUTY') && !l.match(/PER\s/i)),
+  )
   const brokerageLine = lines.find(l => /RS\.?\s*PER\s*TON/i.test(l))
 
   const contractNo = lines.find(l => /^\d+$/.test(l)) ?? normalized.match(/CONTRACT NO\.:\s*(\d+)/i)?.[1] ?? ''
@@ -334,15 +480,7 @@ export function parseContractText(
   const quantityMatch = quantityLine?.match(/([\d,]+(?:\.\d+)?)\s*TON/i)
   const quantityMt = quantityMatch ? parseFloat(quantityMatch[1].replace(/,/g, '')) : 0
 
-  const rate = rateLine ? parseRate(rateLine) : {
-    ratePerMt: 0,
-    ratePerBasis: 0,
-    ratePerBasisFormatted: '',
-    rateBasis: 'PER 10 KG',
-    rateIncludesGst: false,
-    rateDisplay: '',
-    brand: '',
-  }
+  const rate = rateLine ? parseRate(rateLine) : emptyRate()
 
   const deliveryType: DeliveryType = readyDeliveryLine ? 'ready' : 'period'
   let deliveryPeriodStart = ''
@@ -361,6 +499,7 @@ export function parseContractText(
   const brokeragePerTon = brokerageMatch ? parseFloat(brokerageMatch[1].replace(/,/g, '')) : 0
 
   const gstMatch = normalized.match(/GST#\s*Seller:\s*(\S+)\s*,?\s*Buyer:\s*(\S+)/i)
+  const gstSellerOnly = normalized.match(/GST#\s*Seller:\s*(\S+)/i)
 
   return {
     brokerContractRef: contractNo,
@@ -384,8 +523,8 @@ export function parseContractText(
     paymentTerms: paymentLine ?? '',
     remarks: remarksLine ?? '',
     brokeragePerTon,
-    sellerGst: gstMatch?.[1]?.replace(/,$/, '') ?? '',
-    buyerGst: gstMatch?.[2]?.replace(/,$/, '') ?? '',
+    sellerGst: (gstMatch?.[1] || gstSellerOnly?.[1] || '').replace(/,$/, ''),
+    buyerGst: (gstMatch?.[2] || '').replace(/,$/, ''),
     brokerName,
   }
 }
@@ -430,7 +569,9 @@ export async function parseContractPdf(file: File): Promise<ParsedContractPdf> {
   const parsed = parseContractText(text, headerLines, brokerName)
 
   if (!parsed.brokerContractRef && !parsed.sellerName && !parsed.buyerName) {
-    throw new Error('Could not read contract fields from this PDF. Use a broker contract confirmation export.')
+    throw new Error(
+      "We couldn't find contract details in this PDF. Please upload the broker's contract confirmation instead.",
+    )
   }
 
   return parsed

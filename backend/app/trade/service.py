@@ -25,6 +25,8 @@ from .helpers import (
     round_qty_mt,
     uid,
     upsert_string,
+    validate_order_input_fields,
+    validate_spot_name,
 )
 from .lift_logic import (
     allocation_actual_key,
@@ -370,6 +372,7 @@ class TradeService:
         key = "po" if side == "purchase" else "so"
         counter_next = data["counters"][key] + 1
         ref = (input_data.get("ref") or "").strip() or (f"PO-{counter_next}" if side == "purchase" else f"SO-{counter_next}")
+        validate_order_input_fields({**input_data, "ref": ref}, check_ref=True)
 
         po_ref = (input_data.get("poRef") or "").strip() if side == "sale" else None
         if side == "sale" and po_ref:
@@ -560,6 +563,10 @@ class TradeService:
             raise ValueError("Order not found")
         if existing["side"] != input_data["side"]:
             raise ValueError("Cannot change order type")
+        validate_order_input_fields(
+            {**input_data, "ref": existing["ref"]},
+            check_ref=False,
+        )
         if input_data["orderQty"] < existing.get("liftedQty", 0):
             raise ValueError(f"Quantity cannot be less than lifted qty ({format_qty(existing['liftedQty'])})")
         if existing.get("side") == "purchase":
@@ -1706,9 +1713,7 @@ class TradeService:
 
     def add_spot(self, name: str) -> tuple[str, dict]:
         data = self._read()
-        trimmed = (name or "").strip()
-        if not trimmed:
-            raise ValueError("Spot location is required")
+        trimmed = validate_spot_name(name)
         if any(s.lower() == trimmed.lower() for s in data.get("spots") or []):
             raise ValueError("This spot already exists")
         next_data = {**data, "spots": upsert_string(data.get("spots") or [], trimmed)}

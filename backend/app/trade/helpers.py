@@ -260,6 +260,79 @@ def format_contract_rate(rate: float) -> str:
     return f"₹{formatted}/10 KG"
 
 
+MAX_RATE_PER_10_KG = 100_000
+MAX_ORDER_QTY_MT = 10_000
+ORDER_REF_RE = re.compile(r"^(PO|SO)-[A-Za-z0-9]{1,16}$")
+BROKER_CONTRACT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ./\-]{0,39}$")
+SPOT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.\-]{0,59}$")
+
+
+def validate_order_input_fields(input_data: dict, *, check_ref: bool = True) -> None:
+    """Reject smoke-test junk on create/update. Raises ValueError with a short message."""
+    side = input_data.get("side") or ""
+    if check_ref:
+        ref = (input_data.get("ref") or "").strip()
+        expected = "PO" if side == "purchase" else "SO"
+        if not ref:
+            raise ValueError(f"Enter a {expected} reference")
+        if not ORDER_REF_RE.match(ref) or not ref.upper().startswith(f"{expected}-"):
+            raise ValueError(
+                f"Use a short code like {expected}-12 (letters and numbers only, no spaces).",
+            )
+
+    broker = (input_data.get("brokerContractRef") or "").strip()
+    if broker and not BROKER_CONTRACT_RE.match(broker):
+        raise ValueError("Broker contract # can only use letters, numbers, spaces, and . / -")
+
+    spot = (input_data.get("spot") or "").strip()
+    if spot and not SPOT_RE.match(spot):
+        raise ValueError("Spot can only use letters, numbers, spaces, and , . -")
+
+    try:
+        qty = float(input_data.get("orderQty") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid quantity") from exc
+    if not (qty > 0):
+        raise ValueError("Enter a valid quantity")
+    if qty > MAX_ORDER_QTY_MT:
+        raise ValueError(f"Quantity can’t be more than {MAX_ORDER_QTY_MT:,} MT")
+
+    # Stored `rate` is ₹/MT; form edits ₹/10 KG (rate / 100). Prefer ratePerBasis when present.
+    try:
+        rate_mt = float(input_data.get("rate") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid rate") from exc
+    rate_per_10: float
+    raw_basis = input_data.get("ratePerBasis")
+    if raw_basis is not None and str(raw_basis).strip() != "":
+        try:
+            rate_per_10 = float(raw_basis)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Enter a valid rate") from exc
+    else:
+        rate_per_10 = rate_mt / 100 if rate_mt else 0.0
+    if not (rate_per_10 > 0):
+        raise ValueError("Enter a valid rate")
+    if rate_per_10 > MAX_RATE_PER_10_KG:
+        raise ValueError("That rate looks too high — check the amount and try again.")
+
+    try:
+        tax = float(input_data.get("taxRate") if input_data.get("taxRate") is not None else 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid tax rate") from exc
+    if tax < 0 or tax > 100:
+        raise ValueError("Tax rate must be between 0 and 100")
+
+
+def validate_spot_name(name: str) -> str:
+    trimmed = (name or "").strip()
+    if not trimmed:
+        raise ValueError("Spot location is required")
+    if not SPOT_RE.match(trimmed):
+        raise ValueError("Spot can only use letters, numbers, spaces, and , . -")
+    return trimmed
+
+
 def deletion_date_from_now(from_dt: datetime | None = None) -> str:
     d = from_dt or datetime.utcnow()
     from datetime import timedelta
