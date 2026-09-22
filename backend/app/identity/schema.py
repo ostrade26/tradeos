@@ -525,6 +525,9 @@ def init_identity_schema() -> None:
         from .backup_reminder_schema import init_backup_reminder_schema
 
         init_backup_reminder_schema()
+        from .password_reset_schema import init_password_reset_schema
+
+        init_password_reset_schema()
         return
 
     with _sqlite_connect() as conn:

@@ -133,13 +133,18 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const detail = rawDetail !== undefined
       ? (formatApiDetail(rawDetail) || res.statusText || 'Request failed')
       : res.statusText || 'Request failed'
-    if (res.status === 401 && !path.startsWith('/auth/login')) {
+    if (res.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/forgot-password') && !path.startsWith('/auth/reset-password')) {
       const code = authDetailCode(rawDetail)
       if (code === 'session_replaced') {
         setLoginNotice('session_replaced')
       }
       clearAuthSession()
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/login') &&
+        !window.location.pathname.startsWith('/forgot-password') &&
+        !window.location.pathname.startsWith('/reset-password')
+      ) {
         window.location.assign('/login')
       }
     }

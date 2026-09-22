@@ -699,6 +699,18 @@ def delete_session(token: str) -> None:
             conn.commit()
 
 
+def delete_sessions_for_user(user_id: int) -> None:
+    """Revoke every active session for a user (e.g. after password reset)."""
+    if uses_postgres():
+        with _pg_connect() as conn:
+            conn.execute("DELETE FROM auth_sessions WHERE user_id = %s", (user_id,))
+            conn.commit()
+    else:
+        with _sqlite_connect() as conn:
+            conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
+            conn.commit()
+
+
 def get_session(token: str) -> Session | None:
     import time
 

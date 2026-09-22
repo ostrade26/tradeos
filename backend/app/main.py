@@ -21,6 +21,15 @@ from .identity.platform_api import router as platform_router
 from .trade.service import TradeService
 
 logger = logging.getLogger(__name__)
+
+# Local: load backend/.env without overriding already-exported Railway/shell vars.
+try:
+    from .identity.email_send import load_dotenv_file
+
+    load_dotenv_file()
+except Exception:
+    pass
+
 OPENAPI_TAGS = [
     {"name": "auth", "description": "Login, logout, and session."},
     {"name": "health", "description": "Service health and discovery."},
@@ -151,6 +160,15 @@ class PreferencesPatchBody(BaseModel):
 
 class ChangePasswordBody(BaseModel):
     current_password: str
+    new_password: str
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
     new_password: str
 
 
@@ -335,6 +353,7 @@ def auth_update_profile(body: ProfilePatchBody, request: Request) -> dict:
         phone=body.phone,
         location=body.location,
         username=body.username,
+        email=body.email,
     )
     append_audit_log(
         organisation_id=session.user.organisation_id,
@@ -384,6 +403,20 @@ def auth_change_password(body: ChangePasswordBody, request: Request) -> dict:
         entity_id=str(session.user.id),
     )
     return {"ok": True}
+
+
+@app.post("/api/v1/auth/forgot-password", tags=["auth"], summary="Request a password reset email")
+def auth_forgot_password(body: ForgotPasswordBody) -> dict:
+    from .identity.password_reset import request_password_reset
+
+    return request_password_reset(body.email)
+
+
+@app.post("/api/v1/auth/reset-password", tags=["auth"], summary="Set a new password with a reset token")
+def auth_reset_password(body: ResetPasswordBody) -> dict:
+    from .identity.password_reset import reset_password_with_token
+
+    return reset_password_with_token(body.token, body.new_password)
 
 
 @app.get("/api/v1/state", tags=["state"], summary="Get full trade state")

@@ -1105,6 +1105,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           ? `Test account “${detail.organisation.name}” created`
           : `Organisation “${detail.organisation.name}” created`,
       )
+      if (detail.welcome_email_sent) {
+        toast.success(`Welcome email sent to ${detail.primary_admin?.email || form.admin_email.trim()}`)
+      } else if (detail.primary_admin?.email && detail.primary_admin?.temporary_password) {
+        toast.error('Organisation created, but the welcome email could not be sent. Copy the password from the modal.')
+      }
       if (form.is_test) setOrgListTab('test')
       if (detail.primary_admin?.temporary_password) {
         const pa = detail.primary_admin
@@ -1178,6 +1183,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     pincode: string
     status: string
     is_test: boolean
+    primary_contact_name: string
+    primary_contact_email: string
+    primary_contact_mobile: string
   }) => {
     if (!orgDetail) return
     setSavingOrg(true)
@@ -1756,6 +1764,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         open={editOrgOpen}
         onClose={() => setEditOrgOpen(false)}
         organisation={orgDetail?.organisation ?? null}
+        primaryAdmin={orgDetail?.primary_admin_user ?? null}
         loading={savingOrg}
         onSubmit={patch => void submitEditOrg(patch)}
       />

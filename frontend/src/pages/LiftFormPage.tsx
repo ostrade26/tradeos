@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
-import { Save, ArrowLeft, Scale } from 'lucide-react'
+import { Scale } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
@@ -39,7 +39,7 @@ import { crossPoAllocationSummary, poolPOsForSo } from '../lib/sellerLiftPool'
 import { CrossPoNotice } from '../components/lifts/CrossPoNotice'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { StickyFormActions } from '../components/ui/StickyFormActions'
-import { FormErrorBanner, FieldValidationBanner } from '../components/ui/FieldError'
+import { FieldValidationBanner, FormErrorBanner } from '../components/ui/FieldError'
 import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
 import type { Lift, TradeOrder } from '../data/mockData'
@@ -120,13 +120,13 @@ function LiftFormSidebar({
   tankerCount,
   balanceApplied,
   isSelfLift,
+  isDeliveredActual = false,
   saveError,
   onSave,
   onCancel,
   isEdit,
   saveLoading,
   saveDisabled,
-  isDeliveredActual = false,
 }: {
   lastLift?: Lift
   isStockMode: boolean
@@ -135,13 +135,13 @@ function LiftFormSidebar({
   tankerCount: number
   balanceApplied: number
   isSelfLift: boolean
+  isDeliveredActual?: boolean
   saveError: string
   onSave: () => void
   onCancel: () => void
   isEdit: boolean
   saveLoading: boolean
   saveDisabled: boolean
-  isDeliveredActual?: boolean
 }) {
   const isSaving = saveLoading || saveDisabled
   const plannedQty = totalPlanned > 0 ? totalPlanned : allocTotal
@@ -150,7 +150,7 @@ function LiftFormSidebar({
     : `Planned on tanker${tankerCount === 1 ? '' : 's'}`
 
   return (
-    <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:z-10 w-full">
+    <div className="space-y-4 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
       {lastLift && (
         <Card>
           <h3 className="text-sm font-semibold text-heading mb-3">Last entry in register</h3>
@@ -181,15 +181,16 @@ function LiftFormSidebar({
         </div>
       </Card>
 
-      {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
-
-      <div className="flex flex-col gap-2 hidden sm:flex">
-        <Button className="w-full" onClick={onSave} disabled={saveDisabled} loading={saveLoading}>
-          <Save className="h-4 w-4" /> {isEdit ? 'Update Lift' : 'Save Lift'}
-        </Button>
-        <Button variant="outline" className="w-full" onClick={onCancel} disabled={isSaving}>
-          <ArrowLeft className="h-4 w-4" /> Cancel
-        </Button>
+      <div className="hidden sm:flex flex-col gap-2 w-full">
+        {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
+        <div className="flex gap-2 w-full">
+          <Button variant="outline" className="flex-1" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button className="flex-[1.4]" onClick={onSave} disabled={saveDisabled} loading={saveLoading}>
+            {isEdit ? 'Update Lift' : 'Save Lift'}
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -772,13 +773,13 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
           tankerCount={tankers.length}
           balanceApplied={balanceApplied}
           isSelfLift={isSelfLift === 'true'}
+          isDeliveredActual={isEdit && editingLift?.status === 'delivered'}
           saveError={saveError}
           onSave={handleSave}
           onCancel={handleCancel}
           isEdit={isEdit}
           saveLoading={saving}
           saveDisabled={saving || !canSave}
-          isDeliveredActual={isEdit && editingLift?.status === 'delivered'}
         />
       </div>
 

@@ -112,13 +112,12 @@ export function LoginPage() {
               onChange={e => setKeepSignedIn(e.target.checked)}
               tight
             />
-            <button
-              type="button"
-              onClick={() => setHelpOpen(true)}
-              className="text-sm font-medium text-accent hover:text-accent-hover cursor-pointer attex-focus shrink-0"
+            <Link
+              to="/forgot-password"
+              className="text-sm font-medium text-accent hover:text-accent-hover shrink-0"
             >
-              Need help?
-            </button>
+              Forgot password?
+            </Link>
           </div>
 
           {error && (

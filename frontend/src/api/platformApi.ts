@@ -213,6 +213,7 @@ export interface OrganisationDetailResponse {
     login_id?: string
     temporary_password?: string | null
   }
+  welcome_email_sent?: boolean
   licence?: OrganisationLicence | null
   amc?: OrganisationAmc | null
   billing?: {

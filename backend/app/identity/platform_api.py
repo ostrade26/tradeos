@@ -45,6 +45,27 @@ from .seat_request_repository import (
 router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
 
 
+def _attach_org_admin_welcome_email(result: dict[str, Any]) -> dict[str, Any]:
+    """Send welcome + temp password email after org create; set welcome_email_sent."""
+    from .email_welcome import send_org_admin_welcome_email
+
+    pa = result.get("primary_admin") or {}
+    email = (pa.get("email") or "").strip()
+    password = (pa.get("temporary_password") or "").strip()
+    org_name = ((result.get("organisation") or {}).get("name") or "").strip()
+    if not email or not password:
+        result["welcome_email_sent"] = False
+        return result
+    result["welcome_email_sent"] = send_org_admin_welcome_email(
+        to=email,
+        name=str(pa.get("name") or ""),
+        organisation_name=org_name,
+        login_id=str(pa.get("login_id") or pa.get("username") or ""),
+        temporary_password=password,
+    )
+    return result
+
+
 class PrimaryAdminBody(BaseModel):
     name: str
     username: str
@@ -539,7 +560,13 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
 
     if body.primary_admin:
         body.primary_admin.username = require_login_username(body.primary_admin.username)
-        body.primary_admin.email = optional_contact_email(body.primary_admin.email)
+        admin_email = (body.primary_admin.email or "").strip()
+        if not admin_email:
+            raise HTTPException(
+                status_code=400,
+                detail="Primary admin email is required so we can send their sign-in details.",
+            )
+        body.primary_admin.email = optional_contact_email(admin_email)
 
     if uses_postgres():
         with _pg_connect() as conn:
@@ -580,7 +607,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
                         "primary_admin_user_id": result["primary_admin"]["user_id"],
                     },
                 )
-                return result
+                return _attach_org_admin_welcome_email(result)
 
             begin_transaction(conn)
             try:
@@ -687,7 +714,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
                     "primary_admin_user_id": result["primary_admin"]["user_id"],
                 },
             )
-            return result
+            return _attach_org_admin_welcome_email(result)
 
         begin_transaction(conn)
         try:
@@ -765,6 +792,10 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         data["status"] = "inactive"
     if "is_test" in data:
         data["is_test"] = 1 if data["is_test"] else 0
+    if "primary_contact_email" in data:
+        data["primary_contact_email"] = optional_contact_email(
+            str(data.get("primary_contact_email") or "")
+        )
     old_status = None
     for key, val in data.items():
         updates.append(f"{key} = ?" if not uses_postgres() else f"{key} = %s")
@@ -774,6 +805,48 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
     values.append(now)
     values.append(org_id)
     sql = f"UPDATE organisations SET {', '.join(updates)} WHERE id = {'?' if not uses_postgres() else '%s'}"
+
+    def _sync_primary_admin_contact(conn) -> None:
+        """Keep primary admin user in sync with org contact fields (email for reset/welcome)."""
+        from .billing_repository import login_identity_in_use
+        from .org_members_repository import find_primary_admin_user
+
+        contact_keys = {"primary_contact_name", "primary_contact_email", "primary_contact_mobile"}
+        if not (contact_keys & set(data.keys())):
+            return
+        admin = find_primary_admin_user(conn, org_id)
+        if not admin:
+            return
+        user_id = int(admin["user_id"])
+        name = data.get("primary_contact_name")
+        email = data.get("primary_contact_email")
+        mobile = data.get("primary_contact_mobile")
+        sets: list[str] = []
+        params: list[Any] = []
+        if name is not None:
+            sets.append("name = %s" if uses_postgres() else "name = ?")
+            params.append(str(name).strip())
+        if email is not None:
+            email_norm = optional_contact_email(str(email))
+            if email_norm and login_identity_in_use(
+                conn, "", email_norm, exclude_user_id=user_id
+            ):
+                raise HTTPException(status_code=400, detail="This email is already in use")
+            sets.append("email = %s" if uses_postgres() else "email = ?")
+            params.append(email_norm)
+        if mobile is not None:
+            sets.append("phone = %s" if uses_postgres() else "phone = ?")
+            params.append(str(mobile).strip())
+        if not sets:
+            return
+        sets.append("updated_at = %s" if uses_postgres() else "updated_at = ?")
+        params.append(now)
+        params.append(user_id)
+        conn.execute(
+            f"UPDATE users SET {', '.join(sets)} WHERE id = {'%s' if uses_postgres() else '?'}",
+            tuple(params),
+        )
+
     if uses_postgres():
         with _pg_connect() as conn:
             old = conn.execute("SELECT * FROM organisations WHERE id = %s", (org_id,)).fetchone()
@@ -781,6 +854,7 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
                 raise HTTPException(status_code=404, detail="Organisation not found")
             old_status = str(dict(old).get("status") or "")
             conn.execute(sql, tuple(values))
+            _sync_primary_admin_contact(conn)
             conn.commit()
             detail = organisation_detail(conn, org_id)
             action = "organisation.updated"
@@ -808,6 +882,7 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
             raise HTTPException(status_code=404, detail="Organisation not found")
         old_status = str(dict(old).get("status") or "")
         conn.execute(sql, tuple(values))
+        _sync_primary_admin_contact(conn)
         conn.commit()
         detail = organisation_detail(conn, org_id)
         action = "organisation.updated"

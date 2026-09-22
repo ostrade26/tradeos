@@ -29,6 +29,29 @@ def normalize_login_email(email: str) -> str:
     return email.strip().lower()
 
 
+def _duplicate_email_exemptions() -> frozenset[str]:
+    """Emails allowed on more than one user (testing only). Comma-separated env."""
+    import os
+
+    raw = (
+        os.environ.get("TRADEAL_DUPLICATE_EMAIL_ALLOWLIST")
+        or os.environ.get("TRADEOS_DUPLICATE_EMAIL_ALLOWLIST")
+        or ""
+    ).strip()
+    if not raw:
+        return frozenset()
+    return frozenset(
+        normalize_login_email(part)
+        for part in raw.split(",")
+        if part.strip()
+    )
+
+
+def email_exempt_from_uniqueness(email: str) -> bool:
+    key = normalize_login_email(email)
+    return bool(key) and key in _duplicate_email_exemptions()
+
+
 def login_identity_in_use(
     conn,
     username: str,
@@ -36,47 +59,38 @@ def login_identity_in_use(
     *,
     exclude_user_id: int | None = None,
 ) -> bool:
-    """True if username or a non-empty email is already taken as a login identity."""
-    keys: list[str] = []
+    """True if username or a non-empty email is already taken as a login identity.
+
+    Emails listed in TRADEAL_DUPLICATE_EMAIL_ALLOWLIST skip the email uniqueness
+    check (username must still be unique). Intended for local/Resend testing.
+    """
     user_key = normalize_login_email(username)
-    if user_key:
-        keys.append(user_key)
     email_key = normalize_login_email(email)
-    if email_key and email_key not in keys:
-        keys.append(email_key)
-    if not keys:
+    check_email = bool(email_key) and not email_exempt_from_uniqueness(email_key)
+
+    if not user_key and not check_email:
         return False
+
     extra = ""
-    params: list[Any] = list(keys + keys)
+    params: list[Any] = []
+    clauses: list[str] = []
+    if user_key:
+        clauses.append("lower(username) = %s" if uses_postgres() else "lower(username) = ?")
+        params.append(user_key)
+    if check_email:
+        clauses.append(
+            "(coalesce(email, '') <> '' AND lower(email) = %s)"
+            if uses_postgres()
+            else "(coalesce(email, '') <> '' AND lower(email) = ?)"
+        )
+        params.append(email_key)
     if exclude_user_id is not None:
         extra = " AND id <> %s" if uses_postgres() else " AND id <> ?"
         params.append(exclude_user_id)
-    if uses_postgres():
-        placeholders = ", ".join(["%s"] * len(keys))
-        row = conn.execute(
-            f"""
-            SELECT 1 FROM users
-            WHERE (
-                lower(username) IN ({placeholders})
-                OR (coalesce(email, '') <> '' AND lower(email) IN ({placeholders}))
-            ){extra}
-            LIMIT 1
-            """,
-            tuple(params),
-        ).fetchone()
-    else:
-        placeholders = ", ".join(["?"] * len(keys))
-        row = conn.execute(
-            f"""
-            SELECT 1 FROM users
-            WHERE (
-                lower(username) IN ({placeholders})
-                OR (coalesce(email, '') <> '' AND lower(email) IN ({placeholders}))
-            ){extra}
-            LIMIT 1
-            """,
-            tuple(params),
-        ).fetchone()
+
+    where = " OR ".join(clauses)
+    q = f"SELECT 1 FROM users WHERE ({where}){extra} LIMIT 1"
+    row = conn.execute(q, tuple(params)).fetchone()
     return row is not None
 
 

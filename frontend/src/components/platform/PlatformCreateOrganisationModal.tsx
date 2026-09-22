@@ -5,7 +5,7 @@ import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
 import { OrganisationLocationFields } from './OrganisationLocationFields'
-import { contactEmailError } from '../../lib/email'
+import { loginEmailError } from '../../lib/email'
 import { loginUsernameError } from '../../lib/username'
 import { DEFAULT_ORGANISATION_COUNTRY } from '../../lib/organisationLocations'
 import type { BillingCycle, SubscriptionPlan } from '../../api/platformApi'
@@ -66,7 +66,7 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
     plans.find(p => p.slug === 'tradeal-standard') ??
     null
   const usernameError = usernameTouched ? loginUsernameError(form.admin_username) : null
-  const emailError = contactEmailError(form.admin_email)
+  const emailError = loginEmailError(form.admin_email)
   const accountValid = Boolean(
     form.name.trim() &&
     form.business_address.trim() &&
@@ -105,7 +105,7 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
       open={open}
       onClose={onClose}
       title="Add organisation"
-      subtitle={step === 1 ? 'Customer account and plan.' : 'Primary admin and sign-in username.'}
+      subtitle={step === 1 ? 'Customer account and plan.' : 'Primary admin — email and login details.'}
       size="lg"
       footerClassName="w-full items-center justify-between gap-3"
       footer={
@@ -179,8 +179,20 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
           <div className="sm:col-span-2">
             <p className="text-sm font-medium text-heading">Primary Organisation Admin</p>
             <p className="text-xs text-muted mt-1">
-              Uses the first included seat · a one-time temporary password is shown after create (copy it before closing)
+              Uses the first included seat · we email their login ID and temporary password to the
+              address below, and also show it once after create
             </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Input
+              label="Email *"
+              type="email"
+              autoComplete="off"
+              placeholder="admin@company.com"
+              value={form.admin_email}
+              error={emailError ?? undefined}
+              onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
+            />
           </div>
           <Input label="Admin name *" value={form.admin_name} onChange={e => setForm(f => ({ ...f, admin_name: e.target.value }))} />
           <Input
@@ -193,15 +205,11 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
             onBlur={() => setUsernameTouched(true)}
           />
           <Input
-            label="Email"
-            type="email"
-            autoComplete="off"
-            placeholder="Optional contact"
-            value={form.admin_email}
-            error={emailError ?? undefined}
-            onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
+            label="Mobile"
+            className="sm:col-span-2"
+            value={form.admin_mobile}
+            onChange={e => setForm(f => ({ ...f, admin_mobile: e.target.value }))}
           />
-          <Input label="Mobile" value={form.admin_mobile} onChange={e => setForm(f => ({ ...f, admin_mobile: e.target.value }))} />
         </div>
       )}
     </Modal>

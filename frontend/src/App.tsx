@@ -21,6 +21,8 @@ import {
   PlatformAdminSettingsSectionPage,
 } from './pages/PlatformAdminSettingsPage'
 import { LoginPage } from './pages/LoginPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { APP_HOME, appPath, isAppPath } from './lib/appShellMode'
 import { MarketingPage } from './pages/MarketingPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -106,6 +108,8 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <MarketingPage /> },
       { path: '/login', element: <LoginPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
       {
         element: <RequireAuth />,
         children: [

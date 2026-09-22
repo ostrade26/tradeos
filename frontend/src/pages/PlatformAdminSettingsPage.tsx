@@ -26,6 +26,7 @@ import {
 import { platformApi, type PlatformAdminAccount } from '../api/platformApi'
 import { ApiError } from '../api/client'
 import { loginUsernameError } from '../lib/username'
+import { contactEmailError } from '../lib/email'
 import {
   PLATFORM_SETTINGS_SECTIONS,
   isPlatformSettingsSectionId,
@@ -259,6 +260,7 @@ function AccountSection() {
   }
 
   const usernameError = loginUsernameError(form.username, { allowCurrent: session?.username })
+  const emailError = contactEmailError(form.email)
   const dirty = JSON.stringify(form) !== JSON.stringify(profile)
 
   const handleSave = async () => {
@@ -266,11 +268,19 @@ function AccountSection() {
       toast.error(usernameError)
       return
     }
+    if (emailError) {
+      toast.error(emailError)
+      return
+    }
     try {
-      await updateProfile({ ...form, username: form.username.trim().toLowerCase() })
+      await updateProfile({
+        ...form,
+        username: form.username.trim().toLowerCase(),
+        email: form.email.trim().toLowerCase(),
+      })
       toast.success('Profile updated')
-    } catch {
-      toast.error('Could not save profile')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save profile')
     }
   }
 
@@ -298,13 +308,20 @@ function AccountSection() {
             autoComplete="off"
           />
           <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
-          <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={set('email')}
+            error={emailError ?? undefined}
+            placeholder=""
+          />
           <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
           <Input label="Role" value={roleLabel} readOnly />
         </div>
 
         <div className="flex items-center gap-2 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError)}>
+          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError) || Boolean(emailError)}>
             Save changes
           </Button>
           <Button variant="outline" onClick={() => setForm(profile)} disabled={!dirty}>

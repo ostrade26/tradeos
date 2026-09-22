@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type Dispatch, type SetStateAction, type ReactNode } from 'react'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Package, FileText, FileUp } from 'lucide-react'
+import { Package, FileText, FileUp } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { serializeOrderFormValues } from '../lib/unsavedChanges'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
@@ -16,7 +16,7 @@ import { SearchableSelect, companyToSelectOption, stringsToOptions, type Searcha
 import { Card } from '../components/ui/Card'
 import { ShareWhatsAppButton } from '../components/ui/ShareWhatsAppButton'
 import { StickyFormActions } from '../components/ui/StickyFormActions'
-import { FormErrorBanner, FieldValidationBanner } from '../components/ui/FieldError'
+import { FieldValidationBanner, FormErrorBanner } from '../components/ui/FieldError'
 import { useToast } from '../hooks/useToast'
 import { OrderCreatedModal } from '../components/orders/OrderCreatedModal'
 import { ContractPdfUpload } from '../components/orders/ContractPdfUpload'
@@ -49,7 +49,7 @@ import {
 import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
 import { uniqueSorted } from '../lib/orderFilters'
-import { collapseRepeatedPartyLocation, formatSellerBalanceDetail } from '../lib/liftBalance'
+import { collapseRepeatedPartyLocation } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
 import { shareOrderOnWhatsApp } from '../lib/whatsappShare'
 import { partyMatches } from '../lib/assistant/partyMatch'
@@ -655,7 +655,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
 
   return (
     <>
-    <div className="w-full mx-auto max-w-3xl lg:max-w-5xl pb-24 sm:pb-0">
+    <div className="w-full pb-24 sm:pb-0">
       <PageHeader
         title={isEdit ? `Edit ${label}` : `${label} Entry`}
         subtitle={isEdit ? `Update ${formatOrderRef(form.ref || editRef || '', side)}` : <>Create a new purchase order<span className="hidden md:inline"> · ⌘S to save</span></>}
@@ -667,24 +667,34 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       />
 
       {editingOrder?.deleteScheduledAt && (
-        <div className="mb-4 rounded-md border border-warning/40 bg-warning-muted px-4 py-3 text-sm text-warning">
+        <div className="mb-3 rounded-md border border-warning/40 bg-warning-muted px-4 py-3 text-sm text-warning">
           This {shortLabel} is scheduled for deletion on {formatDeletionDate(editingOrder.deleteScheduledAt)}.
         </div>
       )}
 
       {Object.keys(fieldErrors).length > 0 && (
-        <FieldValidationBanner className="mb-4" />
+        <FieldValidationBanner className="mb-3" />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-3">
           {showPdfImport && (
-            <ContractPdfUpload
-              key={pdfUploadKey}
-              side={side}
-              onParsed={applyPdfImport}
-              onBeforeApply={confirmPdfReplace}
-            />
+            <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+                <FileUp className="h-4 w-4 text-accent" />
+                Import from Contract PDF
+                <span className="ml-auto text-xs font-normal text-muted group-open:hidden">Show</span>
+                <span className="ml-auto text-xs font-normal text-muted hidden group-open:inline">Hide</span>
+              </summary>
+              <div className="px-4 pb-4">
+                <ContractPdfUpload
+                  key={pdfUploadKey}
+                  side={side}
+                  onParsed={applyPdfImport}
+                  onBeforeApply={confirmPdfReplace}
+                />
+              </div>
+            </details>
           )}
           <OrderFormFields
             isPO={isPO}
@@ -697,25 +707,15 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
             isEdit={isEdit}
             fieldErrors={fieldErrors}
             onFieldEdit={clearFieldError}
-            accountTrader={accountTrader}
-            quantityAvailability={(() => {
-              const enteredQty = parseFloat(form.quantity) || 0
-              const lot = store.lots.find(l => l.lotNumber === `LOT-${form.ref || editingOrder?.ref}`)
-              if (isEdit && lot) {
-                return {
-                  label: 'Available to sell on lot',
-                  remaining: Math.max(0, enteredQty - lot.allocated),
-                  detail: `${formatQty(lot.allocated)} allocated · ${formatQty(Math.max(0, enteredQty - (editingOrder?.liftedQty ?? 0)))} remaining stock`,
-                }
-              }
-              return undefined
-            })()}
           />
         </div>
 
         <OrderFormSidebar
           isPO={isPO}
           shortLabel={shortLabel}
+          form={form}
+          store={store}
+          accountTrader={accountTrader}
           lastEntry={lastEntry}
           amount={amount}
           taxRate={form.taxRate}
@@ -726,6 +726,18 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
           editingOrder={editingOrder}
           saveLoading={saving}
           saveDisabled={saving}
+          quantityAvailability={(() => {
+            const enteredQty = parseFloat(form.quantity) || 0
+            const lot = store.lots.find(l => l.lotNumber === `LOT-${form.ref || editingOrder?.ref}`)
+            if (isEdit && lot) {
+              return {
+                label: 'Available to sell on lot',
+                remaining: Math.max(0, enteredQty - lot.allocated),
+                detail: `${formatQty(lot.allocated)} allocated · ${formatQty(Math.max(0, enteredQty - (editingOrder?.liftedQty ?? 0)))} remaining stock`,
+              }
+            }
+            return undefined
+          })()}
         />
       </div>
 
@@ -736,6 +748,14 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         error={saveError}
         saveLoading={saving}
         saveDisabled={saving}
+        extra={
+          isEdit && editingOrder ? (
+            <ShareWhatsAppButton
+              fullWidth
+              onShare={() => shareOrderOnWhatsApp(editingOrder)}
+            />
+          ) : undefined
+        }
       />
     </div>
     {createdModal}
@@ -854,20 +874,10 @@ function SOEntryForm({
     : availableBeforeSo
   const showPoRowAction = !isEdit && !sellFromLot && !linkedPoRef
 
-  const linkPoCaptions = selectedPO ? [
-    { label: 'Item', value: selectedPO.itemName },
-    {
-      label: 'Available to sell',
-      value: formatQty(maxSellQty),
-      valueClassName: availableQtyClass(maxSellQty),
-    },
-    { label: 'Seller', value: selectedPO.sellerName || selectedPO.partyName },
-  ] : undefined
-
   const linkPoSelect = (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {poLinkEditable ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Select
             label="Item"
             searchable
@@ -900,7 +910,7 @@ function SOEntryForm({
           />
         </div>
       ) : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
           <Select
             label="Purchase Order (Lot)"
@@ -913,7 +923,7 @@ function SOEntryForm({
             disabled={(isEdit && poLinked) || !!sellFromLot || !!linkedPoRef}
           />
           {poLinkEditable ? (
-            <p className="mt-1.5 text-xs text-muted">
+            <p className="mt-1 text-xs text-muted">
               {availablePOs.length} open PO{availablePOs.length === 1 ? '' : 's'}
               {(poLinkItem || poLinkSeller || poLinkSpot) ? ' matching filters' : ' with availability'}
             </p>
@@ -934,7 +944,7 @@ function SOEntryForm({
   )
 
   return (
-    <div className="animate-fade-in w-full mx-auto max-w-3xl lg:max-w-5xl pb-24 sm:pb-0">
+    <div className="animate-fade-in w-full pb-24 sm:pb-0">
       <PageHeader
         title={sellFromLot ? 'Sell from lot' : isEdit ? 'Edit Sales Order' : 'Sales Order Entry'}
         subtitle={
@@ -963,27 +973,26 @@ function SOEntryForm({
       />
 
       {editingOrder?.deleteScheduledAt && (
-        <div className="mb-4 rounded-md border border-warning/40 bg-warning-muted px-4 py-3 text-sm text-warning">
+        <div className="mb-3 rounded-md border border-warning/40 bg-warning-muted px-4 py-3 text-sm text-warning">
           This SO is scheduled for deletion on {formatDeletionDate(editingOrder.deleteScheduledAt)}.
         </div>
       )}
 
       {Object.keys(fieldErrors).length > 0 && (
-        <FieldValidationBanner className="mb-4" />
+        <FieldValidationBanner className="mb-3" />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <CaptionCard
-            captions={linkPoCaptions}
-            noteVariant={!!selectedPO}
-          >
-            {showPdfImport && (
-              <div className="mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <FileUp className="h-4 w-4 text-accent" />
-                  Import from Contract PDF
-                </h4>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-3">
+          {showPdfImport && (
+            <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+                <FileUp className="h-4 w-4 text-accent" />
+                Import from Contract PDF
+                <span className="ml-auto text-xs font-normal text-muted group-open:hidden">Show</span>
+                <span className="ml-auto text-xs font-normal text-muted hidden group-open:inline">Hide</span>
+              </summary>
+              <div className="px-4 pb-4">
                 <ContractPdfUpload
                   key={pdfUploadKey}
                   embedded
@@ -992,12 +1001,14 @@ function SOEntryForm({
                   onBeforeApply={onBeforePdfApply}
                 />
               </div>
-            )}
-            <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+            </details>
+          )}
+          <CaptionCard bodyClassName="p-4">
+            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
               <Package className="h-4 w-4 text-accent" /> {sellFromLot ? 'Purchase Order' : 'Link to Purchase Order'}
             </h3>
             {(sellFromLot || linkedPoRef) && (
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-xs text-gray-500 mb-2">
                 {sellFromLot
                   ? `Selling from ${sellFromLot.lotNumber}. This PO is linked to the lot.`
                   : `Linked to ${linkedPoRef}. Item follows this PO; other fields are editable.`}
@@ -1016,20 +1027,8 @@ function SOEntryForm({
             brokers={store.brokers}
             isEdit={isEdit}
             poFieldsLocked={!!selectedPO}
-            accountTrader={accountTrader}
-            linkedPoRate={
-              selectedPO
-                ? formatContractRate(selectedPO.rate, selectedPO.rateBasis, selectedPO.ratePerBasis)
-                : undefined
-            }
             fieldErrors={fieldErrors}
             onFieldEdit={onFieldEdit}
-            quantityAvailability={selectedPO || sellFromLot ? {
-              label: 'Available after SO',
-              remaining: availableAfterSo,
-              before: availableBeforeSo,
-              remainingClassName: soRemainingQtyClass(availableAfterSo),
-            } : undefined}
             maxQty={qtyCap > 0 ? qtyCap : undefined}
             maxQtyMessage={
               selectedPO
@@ -1044,6 +1043,9 @@ function SOEntryForm({
         <OrderFormSidebar
           isPO={false}
           shortLabel="SO"
+          form={form}
+          store={store}
+          accountTrader={accountTrader}
           lastEntry={lastEntry}
           amount={amount}
           taxRate={form.taxRate}
@@ -1054,6 +1056,28 @@ function SOEntryForm({
           editingOrder={editingOrder}
           saveLoading={saveLoading}
           saveDisabled={saveLoading}
+          infoNotes={
+            selectedPO || sellFromLot
+              ? [
+                  {
+                    label: 'Available before SO',
+                    value: formatQty(availableBeforeSo),
+                    valueClassName: cn('font-semibold', availableQtyClass(availableBeforeSo)),
+                  },
+                  {
+                    label: 'Available after SO',
+                    value: formatQty(availableAfterSo),
+                    valueClassName: soRemainingQtyClass(availableAfterSo),
+                  },
+                  ...(selectedPO
+                    ? [{
+                        label: 'PO rate',
+                        value: formatContractRate(selectedPO.rate, selectedPO.rateBasis, selectedPO.ratePerBasis),
+                      }]
+                    : []),
+                ]
+              : undefined
+          }
         />
       </div>
 
@@ -1064,12 +1088,34 @@ function SOEntryForm({
         error={saveError}
         saveLoading={saveLoading}
         saveDisabled={saveLoading}
+        extra={
+          isEdit && editingOrder ? (
+            <ShareWhatsAppButton
+              fullWidth
+              onShare={() => shareOrderOnWhatsApp(editingOrder)}
+            />
+          ) : undefined
+        }
       />
     </div>
   )
 }
 
-function ContractPartiesCard({ form, isPO, accountTrader }: { form: FormApi; isPO: boolean; accountTrader: string }) {
+function FormFieldGroup({
+  children,
+  columns = 'grid-cols-1 sm:grid-cols-2',
+}: {
+  children: ReactNode
+  columns?: string
+}) {
+  return (
+    <section>
+      <div className={cn('grid gap-3', columns)}>{children}</div>
+    </section>
+  )
+}
+
+function ContractPartiesPreview({ form, isPO, accountTrader }: { form: FormApi; isPO: boolean; accountTrader: string }) {
   // Prefer PDF-extracted contract names when present so import matches the confirmation.
   const sellerName = isPO
     ? (form.sellerName || 'Select seller')
@@ -1081,27 +1127,16 @@ function ContractPartiesCard({ form, isPO, accountTrader }: { form: FormApi; isP
   const buyerConfirmed = displayPartyConfirmedBy(form.buyerConfirmedBy, accountTrader)
 
   return (
-    <CaptionCard
-      captions={[
-        { label: 'Seller confirmed by', value: sellerConfirmed },
-        { label: 'Buyer confirmed by', value: buyerConfirmed },
-      ]}
-    >
-      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-        <FileText className="h-4 w-4 text-muted" />
-        Contract Parties
-      </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <div className="min-w-0">
-          <p className="text-xs text-muted">Seller</p>
-          <p className="font-medium line-clamp-2 break-words" title={sellerName}>{sellerName}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted">Buyer</p>
-          <p className="font-medium line-clamp-2 break-words" title={buyerName}>{buyerName}</p>
-        </div>
+    <div className="grid grid-cols-2 gap-3 text-sm">
+      <div className="min-w-0">
+        <p className="text-xs text-muted">Seller · {sellerConfirmed}</p>
+        <p className="font-medium truncate" title={sellerName}>{sellerName}</p>
       </div>
-    </CaptionCard>
+      <div className="min-w-0">
+        <p className="text-xs text-muted">Buyer · {buyerConfirmed}</p>
+        <p className="font-medium truncate" title={buyerName}>{buyerName}</p>
+      </div>
+    </div>
   )
 }
 
@@ -1116,12 +1151,9 @@ function OrderFormFields({
   isEdit: _isEdit = false,
   fieldErrors = {},
   onFieldEdit,
-  quantityAvailability,
   maxQty,
   maxQtyMessage,
   poFieldsLocked = false,
-  linkedPoRate,
-  accountTrader,
 }: {
   isPO: boolean
   shortLabel: string
@@ -1132,26 +1164,14 @@ function OrderFormFields({
   brokers: { name: string }[]
   isEdit?: boolean
   poFieldsLocked?: boolean
-  linkedPoRate?: string
   fieldErrors?: OrderFieldErrors
-  accountTrader: string
   onFieldEdit?: (key: keyof OrderFieldErrors) => void
-  quantityAvailability?: {
-    label: string
-    remaining: number
-    before?: number
-    detail?: string
-    remainingClassName?: string
-  }
   maxQty?: number
   maxQtyMessage?: string
 }) {
   const toast = useToast()
   const isReadyDelivery = form.deliveryType === 'ready'
   const minDeliveryEnd = form.deliveryPeriodStart || undefined
-  const sellerBalance = isPO && form.partyName.trim()
-    ? store.getSellerOutstandingBalance(form.partyName)
-    : { total: 0, lines: [] as { poRef: string; soRef: string; qtyMt: number }[] }
   const [partyModalOpen, setPartyModalOpen] = useState(false)
   const [partyModalInitial, setPartyModalInitial] = useState<Partial<PartyFormValues> | null>(null)
   const [partyModalSaving, setPartyModalSaving] = useState(false)
@@ -1186,230 +1206,160 @@ function OrderFormFields({
     }
   }
 
-  const sellerItemCaption = isPO && sellerBalance.total > 0
-    ? {
-      label: 'Remaining balance',
-      value: `${formatQty(sellerBalance.total)} owed by ${collapseRepeatedPartyLocation(form.partyName)}`,
-      detail: formatSellerBalanceDetail(
-        sellerBalance.lines,
-        (poRef, soRef, qtyMt) => `${formatPoRef(poRef)} → ${formatSoRef(soRef)}: ${formatQty(qtyMt)}`,
-      ),
-    }
-    : undefined
-
-  const quantityCaption = quantityAvailability && isPO
-    ? {
-      label: quantityAvailability.label,
-      value: formatQty(quantityAvailability.remaining),
-      valueClassName: quantityAvailability.remainingClassName
-        ? cn('font-semibold', quantityAvailability.remainingClassName)
-        : undefined,
-      detail: quantityAvailability.detail,
-    }
-    : undefined
-
-  const pricingNoteCaptions = !isPO && quantityAvailability?.before != null
-    ? [
-      {
-        label: 'Available before SO',
-        value: formatQty(quantityAvailability.before),
-        valueClassName: cn('font-semibold', availableQtyClass(quantityAvailability.before)),
-      },
-      {
-        label: quantityAvailability.label,
-        value: formatQty(quantityAvailability.remaining),
-        valueClassName: quantityAvailability.remainingClassName,
-      },
-      ...(linkedPoRate ? [{ label: 'PO rate', value: linkedPoRate }] : []),
-    ]
-    : undefined
-
-  const poRateCaption = !isPO && linkedPoRate && !pricingNoteCaptions
-    ? { label: 'PO rate', value: linkedPoRate }
-    : undefined
-
   return (
     <>
-      {(isPO || form.sellerName || form.buyerName) && <ContractPartiesCard form={form} isPO={isPO} accountTrader={accountTrader} />}
+      <Card className="p-4" padding={false}>
+        <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-200 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-700">
+          <FormFieldGroup>
+            <DatePicker
+              label="Date"
+              value={form.date}
+              error={fieldErrors.date}
+              onChange={next => {
+                onFieldEdit?.('date')
+                form.set('date', next)
+              }}
+            />
+            <Input
+              label="Broker Contract #"
+              value={form.brokerContractRef}
+              error={fieldErrors.brokerContractRef}
+              onChange={e => {
+                onFieldEdit?.('brokerContractRef')
+                form.set('brokerContractRef', e.target.value)
+              }}
+              placeholder="e.g. 713"
+            />
+          </FormFieldGroup>
 
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label={`${shortLabel} Ref. No.`}
-            value={formatOrderRef(form.ref, isPO ? 'purchase' : 'sale')}
-            readOnly
-            error={fieldErrors.ref}
-          />
-          <DatePicker
-            label="Date"
-            value={form.date}
-            error={fieldErrors.date}
-            onChange={next => {
-              onFieldEdit?.('date')
-              form.set('date', next)
-            }}
-          />
-          <Input
-            label="Broker Contract #"
-            value={form.brokerContractRef}
-            error={fieldErrors.brokerContractRef}
-            onChange={e => {
-              onFieldEdit?.('brokerContractRef')
-              form.set('brokerContractRef', e.target.value)
-            }}
-            placeholder="e.g. 713"
-          />
-        </div>
-      </Card>
-
-      <CaptionCard caption={sellerItemCaption}>
-        <h3 className="text-sm font-semibold mb-4">{isPO ? 'Seller' : 'Buyer'} & Item</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SearchableSelect
-            label={`${isPO ? 'Seller' : 'Buyer'} Name`}
-            placeholder={isPO ? 'Select seller...' : 'Select buyer...'}
-            searchPlaceholder="Search parties..."
-            options={partyOptions}
-            value={form.partyCompanyId}
-            displayLabel={form.partyName}
-            error={fieldErrors.partyName}
-            allowCreate
-            createLabel="Add new party"
-            onRequestCreate={draftName => {
-              setPartyModalInitial({ name: draftName })
-              setPartyModalOpen(true)
-            }}
-            emptyMessage="No parties in directory"
-            onValueChange={(id, label) => {
-              onFieldEdit?.('partyName')
-              applyPartySelection(form, isPO, id, label)
-            }}
-          />
-          <SearchableSelect
-            label="Item / Material"
-            placeholder="Select item..."
-            searchPlaceholder="Search items..."
-            options={stringsToOptions(store.items)}
-            value={form.itemName}
-            displayLabel={form.itemName}
-            error={fieldErrors.itemName}
-            disabled={poFieldsLocked}
-            allowCreate={!poFieldsLocked}
-            createLabel="Add new item"
-            onCreate={async (name) => {
-              const candidates = collectItemNames({
-                items: store.items,
-                tradeOrders: store.tradeOrders,
-                lots: store.lots,
-              })
-              const finalName = canonicalItemName(name, candidates)
-              const exists = candidates.some(candidate => itemMatches(candidate, finalName))
-              if (!exists) {
-                await store.addItem(finalName)
-                toast.success('Item added', { description: finalName })
-              } else if (!itemMatches(name, finalName)) {
-                toast.success('Matched existing item', { description: `${name} → ${finalName}` })
-              }
-              return { value: finalName, label: finalName }
-            }}
-            emptyMessage="No saved items — add one below"
-            onValueChange={(value, label) => {
-              onFieldEdit?.('itemName')
-              const itemName = value || label
-              form.set('itemName', itemName)
-              if (form.brokerName) {
-                const broker = store.brokers.find(b => b.name === form.brokerName)
-                const terms = broker
-                  ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', itemName)
-                  : undefined
-                if (terms) {
-                  form.setValues(v => ({ ...v, itemName, ...brokerageTermsToFormPatch(terms) }))
+          <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
+            <SearchableSelect
+              label={`${isPO ? 'Seller' : 'Buyer'} Name`}
+              placeholder={isPO ? 'Select seller...' : 'Select buyer...'}
+              searchPlaceholder="Search parties..."
+              options={partyOptions}
+              value={form.partyCompanyId}
+              displayLabel={form.partyName}
+              error={fieldErrors.partyName}
+              allowCreate
+              createLabel="Add new party"
+              onRequestCreate={draftName => {
+                setPartyModalInitial({ name: draftName })
+                setPartyModalOpen(true)
+              }}
+              emptyMessage="No parties in directory"
+              onValueChange={(id, label) => {
+                onFieldEdit?.('partyName')
+                applyPartySelection(form, isPO, id, label)
+              }}
+            />
+            <SearchableSelect
+              label="Item / Material"
+              placeholder="Select item..."
+              searchPlaceholder="Search items..."
+              options={stringsToOptions(store.items)}
+              value={form.itemName}
+              displayLabel={form.itemName}
+              error={fieldErrors.itemName}
+              disabled={poFieldsLocked}
+              allowCreate={!poFieldsLocked}
+              createLabel="Add new item"
+              onCreate={async (name) => {
+                const candidates = collectItemNames({
+                  items: store.items,
+                  tradeOrders: store.tradeOrders,
+                  lots: store.lots,
+                })
+                const finalName = canonicalItemName(name, candidates)
+                const exists = candidates.some(candidate => itemMatches(candidate, finalName))
+                if (!exists) {
+                  await store.addItem(finalName)
+                  toast.success('Item added', { description: finalName })
+                } else if (!itemMatches(name, finalName)) {
+                  toast.success('Matched existing item', { description: `${name} → ${finalName}` })
                 }
-              }
-            }}
-          />
-          <SearchableSelect
-            label="Spot / Location"
-            placeholder="Select spot..."
-            searchPlaceholder="Search spots..."
-            options={stringsToOptions(spots)}
-            value={form.spot}
-            displayLabel={form.spot}
-            error={fieldErrors.spot}
-            allowCreate
-            createLabel="Add new spot"
-            onCreate={async (name) => {
-              const spotError = validateSpot(name)
-              if (spotError) {
-                toast.error(spotError)
-                throw new Error(spotError)
-              }
-              const spot = await store.addSpot(name)
-              toast.success('Spot added', { description: spot })
-              return { value: spot, label: spot }
-            }}
-            emptyMessage="No saved spots — add one below"
-            onValueChange={(_, label) => {
-              onFieldEdit?.('spot')
-              form.set('spot', label)
-            }}
-          />
-        </div>
-      </CaptionCard>
+                return { value: finalName, label: finalName }
+              }}
+              emptyMessage="No saved items — add one below"
+              onValueChange={(value, label) => {
+                onFieldEdit?.('itemName')
+                const itemName = value || label
+                form.set('itemName', itemName)
+                if (form.brokerName) {
+                  const broker = store.brokers.find(b => b.name === form.brokerName)
+                  const terms = broker
+                    ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', itemName)
+                    : undefined
+                  if (terms) {
+                    form.setValues(v => ({ ...v, itemName, ...brokerageTermsToFormPatch(terms) }))
+                  }
+                }
+              }}
+            />
+            <SearchableSelect
+              label="Spot / Location"
+              placeholder="Select spot..."
+              searchPlaceholder="Search spots..."
+              options={stringsToOptions(spots)}
+              value={form.spot}
+              displayLabel={form.spot}
+              error={fieldErrors.spot}
+              allowCreate
+              createLabel="Add new spot"
+              onCreate={async (name) => {
+                const spotError = validateSpot(name)
+                if (spotError) {
+                  toast.error(spotError)
+                  throw new Error(spotError)
+                }
+                const spot = await store.addSpot(name)
+                toast.success('Spot added', { description: spot })
+                return { value: spot, label: spot }
+              }}
+              emptyMessage="No saved spots — add one below"
+              onValueChange={(_, label) => {
+                onFieldEdit?.('spot')
+                form.set('spot', label)
+              }}
+            />
+          </FormFieldGroup>
 
-      <CaptionCard
-        captions={pricingNoteCaptions}
-        caption={quantityCaption}
-        secondaryCaption={poRateCaption}
-        noteVariant={!!pricingNoteCaptions || !!quantityCaption || !!poRateCaption}
-      >
-        <h3 className="text-sm font-semibold mb-4">Quantity & Pricing</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <QtyInput
-            label="Quantity (MT)"
-            value={form.quantity}
-            error={fieldErrors.quantity}
-            maxQty={maxQty}
-            maxQtyMessage={maxQtyMessage}
-            onChange={e => { onFieldEdit?.('quantity'); form.set('quantity', e.target.value) }}
-          />
-          <AmountInput
-            label={rateInputLabel(shortLabel, form.rateBasis)}
-            value={form.rate}
-            error={fieldErrors.rate}
-            onChange={v => {
-              onFieldEdit?.('rate')
-              form.setValues(prev => ({
-                ...prev,
-                rate: v,
-                ratePerBasis: v,
-                rateBasis: 'PER 10 KG',
-                contractRateDisplay: '',
-              }))
-            }}
-          />
-          <Input
-            label="Tax Rate (%)"
-            value={form.taxRate}
-            error={fieldErrors.taxRate}
-            onChange={e => {
-              onFieldEdit?.('taxRate')
-              form.set('taxRate', e.target.value)
-            }}
-          />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-300">{shortLabel} Amount</label>
-            <div className="h-9 flex items-center px-3 rounded-md border border-transparent bg-gray-100 dark:bg-gray-700/50 text-sm font-semibold tabular-nums">
-              {formatCurrency(orderLineAmount(parseFloat(form.quantity) || 0, parseRateNumber(form.rate), form.rateBasis))}
-            </div>
-          </div>
-        </div>
-      </CaptionCard>
+          <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
+            <QtyInput
+              label="Quantity (MT)"
+              value={form.quantity}
+              error={fieldErrors.quantity}
+              maxQty={maxQty}
+              maxQtyMessage={maxQtyMessage}
+              onChange={e => { onFieldEdit?.('quantity'); form.set('quantity', e.target.value) }}
+            />
+            <AmountInput
+              label={rateInputLabel(shortLabel, form.rateBasis)}
+              value={form.rate}
+              error={fieldErrors.rate}
+              onChange={v => {
+                onFieldEdit?.('rate')
+                form.setValues(prev => ({
+                  ...prev,
+                  rate: v,
+                  ratePerBasis: v,
+                  rateBasis: 'PER 10 KG',
+                  contractRateDisplay: '',
+                }))
+              }}
+            />
+            <Input
+              label="Tax Rate (%)"
+              value={form.taxRate}
+              error={fieldErrors.taxRate}
+              onChange={e => {
+                onFieldEdit?.('taxRate')
+                form.set('taxRate', e.target.value)
+              }}
+            />
+          </FormFieldGroup>
 
-      <Card>
-        <h3 className="text-sm font-semibold mb-4">Delivery & Terms</h3>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormFieldGroup columns="grid-cols-2 lg:grid-cols-4">
             <div>
               <Select
                 searchable={false}
@@ -1422,17 +1372,14 @@ function OrderFormFields({
                 onChange={e => form.set('deliveryType', e.target.value)}
               />
               {isReadyDelivery && (
-                <p className="text-xs text-gray-500 dark:text-muted mt-1.5">
-                  Same-day delivery — no period dates needed.
+                <p className="text-xs text-gray-500 dark:text-muted mt-1">
+                  Same-day — no period dates.
                 </p>
               )}
             </div>
-          </div>
-
-          {!isReadyDelivery && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {!isReadyDelivery ? (
               <DatePicker
-                label="Delivery Period Start"
+                label="Delivery Start"
                 value={form.deliveryPeriodStart}
                 error={fieldErrors.deliveryPeriodStart}
                 onChange={start => {
@@ -1443,8 +1390,10 @@ function OrderFormFields({
                   }
                 }}
               />
+            ) : null}
+            {!isReadyDelivery ? (
               <DatePicker
-                label="Delivery Period End"
+                label="Delivery End"
                 value={form.deliveryPeriodEnd}
                 min={minDeliveryEnd}
                 error={fieldErrors.deliveryPeriodEnd}
@@ -1453,47 +1402,46 @@ function OrderFormFields({
                   form.set('deliveryPeriodEnd', end)
                 }}
               />
+            ) : null}
+            <div className="col-span-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Select
+                label="Broker Name"
+                placeholder="Select broker..."
+                searchPlaceholder="Search brokers..."
+                allowCreate
+                createLabel="Add new broker"
+                onCreate={async (name) => {
+                  const broker = await store.addBroker({ name })
+                  toast.success('Broker added to directory', { description: broker.name })
+                  return { value: broker.name, label: broker.name }
+                }}
+                options={brokers.map(b => ({ value: b.name, label: b.name }))}
+                value={form.brokerName}
+                onChange={e => {
+                  const brokerName = e.target.value
+                  form.set('brokerName', brokerName)
+                  const broker = store.brokers.find(b => b.name === brokerName)
+                  const terms = broker
+                    ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', form.itemName)
+                    : undefined
+                  if (terms) {
+                    form.setValues(v => ({ ...v, brokerName, ...brokerageTermsToFormPatch(terms) }))
+                  }
+                }}
+                emptyMessage="No brokers in directory — add one below"
+              />
+              <BrokerageInput
+                mode={form.brokerageType === 'percent' ? 'percent' : 'perTon'}
+                value={form.brokerageType === 'percent' ? form.brokeragePct : form.brokeragePerTon}
+                onModeChange={handleBrokerageModeChange}
+                onChange={v => form.set(form.brokerageType === 'percent' ? 'brokeragePct' : 'brokeragePerTon', v)}
+              />
+              <Input label="Payment Terms" value={form.paymentTerms} onChange={e => form.set('paymentTerms', e.target.value)} />
             </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Broker Name"
-              placeholder="Select broker..."
-              searchPlaceholder="Search brokers..."
-              allowCreate
-              createLabel="Add new broker"
-              onCreate={async (name) => {
-                const broker = await store.addBroker({ name })
-                toast.success('Broker added to directory', { description: broker.name })
-                return { value: broker.name, label: broker.name }
-              }}
-              options={brokers.map(b => ({ value: b.name, label: b.name }))}
-              value={form.brokerName}
-              onChange={e => {
-                const brokerName = e.target.value
-                form.set('brokerName', brokerName)
-                const broker = store.brokers.find(b => b.name === brokerName)
-                const terms = broker
-                  ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', form.itemName)
-                  : undefined
-                if (terms) {
-                  form.setValues(v => ({ ...v, brokerName, ...brokerageTermsToFormPatch(terms) }))
-                }
-              }}
-              emptyMessage="No brokers in directory — add one below"
-            />
-            <BrokerageInput
-              mode={form.brokerageType === 'percent' ? 'percent' : 'perTon'}
-              value={form.brokerageType === 'percent' ? form.brokeragePct : form.brokeragePerTon}
-              onModeChange={handleBrokerageModeChange}
-              onChange={v => form.set(form.brokerageType === 'percent' ? 'brokeragePct' : 'brokeragePerTon', v)}
-            />
-            <Input label="Payment Terms" value={form.paymentTerms} onChange={e => form.set('paymentTerms', e.target.value)} />
-            <div className="col-span-2">
+            <div className="col-span-full">
               <Input label="Remarks" value={form.remarks} onChange={e => form.set('remarks', e.target.value)} />
             </div>
-          </div>
+          </FormFieldGroup>
         </div>
       </Card>
 
@@ -1516,13 +1464,17 @@ function OrderFormFields({
 function OrderFormSidebar({
   isPO,
   shortLabel,
+  form,
+  store,
+  accountTrader,
   lastEntry,
   amount,
   taxRate,
+  infoNotes,
+  quantityAvailability,
   saveError,
   onSave,
   onCancel,
-  disabled,
   saveLoading = false,
   saveDisabled,
   isEdit = false,
@@ -1530,61 +1482,127 @@ function OrderFormSidebar({
 }: {
   isPO: boolean
   shortLabel: string
+  form: FormApi
+  store: ReturnType<typeof useTradeStore>
+  accountTrader: string
   lastEntry?: TradeOrder
   amount: number
   taxRate: string
+  infoNotes?: { label: string; value: ReactNode; valueClassName?: string }[]
+  quantityAvailability?: {
+    label: string
+    remaining: number
+    detail?: string
+    remainingClassName?: string
+  }
   saveError: string
   onSave: () => void
   onCancel: () => void
-  disabled?: boolean
   saveLoading?: boolean
   saveDisabled?: boolean
   isEdit?: boolean
   editingOrder?: TradeOrder
 }) {
   const isSaving = saveLoading || saveDisabled
+  const showParties = isPO || !!form.sellerName || !!form.buyerName
+  const sellerBalance = isPO && form.partyName.trim()
+    ? store.getSellerOutstandingBalance(form.partyName)
+    : { total: 0, lines: [] as { poRef: string; soRef: string; qtyMt: number }[] }
+
+  const previewNotes = [
+    ...(infoNotes ?? []),
+    ...(isPO && sellerBalance.total > 0
+      ? [{
+          label: 'Remaining balance',
+          value: `${formatQty(sellerBalance.total)} owed by ${collapseRepeatedPartyLocation(form.partyName)}`,
+        }]
+      : []),
+    ...(quantityAvailability && isPO
+      ? [{
+          label: quantityAvailability.label,
+          value: formatQty(quantityAvailability.remaining),
+          valueClassName: quantityAvailability.remainingClassName
+            ? cn('font-semibold', quantityAvailability.remainingClassName)
+            : undefined,
+        }]
+      : []),
+  ]
+
   return (
-    <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:z-10 w-full">
+    <div className="space-y-3 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
+      {previewNotes.length > 0 && (
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
+          <div className="flex flex-wrap items-stretch divide-x divide-gray-200 bg-gray-100/90 px-3 py-3 dark:divide-gray-700 dark:bg-gray-800/50">
+            {previewNotes.map(note => (
+              <div key={note.label} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0 py-1">
+                <p className="text-xs font-medium text-muted leading-tight">{note.label}</p>
+                <div className={cn('mt-1 text-sm font-semibold tabular-nums text-heading leading-tight', note.valueClassName)}>
+                  {note.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Card className="p-4" padding={false}>
+        <h3 className="text-sm font-semibold mb-3">Summary</h3>
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted shrink-0">{shortLabel} Ref.</span>
+            <span className="font-mono font-medium text-right truncate">
+              {formatOrderRef(form.ref, isPO ? 'purchase' : 'sale')}
+            </span>
+          </div>
+
+          {showParties && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+              <ContractPartiesPreview form={form} isPO={isPO} accountTrader={accountTrader} />
+            </div>
+          )}
+
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1.5">
+            <div className="flex justify-between"><span className="text-muted">{shortLabel} Value</span><span className="font-semibold tabular-nums">{formatCurrency(amount)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Tax ({taxRate}%)</span><span className="tabular-nums">{formatCurrency(amount * (parseFloat(taxRate) / 100 || 0))}</span></div>
+            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-2">
+              <span className="text-muted">Total</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(amount * (1 + (parseFloat(taxRate) / 100 || 0)))}</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {lastEntry && (
-        <Card>
-          <h3 className="text-sm font-semibold text-heading mb-3">Last entry in register</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted">Deal No</span><span className="font-mono font-medium">{formatOrderRef(lastEntry.ref, lastEntry.side)}</span></div>
+        <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden flex items-center">
+            Last entry
+            <span className="ml-auto text-xs font-normal text-muted font-mono">{formatOrderRef(lastEntry.ref, lastEntry.side)}</span>
+          </summary>
+          <div className="px-4 pb-3 space-y-1.5 text-sm">
             {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span className="font-mono">{formatPoRef(lastEntry.poRef)}</span></div>}
             <div className="flex justify-between"><span className="text-muted">Date</span><span>{formatDate(lastEntry.date)}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">{isPO ? 'Seller' : 'Buyer'}</span><span className="font-medium text-right truncate">{lastEntry.partyName}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">Item</span><span className="font-medium text-right truncate">{lastEntry.itemName}</span></div>
           </div>
-        </Card>
+        </details>
       )}
 
-      <Card>
-        <h3 className="text-sm font-semibold mb-3">Summary</h3>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-muted">{shortLabel} Value</span><span className="font-semibold">{formatCurrency(amount)}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Tax ({taxRate}%)</span><span>{formatCurrency(amount * (parseFloat(taxRate) / 100 || 0))}</span></div>
-          <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-2">
-            <span className="text-muted">Total</span>
-            <span className="font-semibold">{formatCurrency(amount * (1 + (parseFloat(taxRate) / 100 || 0)))}</span>
-          </div>
-        </div>
-      </Card>
-
-      {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
-
-      <div className="flex flex-col gap-2 hidden sm:flex">
+      <div className="hidden sm:flex flex-col gap-2 w-full">
+        {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
         {isEdit && editingOrder && (
           <ShareWhatsAppButton
             fullWidth
             onShare={() => shareOrderOnWhatsApp(editingOrder)}
           />
         )}
-        <Button className="w-full" onClick={onSave} disabled={disabled || isSaving} loading={saveLoading}>
-          <Save className="h-4 w-4" /> {isEdit ? `Update ${shortLabel}` : `Create ${shortLabel}`}
-        </Button>
-        <Button variant="outline" className="w-full" onClick={onCancel} disabled={isSaving}>
-          <ArrowLeft className="h-4 w-4" /> Cancel
-        </Button>
+        <div className="flex gap-2 w-full">
+          <Button variant="outline" className="flex-1" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button className="flex-[1.4]" onClick={onSave} disabled={isSaving} loading={saveLoading}>
+            {isEdit ? `Update ${shortLabel}` : `Create ${shortLabel}`}
+          </Button>
+        </div>
       </div>
     </div>
   )

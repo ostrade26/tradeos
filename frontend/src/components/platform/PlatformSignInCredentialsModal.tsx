@@ -280,7 +280,9 @@ export function PlatformSignInCredentialsModal({
             </p>
           ) : (
             <p className="text-xs text-muted leading-relaxed mt-4">
-              Copy all, then sign in at /login. Temporary passwords are case-sensitive. Notify sends the same details in-app.
+              Copy all, then sign in at /login. Temporary passwords are case-sensitive. A welcome
+              email with these details is sent when the organisation is created. Notify also sends
+              them in-app.
             </p>
           )}
         </div>

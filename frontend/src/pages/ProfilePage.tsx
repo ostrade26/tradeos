@@ -8,7 +8,9 @@ import { useAuth } from '../hooks/useAuth'
 import { useUser } from '../hooks/useUser'
 import { useToast } from '../hooks/useToast'
 import { loginUsernameError } from '../lib/username'
+import { contactEmailError } from '../lib/email'
 import { APP_HOME } from '../lib/appShellMode'
+import { ApiError } from '../api/client'
 
 export function ProfilePage() {
   const { roleLabel, session } = useAuth()
@@ -25,17 +27,26 @@ export function ProfilePage() {
   }
 
   const usernameError = loginUsernameError(form.username, { allowCurrent: session?.username })
+  const emailError = contactEmailError(form.email)
 
   const handleSave = async () => {
     if (usernameError) {
       toast.error(usernameError)
       return
     }
+    if (emailError) {
+      toast.error(emailError)
+      return
+    }
     try {
-      await updateProfile({ ...form, username: form.username.trim().toLowerCase() })
+      await updateProfile({
+        ...form,
+        username: form.username.trim().toLowerCase(),
+        email: form.email.trim().toLowerCase(),
+      })
       toast.success('Profile updated')
-    } catch {
-      toast.error('Could not save profile')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save profile')
     }
   }
 
@@ -78,7 +89,14 @@ export function ProfilePage() {
             autoComplete="off"
           />
           <Input label="Location" value={form.location} onChange={set('location')} placeholder="" />
-          <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="" />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={set('email')}
+            error={emailError ?? undefined}
+            placeholder=""
+          />
           <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="" />
           <div className="sm:col-span-2">
             <Input label="Role" value={roleLabel || form.role} readOnly />
@@ -86,7 +104,7 @@ export function ProfilePage() {
         </div>
 
         <div className="flex items-center gap-2 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError)}>
+          <Button onClick={() => void handleSave()} disabled={!dirty || Boolean(usernameError) || Boolean(emailError)}>
             Save changes
           </Button>
           <Button variant="outline" onClick={handleReset} disabled={!dirty}>
