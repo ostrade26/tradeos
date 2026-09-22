@@ -410,15 +410,21 @@ export function getLastOrder(orders: TradeOrder[], side: OrderSide): TradeOrder 
   return orders.filter(o => o.side === side).sort((a, b) => b.date.localeCompare(a.date))[0]
 }
 
+/** Linked SO qty allocated against a PO (excludes cancelled / delete-scheduled). */
+export function getAllocatedSellQty(orders: TradeOrder[], poRef: string): number {
+  return roundQtyMt(
+    orders
+      .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled' && !o.deleteScheduledAt)
+      .reduce((sum, o) => sum + o.orderQty, 0),
+  )
+}
+
 /** Qty on a PO still available to allocate to new SOs */
 export function getRemainingSellQty(orders: TradeOrder[], poRef: string): number {
   const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
   if (!po) return 0
-  const soldQty = orders
-    .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled' && !o.deleteScheduledAt)
-    .reduce((sum, o) => sum + o.orderQty, 0)
   const cap = orderQtyCap(po)
-  return roundQtyMt(cap - soldQty)
+  return roundQtyMt(cap - getAllocatedSellQty(orders, poRef))
 }
 
 export function getSOsForPO(orders: TradeOrder[], poRef: string): TradeOrder[] {

@@ -19,6 +19,25 @@ export function liftTouchesRef(lift: Pick<Lift, 'poRef' | 'soRef' | 'liftedQty' 
   return getLiftAllocations(lift).some(a => a.poRef === ref || a.soRef === ref)
 }
 
+/** Pending (not yet delivered) lift qty allocated to this PO or SO. */
+export function inTransitQtyOnOrder(
+  lifts: Lift[],
+  order: Pick<TradeOrder, 'ref' | 'side'>,
+): number {
+  return roundQtyMt(
+    lifts
+      .filter(l => l.status === 'pending' && !l.deletedAt)
+      .reduce((sum, l) => {
+        const part = getLiftAllocations(l)
+          .filter(a =>
+            order.side === 'purchase' ? a.poRef === order.ref : Boolean(a.soRef) && a.soRef === order.ref,
+          )
+          .reduce((s, a) => s + a.qtyMt, 0)
+        return sum + part
+      }, 0),
+  )
+}
+
 export function uniqueLiftRefs(
   lift: Pick<Lift, 'poRef' | 'soRef' | 'liftedQty' | 'allocations'>,
   key: 'poRef' | 'soRef',

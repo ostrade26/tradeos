@@ -82,7 +82,7 @@ export function formatOrderWhatsAppMessage(order: TradeOrder): string {
   ]
 
   const liftLines = [
-    bullet('Lifted', formatQty(order.liftedQty)),
+    bullet('Delivered', formatQty(order.liftedQty)),
     bullet('To be lifted', formatQty(pending)),
     bullet('Status', formatStatus(order.status)),
   ]

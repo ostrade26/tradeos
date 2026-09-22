@@ -33,7 +33,9 @@ import {
   type OrderSide,
   toBeLifted,
   formatDeliveryPeriodLabel,
+  getAllocatedSellQty,
 } from '../../data/mockData'
+import { inTransitQtyOnOrder } from '../../lib/liftAllocations'
 import { useTradeStore } from '../../store/TradeStore'
 import { canCloseOrder, completionTypeLabel } from '../../lib/orderClosure'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
@@ -61,6 +63,14 @@ function registerToBeLift(order: TradeOrder): number {
 
 function availableOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): number {
   return store.getRemainingSellQty(poRef)
+}
+
+function allocationOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): number {
+  return getAllocatedSellQty(store.tradeOrders, poRef)
+}
+
+function inTransitOnOrder(store: ReturnType<typeof useTradeStore>, order: TradeOrder): number {
+  return inTransitQtyOnOrder(store.lifts, order)
 }
 
 interface OrderRegisterViewProps {
@@ -295,10 +305,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         case 'spot': return row.spot ?? ''
         case 'orderQty': return row.orderQty
         case 'buyBackQty': return totalBuyBackQty(row)
+        case 'allocation': return isPO ? allocationOnPO(store, row.ref) : 0
+        case 'available': return isPO ? availableOnPO(store, row.ref) : 0
         case 'liftedQty': return row.liftedQty
+        case 'inTransit': return inTransitOnOrder(store, row)
         case 'toBeLift': return registerToBeLift(row)
         case 'rate': return row.rate
-        case 'available': return isPO ? availableOnPO(store, row.ref) : 0
         default: return ''
       }
     })
@@ -316,11 +328,15 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     const orderQty = sortedFiltered.reduce((s, o) => s + o.orderQty, 0)
     return {
       orderQty,
+      allocation: isPO
+        ? sortedFiltered.reduce((s, o) => s + allocationOnPO(store, o.ref), 0)
+        : 0,
       liftedQty: sortedFiltered.reduce((s, o) => s + o.liftedQty, 0),
+      inTransit: sortedFiltered.reduce((s, o) => s + inTransitOnOrder(store, o), 0),
       toBeLift: sortedFiltered.reduce((s, o) => s + registerToBeLift(o), 0),
       avgRatePer10Kg: weightedAverageRatePer10Kg(sortedFiltered),
     }
-  }, [sortedFiltered])
+  }, [sortedFiltered, isPO, store])
 
   const checkedOrders = useMemo(
     () => sortedFiltered.filter(o => checkedOrderIds.includes(o.id)),
@@ -510,15 +526,60 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
               </span>
             )
           },
+        },
+        {
+          key: 'allocation',
+          header: 'Allocation',
+          className: 'text-right',
+          sortable: true,
+          sortValue: (r: TradeOrder) => allocationOnPO(store, r.ref),
+          render: (r: TradeOrder) => {
+            const allocated = allocationOnPO(store, r.ref)
+            return (
+              <span className={cn('tabular-nums', allocated > 0 ? 'text-heading font-medium' : 'text-muted')}>
+                {formatMt(allocated)}
+              </span>
+            )
+          },
+        },
+        {
+          key: 'available',
+          header: 'Avail. to Sell',
+          className: 'text-right',
+          sortable: true,
+          sortValue: (r: TradeOrder) => availableOnPO(store, r.ref),
+          render: (r: TradeOrder) => {
+            const available = availableOnPO(store, r.ref)
+            return (
+              <span className={cn('tabular-nums', availableQtyClass(available))}>
+                {formatMt(available)}
+              </span>
+            )
+          },
         }]
       : []),
     {
       key: 'liftedQty',
-      header: 'Lifted Qty',
+      header: 'Delivered',
       className: 'text-right',
       sortable: true,
       sortValue: (r: TradeOrder) => r.liftedQty,
       render: (r: TradeOrder) => <span className="tabular-nums">{formatMt(r.liftedQty)}</span>,
+    },
+    {
+      key: 'inTransit',
+      header: 'In transit',
+      className: 'text-right',
+      sortable: true,
+      sortValue: (r: TradeOrder) => inTransitOnOrder(store, r),
+      render: (r: TradeOrder) => {
+        const qty = inTransitOnOrder(store, r)
+        return (
+          <span className={cn('tabular-nums', qty > 0 ? 'text-heading font-medium' : 'text-muted')}>
+            {formatMt(qty)}
+          </span>
+        )
+      },
     },
     {
       key: 'toBeLift',
@@ -535,21 +596,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         )
       },
     },
-    ...(isPO ? [{
-      key: 'available',
-      header: 'Avail. to Sell',
-      className: 'text-right',
-      sortable: true,
-      sortValue: (r: TradeOrder) => availableOnPO(store, r.ref),
-      render: (r: TradeOrder) => {
-        const available = availableOnPO(store, r.ref)
-        return (
-          <span className={cn('tabular-nums', availableQtyClass(available))}>
-            {formatMt(available)}
-          </span>
-        )
-      },
-    }] : []),
     {
       key: 'brokerName',
       header: 'Broker Name',
@@ -665,7 +711,10 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       rate: number
       orderQty: number
       buyBackQty?: number
+      allocation?: number
+      available?: number
       liftedQty: number
+      inTransit: number
       toBeLift: number
       broker: string
     }
@@ -678,8 +727,15 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       { key: 'spot', header: 'Spot' },
       { key: 'rate', header: RATE_COLUMN_HEADER },
       { key: 'orderQty', header: `${shortLabel} Qty` },
-      ...(isPO ? [{ key: 'buyBackQty' as const, header: 'Buy back' }] : []),
-      { key: 'liftedQty', header: 'Lifted Qty' },
+      ...(isPO
+        ? [
+            { key: 'buyBackQty' as const, header: 'Buy back' },
+            { key: 'allocation' as const, header: 'Allocation' },
+            { key: 'available' as const, header: 'Avail. to Sell' },
+          ]
+        : []),
+      { key: 'liftedQty', header: 'Delivered' },
+      { key: 'inTransit', header: 'In transit' },
       { key: 'toBeLift', header: 'To Be Lift' },
       { key: 'broker', header: 'Broker Name' },
     ]
@@ -693,8 +749,15 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         spot: o.spot,
         rate: contractRateFromOrder(o.rate, o.rateBasis, o.ratePerBasis),
         orderQty: o.orderQty,
-        ...(isPO ? { buyBackQty: totalBuyBackQty(o) } : {}),
+        ...(isPO
+          ? {
+              buyBackQty: totalBuyBackQty(o),
+              allocation: allocationOnPO(store, o.ref),
+              available: availableOnPO(store, o.ref),
+            }
+          : {}),
         liftedQty: o.liftedQty,
+        inTransit: inTransitOnOrder(store, o),
         toBeLift: registerToBeLift(o),
         broker: o.brokerName,
       })),
@@ -807,7 +870,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           <p className="text-lg font-semibold tabular-nums">{formatMt(totals.orderQty)}</p>
         </div>
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
-          <p className="text-xs uppercase tracking-wider text-muted">Lifted</p>
+          <p className="text-xs uppercase tracking-wider text-muted">Delivered</p>
           <p className="text-lg font-semibold tabular-nums text-success">{formatMt(totals.liftedQty)}</p>
         </div>
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
@@ -933,6 +996,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             mobileRender={(r) => {
               const remaining = registerToBeLift(r)
               const available = isPO ? availableOnPO(store, r.ref) : null
+              const allocated = isPO ? allocationOnPO(store, r.ref) : null
+              const inTransit = inTransitOnOrder(store, r)
               return (
                 <div className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -949,7 +1014,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                           canDelete={store.canDeleteOrder(r.id)}
                           canClose={canCloseOrder(r, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok}
                           canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
-          sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
+                          sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
                           deletedTab={mode === 'deleted'}
                           onCloseOrder={() => setCloseTarget(r)}
                           onBuyBack={() => setBuyBackTarget(r)}
@@ -965,9 +1030,16 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                   </div>
                   <p className="text-heading truncate">{r.partyName} · {r.itemName}</p>
                   <div className="flex items-center justify-between text-muted">
-                    <span className="tabular-nums">{formatMt(remaining)} to lift</span>
+                    <span className="tabular-nums">
+                      {formatMt(r.liftedQty)} delivered · {formatMt(inTransit)} in transit · {formatMt(remaining)} to lift
+                    </span>
                     <span className="tabular-nums">{formatDate(r.date)}</span>
                   </div>
+                  {allocated != null && (
+                    <p className="text-sm tabular-nums text-muted">
+                      Allocation: {formatMt(allocated)}
+                    </p>
+                  )}
                   {available != null && (
                     <p className={cn('text-sm tabular-nums', availableQtyClass(available))}>
                       Avail. to sell: {formatMt(available)}

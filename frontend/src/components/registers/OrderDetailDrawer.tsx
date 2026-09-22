@@ -241,7 +241,7 @@ export function OrderDetailDrawer({
       <DetailMetricsSection>
         <DetailInlineStatRow>
           <DetailInlineStat label="Order" value={formatQty(order.orderQty)} />
-          <DetailInlineStat label="Lifted" value={formatQty(order.liftedQty)} valueClassName="text-success" />
+          <DetailInlineStat label="Delivered" value={formatQty(order.liftedQty)} valueClassName="text-success" />
           <DetailInlineStat
             label="Pending"
             value={formatQty(remaining)}
