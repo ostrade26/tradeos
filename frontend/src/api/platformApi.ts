@@ -424,6 +424,7 @@ export interface FeatureInterest {
   feature_title: string
   feature_detail?: string
   card_tone?: string
+  card_bg_hex?: string
   pricing_type?: string
   price_cents?: number
   status: string
@@ -445,6 +446,7 @@ export interface PlatformFeatureOffer {
   card_tone?: string
   card_image_url?: string
   card_featured?: boolean
+  card_bg_hex?: string
   created_at: string
   updated_at: string
   listed_at?: string | null
@@ -765,6 +767,7 @@ export const platformApi = {
     card_tone?: string
     card_image_url?: string
     card_featured?: boolean
+    card_bg_hex?: string
   }) =>
     apiFetch<{ offer: PlatformFeatureOffer }>('/platform/feature-offers', {
       method: 'POST',
@@ -784,6 +787,7 @@ export const platformApi = {
       card_tone?: string
       card_image_url?: string
       card_featured?: boolean
+      card_bg_hex?: string
     },
   ) =>
     apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {

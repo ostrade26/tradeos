@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '../../lib/utils'
 import {
   BLOCK_COLOR_ROWS,
+  SURFACE_COLOR_ROWS,
   hasGoodAccentContrast,
   normalizeHex,
 } from '../../lib/accentColor'
@@ -13,6 +14,11 @@ interface BlockColorPickerProps {
   onChange: (hex: string) => void
   /** Selected styling on the trigger (e.g. when custom accent is active). */
   selected?: boolean
+  /**
+   * `accent` — dark swatches with white-text contrast (brand accent).
+   * `surface` — light / soft swatches for card backgrounds.
+   */
+  palette?: 'accent' | 'surface'
   className?: string
   'aria-label'?: string
 }
@@ -21,6 +27,7 @@ export function BlockColorPicker({
   value,
   onChange,
   selected = false,
+  palette = 'accent',
   className,
   'aria-label': ariaLabel = 'Pick a colour',
 }: BlockColorPickerProps) {
@@ -31,6 +38,8 @@ export function BlockColorPicker({
   const [open, setOpen] = useState(false)
   const placement = useFlipPopover(open, triggerRef, panelRef)
   const current = normalizeHex(value)
+  const rows = palette === 'surface' ? SURFACE_COLOR_ROWS : BLOCK_COLOR_ROWS
+  const isSurface = palette === 'surface'
 
   useEffect(() => {
     if (!open) return
@@ -50,7 +59,7 @@ export function BlockColorPicker({
 
   const pick = (hex: string) => {
     const next = normalizeHex(hex)
-    if (!hasGoodAccentContrast(next)) return
+    if (!isSurface && !hasGoodAccentContrast(next)) return
     onChange(next)
     setOpen(false)
   }
@@ -68,7 +77,8 @@ export function BlockColorPicker({
         aria-pressed={selected}
         onClick={() => setOpen(v => !v)}
         className={cn(
-          'relative h-8 w-8 rounded-full cursor-pointer overflow-hidden attex-focus border-2 border-transparent',
+          'relative h-8 w-8 rounded-full cursor-pointer overflow-hidden attex-focus border-2',
+          isSurface && !selected ? 'border-gray-200 dark:border-gray-600' : 'border-transparent',
           selected
             ? 'ring-2 ring-offset-2 ring-heading dark:ring-offset-[var(--color-card)] scale-105'
             : 'opacity-90 hover:opacity-100 hover:scale-105',
@@ -80,7 +90,9 @@ export function BlockColorPicker({
           style={{
             background: selected
               ? current
-              : 'conic-gradient(from 180deg, #b91c1c, #b85c00, #1b7a34, #0a66c2, #7e22ce, #be185d, #b91c1c)',
+              : isSurface
+                ? 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 35%, #dbeafe 65%, #fce7f3 100%)'
+                : 'conic-gradient(from 180deg, #b91c1c, #b85c00, #1b7a34, #0a66c2, #7e22ce, #be185d, #b91c1c)',
           }}
         />
       </button>
@@ -97,10 +109,10 @@ export function BlockColorPicker({
           )}
         >
           <p className="px-0.5 pb-2 text-[11px] font-medium text-muted">
-            Colours with good contrast
+            {isSurface ? 'Light backgrounds' : 'Colours with good contrast'}
           </p>
           <div className="space-y-1.5">
-            {BLOCK_COLOR_ROWS.map((row, rowIndex) => (
+            {rows.map((row, rowIndex) => (
               <div
                 key={rowIndex}
                 className="grid gap-1"
@@ -108,6 +120,7 @@ export function BlockColorPicker({
               >
                 {row.map(hex => {
                   const active = current === normalizeHex(hex)
+                  const needsBorder = isSurface && relativeIsNearWhite(hex)
                   return (
                     <button
                       key={hex}
@@ -119,6 +132,7 @@ export function BlockColorPicker({
                       className={cn(
                         'aspect-square w-full rounded-[3px] cursor-pointer transition-transform attex-focus',
                         'hover:scale-110 hover:z-10',
+                        needsBorder && 'ring-1 ring-inset ring-black/10',
                         active && 'ring-2 ring-offset-1 ring-heading dark:ring-offset-zinc-900 scale-105',
                       )}
                       style={{ backgroundColor: hex }}
@@ -135,4 +149,12 @@ export function BlockColorPicker({
       )}
     </div>
   )
+}
+
+function relativeIsNearWhite(hex: string): boolean {
+  const n = normalizeHex(hex).replace('#', '')
+  const r = parseInt(n.slice(0, 2), 16)
+  const g = parseInt(n.slice(2, 4), 16)
+  const b = parseInt(n.slice(4, 6), 16)
+  return (r + g + b) / 3 > 230
 }

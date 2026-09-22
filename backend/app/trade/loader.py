@@ -129,6 +129,11 @@ def _migrate_counters(counters: dict, lifts: list[dict]) -> dict:
 
 
 def apply_lift_totals(data: dict) -> dict:
+    """Sum lift allocations onto PO/SO orders.
+
+    Keys are side-prefixed (``purchase:`` / ``sale:``) so a PO and SO that share
+    the same bare ref (common after spreadsheet import) do not double-count.
+    """
     committed_by_ref: dict[str, float] = {}
     delivered_by_ref: dict[str, float] = {}
     for lift in data.get("lifts") or []:
@@ -136,19 +141,24 @@ def apply_lift_totals(data: dict) -> dict:
             continue
         delivered = (lift.get("status") or "delivered") == "delivered"
         for a in get_lift_allocations(lift):
-            committed_by_ref[a["poRef"]] = committed_by_ref.get(a["poRef"], 0) + a["qtyMt"]
+            po_key = f"purchase:{a['poRef']}"
+            committed_by_ref[po_key] = committed_by_ref.get(po_key, 0) + a["qtyMt"]
             so_ref = a.get("soRef") or ""
             if so_ref:
-                committed_by_ref[so_ref] = committed_by_ref.get(so_ref, 0) + a["qtyMt"]
+                so_key = f"sale:{so_ref}"
+                committed_by_ref[so_key] = committed_by_ref.get(so_key, 0) + a["qtyMt"]
             if delivered:
-                delivered_by_ref[a["poRef"]] = delivered_by_ref.get(a["poRef"], 0) + a["qtyMt"]
+                delivered_by_ref[po_key] = delivered_by_ref.get(po_key, 0) + a["qtyMt"]
                 if so_ref:
-                    delivered_by_ref[so_ref] = delivered_by_ref.get(so_ref, 0) + a["qtyMt"]
+                    delivered_by_ref[f"sale:{so_ref}"] = (
+                        delivered_by_ref.get(f"sale:{so_ref}", 0) + a["qtyMt"]
+                    )
 
     trade_orders = []
     for o in data.get("tradeOrders") or []:
-        committed = committed_by_ref.get(o["ref"], 0)
-        lifted = delivered_by_ref.get(o["ref"], 0)
+        key = f"purchase:{o['ref']}" if o.get("side") == "purchase" else f"sale:{o['ref']}"
+        committed = committed_by_ref.get(key, 0)
+        lifted = delivered_by_ref.get(key, 0)
         updated = {**o, "committedLiftQty": committed, "liftedQty": lifted}
         updated["status"] = order_status(updated)
         trade_orders.append(updated)

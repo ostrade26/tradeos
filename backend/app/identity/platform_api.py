@@ -1585,6 +1585,7 @@ class FeatureOfferBody(BaseModel):
     card_tone: str = ""
     card_image_url: str = ""
     card_featured: bool = False
+    card_bg_hex: str = ""
 
 
 class FeatureOfferStatusBody(BaseModel):
@@ -1627,6 +1628,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
                 card_tone=body.card_tone,
                 card_image_url=body.card_image_url,
                 card_featured=body.card_featured,
+                card_bg_hex=body.card_bg_hex,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1645,6 +1647,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
             card_tone=body.card_tone,
             card_image_url=body.card_image_url,
             card_featured=body.card_featured,
+            card_bg_hex=body.card_bg_hex,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1673,6 +1676,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
                 card_tone=body.card_tone,
                 card_image_url=body.card_image_url,
                 card_featured=body.card_featured,
+                card_bg_hex=body.card_bg_hex,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1691,6 +1695,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
             card_tone=body.card_tone,
             card_image_url=body.card_image_url,
             card_featured=body.card_featured,
+            card_bg_hex=body.card_bg_hex,
             actor_user_id=session.user.id,
         )
         conn.commit()

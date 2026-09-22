@@ -59,11 +59,13 @@ def _enrich(conn, item: dict[str, Any]) -> dict[str, Any]:
             item["feature_detail"] = detail
         item["card_tone"] = str(offer.get("card_tone") or "")
         item["card_image_url"] = str(offer.get("card_image_url") or "")
+        item["card_bg_hex"] = str(offer.get("card_bg_hex") or "")
         item["pricing_type"] = str(offer.get("pricing_type") or "")
         item["price_cents"] = int(offer.get("price_cents") or 0)
     else:
         item["card_tone"] = ""
         item["card_image_url"] = ""
+        item["card_bg_hex"] = ""
     return item
 
 

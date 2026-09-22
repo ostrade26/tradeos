@@ -13,6 +13,7 @@ import {
   Truck,
   Zap,
 } from 'lucide-react'
+import { normalizeHex, relativeLuminance } from './accentColor'
 
 export type AddOnIllustrationKind = 'neutral' | 'ai' | 'analytics' | 'connect' | 'ops' | 'spark'
 
@@ -268,6 +269,32 @@ const CARD_SURFACES: Record<AddOnIllustrationKind, AddOnCardSurface> = {
 
 export function addOnCardSurface(kind: AddOnIllustrationKind): AddOnCardSurface {
   return CARD_SURFACES[kind]
+}
+
+/** Custom content-panel colour with auto light/dark ink. */
+export function addOnCardSurfaceFromHex(hex: string): AddOnCardSurface {
+  const bg = normalizeHex(hex)
+  const lightInk = relativeLuminance(bg) > 0.45
+  return {
+    imagePanel: '',
+    contentPanel: '',
+    ink: lightInk ? 'dark' : 'light',
+    title: lightInk ? 'text-slate-900' : 'text-white',
+    body: lightInk ? 'text-slate-700' : 'text-white/90',
+    price: lightInk ? 'text-slate-900' : 'text-white',
+    categoryPill: lightInk ? 'bg-black/10 text-slate-800' : 'bg-white/20 text-white',
+    divider: lightInk ? 'border-black/10' : 'border-white/25',
+    iconFallback: 'text-white',
+    ring: lightInk ? 'ring-black/10' : 'ring-black/20',
+    ringHover: lightInk ? 'hover:ring-black/20' : 'hover:ring-black/30',
+  }
+}
+
+export function resolveCardBgHex(raw?: string | null): string {
+  const value = (raw || '').trim()
+  if (!value) return ''
+  const hex = normalizeHex(value, '')
+  return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : ''
 }
 
 /** Stable category + surface for catalog cards (avoids regex mis-matches on preview keys). */

@@ -113,6 +113,36 @@ export const BLOCK_COLOR_ROWS: string[][] = [
   ],
 ]
 
+/**
+ * Light / soft surfaces for feature card backgrounds (readable with dark ink).
+ */
+export const SURFACE_COLOR_ROWS: string[][] = [
+  // Neutrals
+  [
+    '#FFFFFF', '#F8FAFC', '#F1F5F9', '#E2E8F0', '#F5F5F4', '#E7E5E4',
+    '#FAFAF9', '#F4F4F5', '#E4E4E7', '#F3F4F6', '#E5E7EB', '#D1D5DB',
+  ],
+  // Soft pastels
+  [
+    '#FEF2F2', '#FFF7ED', '#FFFBEB', '#F0FDF4', '#ECFDF5', '#F0FDFA',
+    '#ECFEFF', '#F0F9FF', '#EFF6FF', '#EEF2FF', '#FAF5FF', '#FDF2F8',
+  ],
+  [
+    '#FEE2E2', '#FFEDD5', '#FEF3C7', '#DCFCE7', '#D1FAE5', '#CCFBF1',
+    '#CFFAFE', '#E0F2FE', '#DBEAFE', '#E0E7FF', '#F3E8FF', '#FCE7F3',
+  ],
+  // Warm / brand-adjacent lights
+  [
+    '#F7E8D8', '#FAE8D4', '#F5E6D3', '#EDE4D8', '#E8F0F7', '#E6F4F1',
+    '#E8F5E9', '#F3E8E8', '#EEE8F5', '#F5E8EE', '#E8EEF5', '#F0EBE3',
+  ],
+  // Mid-light (still dark-ink friendly)
+  [
+    '#FCA5A5', '#FDBA74', '#FCD34D', '#86EFAC', '#6EE7B7', '#5EEAD4',
+    '#67E8F9', '#7DD3FC', '#93C5FD', '#A5B4FC', '#C4B5FD', '#F9A8D4',
+  ],
+]
+
 export function normalizeHex(hex: string, fallback = DEFAULT_CUSTOM_HEX): string {
   let value = hex.trim()
   if (!value.startsWith('#')) value = `#${value}`

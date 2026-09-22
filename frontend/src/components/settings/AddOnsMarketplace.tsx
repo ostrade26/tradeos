@@ -32,9 +32,9 @@ function AddOnTileSkeleton({ featured = false }: { featured?: boolean }) {
           : ADDON_CATALOG_CARD_FRAME,
       )}
     >
-      <div className="flex h-full">
-        <div className={cn('shrink-0 bg-gray-200 dark:bg-gray-700', featured ? 'w-1/2' : 'w-[40%]')} />
-        <div className={cn('flex flex-1 flex-col', featured ? 'w-1/2 px-6 py-6' : 'w-[60%] px-5 py-5')}>
+      <div className="grid h-full grid-cols-[2fr_3fr]">
+        <div className="min-h-0 bg-gray-200 dark:bg-gray-700" />
+        <div className={cn('flex min-h-0 flex-col', featured ? 'p-9' : 'px-5 py-5')}>
           <div className="h-5 w-20 rounded-full bg-gray-200 dark:bg-gray-700" />
           <div className="mt-3 h-6 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mt-2 space-y-2 flex-1">
@@ -100,6 +100,7 @@ function AddOnOfferCard({
         title={offer.title}
         description={offer.description}
         cardTone={offer.card_tone}
+        cardBgHex={offer.card_bg_hex}
         imageUrl={offer.card_image_url}
         priceLabel={price}
         footer={action}

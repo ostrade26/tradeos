@@ -5,6 +5,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Checkbox } from '../ui/Checkbox'
+import { BlockColorPicker } from '../ui/BlockColorPicker'
 import type { PlatformFeatureOffer } from '../../api/platformApi'
 import {
   ADDON_CATALOG_CARD_FRAME,
@@ -14,6 +15,7 @@ import {
 import {
   ADDON_CARD_TONE_OPTIONS,
   resolveAddOnCardTone,
+  resolveCardBgHex,
   type AddOnIllustrationKind,
 } from '../../lib/featureOfferVisuals'
 import { cn } from '../../lib/utils'
@@ -29,10 +31,12 @@ export type FeatureOfferFormPayload = {
   card_tone: AddOnIllustrationKind
   card_image_url: string
   card_featured: boolean
+  card_bg_hex: string
 }
 
 const CARD_TONES = ADDON_CARD_TONE_OPTIONS.map(option => option.id)
 const MAX_IMAGE_BYTES = 500 * 1024
+const DEFAULT_CUSTOM_CARD_HEX = '#f1f5f9'
 
 function nextCardTone(current: AddOnIllustrationKind): AddOnIllustrationKind {
   const others = CARD_TONES.filter(tone => tone !== current)
@@ -51,6 +55,7 @@ function emptyForm(): FeatureOfferFormPayload {
     card_tone: 'neutral',
     card_image_url: '',
     card_featured: false,
+    card_bg_hex: '',
   }
 }
 
@@ -66,6 +71,7 @@ function formFromOffer(offer: PlatformFeatureOffer): FeatureOfferFormPayload {
     card_tone: resolveAddOnCardTone(offer.feature_key, offer.title, offer.card_tone),
     card_image_url: offer.card_image_url ?? '',
     card_featured: Boolean(offer.card_featured),
+    card_bg_hex: resolveCardBgHex(offer.card_bg_hex),
   }
 }
 
@@ -142,6 +148,7 @@ export function PlatformFeatureOfferModal({
         card_tone: tone,
         card_image_url: merged.card_image_url ?? '',
         card_featured: Boolean(merged.card_featured),
+        card_bg_hex: resolveCardBgHex(merged.card_bg_hex),
       })
       setCardTone(tone)
       setPriceRupees('')
@@ -160,10 +167,16 @@ export function PlatformFeatureOfferModal({
   const previewKey = form.feature_key.trim() || 'feature'
   const previewCta = form.pricing_type === 'free' ? 'Enable' : 'Request'
   const hasImage = Boolean(form.card_image_url.trim())
+  const customBg = resolveCardBgHex(form.card_bg_hex)
 
   const applyTone = (tone: AddOnIllustrationKind) => {
     setCardTone(tone)
-    setForm(f => ({ ...f, card_tone: tone }))
+    setForm(f => ({ ...f, card_tone: tone, card_bg_hex: '' }))
+  }
+
+  const applyCustomBg = (hex: string) => {
+    const next = resolveCardBgHex(hex) || DEFAULT_CUSTOM_CARD_HEX
+    setForm(f => ({ ...f, card_bg_hex: next }))
   }
 
   const onPickImage = async (file: File | null) => {
@@ -187,6 +200,7 @@ export function PlatformFeatureOfferModal({
       card_tone: cardTone || 'neutral',
       card_image_url: form.card_image_url.trim(),
       card_featured: Boolean(form.card_featured),
+      card_bg_hex: resolveCardBgHex(form.card_bg_hex),
     })
   }
 
@@ -301,6 +315,7 @@ export function PlatformFeatureOfferModal({
                 elevated
                 featured={form.card_featured}
                 cardTone={cardTone}
+                cardBgHex={customBg}
                 imageUrl={form.card_image_url}
                 featureKey={previewKey}
                 title={previewTitle}
@@ -348,17 +363,24 @@ export function PlatformFeatureOfferModal({
                     type="button"
                     title={option.label}
                     aria-label={`Background ${option.label}`}
-                    aria-pressed={cardTone === option.id}
+                    aria-pressed={!customBg && cardTone === option.id}
                     onClick={() => applyTone(option.id)}
                     className={cn(
                       'h-8 w-8 rounded-full transition-transform cursor-pointer attex-focus',
                       option.swatch,
-                      cardTone === option.id
+                      !customBg && cardTone === option.id
                         ? 'outline outline-2 outline-offset-2 outline-[#5c2a2a] scale-105'
                         : 'hover:scale-105',
                     )}
                   />
                 ))}
+                <BlockColorPicker
+                  value={customBg || DEFAULT_CUSTOM_CARD_HEX}
+                  selected={Boolean(customBg)}
+                  palette="surface"
+                  onChange={applyCustomBg}
+                  aria-label="Custom card background"
+                />
                 <button
                   type="button"
                   onClick={() => applyTone(nextCardTone(cardTone))}

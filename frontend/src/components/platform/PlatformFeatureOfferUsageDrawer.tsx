@@ -112,6 +112,7 @@ export function PlatformFeatureOfferUsageDrawer({
             title={detail.title}
             description={detail.description}
             cardTone={detail.card_tone}
+            cardBgHex={detail.card_bg_hex}
             imageUrl={detail.card_image_url}
             priceLabel={priceLabel}
             footer={

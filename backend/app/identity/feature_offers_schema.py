@@ -17,6 +17,7 @@ def init_feature_offers_schema() -> None:
             _ensure_card_tone_column(conn)
             _ensure_card_image_column(conn)
             _ensure_card_featured_column(conn)
+            _ensure_card_bg_hex_column(conn)
             _seed_tradeal_ai_offer(conn)
             _seed_custom_branding_offer(conn)
             conn.commit()
@@ -26,6 +27,7 @@ def init_feature_offers_schema() -> None:
         _ensure_card_tone_column(conn)
         _ensure_card_image_column(conn)
         _ensure_card_featured_column(conn)
+        _ensure_card_bg_hex_column(conn)
         _seed_tradeal_ai_offer(conn)
         _seed_custom_branding_offer(conn)
         conn.commit()
@@ -74,6 +76,19 @@ def _ensure_card_featured_column(conn) -> None:
         )
 
 
+def _ensure_card_bg_hex_column(conn) -> None:
+    if uses_postgres():
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS card_bg_hex TEXT NOT NULL DEFAULT ''"
+        )
+        return
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(platform_feature_offers)").fetchall()}
+    if "card_bg_hex" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN card_bg_hex TEXT NOT NULL DEFAULT ''"
+        )
+
+
 def _create_tables(conn) -> None:
     pk = "SERIAL PRIMARY KEY" if uses_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
     conn.execute(
@@ -91,6 +106,7 @@ def _create_tables(conn) -> None:
             card_tone TEXT NOT NULL DEFAULT '',
             card_image_url TEXT NOT NULL DEFAULT '',
             card_featured INTEGER NOT NULL DEFAULT 0,
+            card_bg_hex TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             listed_at TEXT,

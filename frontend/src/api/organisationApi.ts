@@ -41,6 +41,7 @@ export interface OrgFeatureOffer {
   card_tone?: string
   card_image_url?: string
   card_featured?: boolean
+  card_bg_hex?: string
   entitlement_status: 'available' | 'pending' | 'active'
 }
 

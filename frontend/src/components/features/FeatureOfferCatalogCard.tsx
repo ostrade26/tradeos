@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 import { Badge } from '../ui/Badge'
+import { darkenHex } from '../../lib/accentColor'
 import {
   addOnCardSurface,
+  addOnCardSurfaceFromHex,
   addOnCategoryLabel,
   iconForAddOnTone,
   resolveAddOnCardTone,
+  resolveCardBgHex,
   type AddOnIllustrationKind,
 } from '../../lib/featureOfferVisuals'
 
@@ -33,6 +36,7 @@ export function FeatureOfferCatalogCard({
   featured = false,
   tone,
   cardTone,
+  cardBgHex,
   imageUrl,
   imageOverlay,
   className,
@@ -52,6 +56,8 @@ export function FeatureOfferCatalogCard({
   tone?: AddOnIllustrationKind
   /** Persisted accent from the feature offer. */
   cardTone?: string | null
+  /** Custom content-panel background hex (overrides tone panel colours). */
+  cardBgHex?: string | null
   /** Optional left-panel image (URL or data URL). */
   imageUrl?: string | null
   /** Edit controls rendered over the image panel (create/edit modal). */
@@ -61,15 +67,19 @@ export function FeatureOfferCatalogCard({
   const surfaceKind = resolveAddOnCardTone(featureKey, title, cardTone ?? tone)
   const Icon = iconForAddOnTone(surfaceKind)
   const category = addOnCategoryLabel(surfaceKind)
-  const surface = addOnCardSurface(surfaceKind)
+  const customBg = resolveCardBgHex(cardBgHex)
+  const surface = customBg ? addOnCardSurfaceFromHex(customBg) : addOnCardSurface(surfaceKind)
   const showFooter = priceLabel != null || footer != null
   const isFree = priceLabel === 'Free'
   const image = (imageUrl || '').trim()
+  const imagePanelStyle = customBg ? { backgroundColor: darkenHex(customBg, 0.14) } : undefined
+  const contentPanelStyle = customBg ? { backgroundColor: customBg } : undefined
 
   return (
     <article
       className={cn(
-        'relative flex h-full overflow-hidden rounded-md ring-1',
+        'relative grid h-full min-h-[180px] overflow-hidden rounded-md ring-1',
+        'grid-cols-[2fr_3fr]',
         elevated
           ? 'shadow-[0_18px_40px_-16px_rgba(15,23,42,0.22),0_8px_16px_-8px_rgba(15,23,42,0.1)] dark:shadow-[0_18px_40px_-16px_rgba(0,0,0,0.55),0_8px_16px_-8px_rgba(0,0,0,0.35)]'
           : 'shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.25)]',
@@ -81,11 +91,8 @@ export function FeatureOfferCatalogCard({
       )}
     >
       <div
-        className={cn(
-          'relative flex shrink-0 items-center justify-center overflow-hidden',
-          featured ? 'w-1/2' : 'w-[40%]',
-          surface.imagePanel,
-        )}
+        className={cn('relative min-h-0 overflow-hidden', !customBg && surface.imagePanel)}
+        style={imagePanelStyle}
       >
         {!image ? (
           <div
@@ -104,15 +111,16 @@ export function FeatureOfferCatalogCard({
             className="absolute inset-0 z-[1] h-full w-full object-cover"
           />
         ) : (
-          <Icon
-            className={cn(
-              'relative z-[1]',
-              featured ? 'h-16 w-16' : 'h-12 w-12',
-              surface.iconFallback,
-            )}
-            strokeWidth={1.75}
-            aria-hidden
-          />
+          <div className="absolute inset-0 z-[1] flex items-center justify-center">
+            <Icon
+              className={cn(
+                featured ? 'h-16 w-16' : 'h-12 w-12',
+                surface.iconFallback,
+              )}
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          </div>
         )}
         {imageOverlay ? (
           <div className="absolute inset-0 z-[2] flex items-center justify-center p-2">
@@ -123,14 +131,16 @@ export function FeatureOfferCatalogCard({
 
       <div
         className={cn(
-          'relative flex min-w-0 flex-1 flex-col',
-          featured ? 'px-6 py-6' : 'px-4 py-4',
-          surface.contentPanel,
+          'relative flex min-h-0 min-w-0 flex-col',
+          featured ? 'p-9' : 'px-4 py-4',
+          !customBg && surface.contentPanel,
         )}
+        style={contentPanelStyle}
       >
         <span
           className={cn(
-            'inline-flex w-fit max-w-full truncate rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide',
+            'inline-flex w-fit max-w-full truncate rounded-full px-2.5 py-0.5 font-semibold tracking-wide',
+            featured ? 'text-xs' : 'text-[11px]',
             surface.categoryPill,
           )}
         >
@@ -138,8 +148,8 @@ export function FeatureOfferCatalogCard({
         </span>
         <h3
           className={cn(
-            'mt-2 truncate font-semibold tracking-tight leading-snug',
-            featured ? 'text-2xl' : 'text-lg',
+            'mt-2 truncate tracking-tight leading-snug',
+            featured ? 'text-[28px] font-bold' : 'text-lg font-semibold',
             surface.title,
           )}
         >
@@ -147,8 +157,8 @@ export function FeatureOfferCatalogCard({
         </h3>
         <p
           className={cn(
-            'mt-1.5 text-[12px] leading-snug break-words',
-            featured ? 'line-clamp-4' : 'line-clamp-2',
+            'mt-2 break-words leading-snug',
+            featured ? 'line-clamp-4 text-[20px]' : 'line-clamp-2 text-[12px]',
             surface.body,
           )}
         >
@@ -158,7 +168,8 @@ export function FeatureOfferCatalogCard({
         {showFooter ? (
           <div
             className={cn(
-              'mt-auto flex min-h-[2rem] items-center justify-between gap-3 border-t pt-3',
+              'mt-auto flex items-center justify-between gap-3 border-t',
+              featured ? 'min-h-[2.75rem] pt-4' : 'min-h-[2rem] pt-3',
               surface.divider,
             )}
           >
@@ -168,7 +179,7 @@ export function FeatureOfferCatalogCard({
                   variant="success"
                   className={cn(
                     'inline-flex items-center font-semibold px-3 leading-none',
-                    featured ? 'h-9 text-lg' : 'h-8 text-base',
+                    featured ? 'h-10 text-[28px]' : 'h-8 text-base',
                   )}
                 >
                   Free
@@ -177,7 +188,7 @@ export function FeatureOfferCatalogCard({
                 <p
                   className={cn(
                     'inline-flex items-center font-semibold tabular-nums tracking-tight leading-none',
-                    featured ? 'h-9 text-2xl' : 'h-8 text-lg',
+                    featured ? 'h-10 text-[28px]' : 'h-8 text-lg',
                     surface.price,
                   )}
                 >
@@ -187,7 +198,7 @@ export function FeatureOfferCatalogCard({
             ) : (
               <span />
             )}
-            <div className={cn('flex shrink-0 items-center', featured ? 'h-9' : 'h-8')}>{footer}</div>
+            <div className={cn('flex shrink-0 items-center', featured ? 'h-10' : 'h-8')}>{footer}</div>
           </div>
         ) : null}
       </div>

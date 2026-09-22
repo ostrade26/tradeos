@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,8 @@ CATALOG_STATUSES = frozenset({"draft", "listed", "retired"})
 CARD_TONES = frozenset({"neutral", "ai", "analytics", "connect", "ops", "spark"})
 # ~500KB binary as base64 data URL
 MAX_CARD_IMAGE_CHARS = 700_000
+_HEX3_RE = re.compile(r"^#[0-9a-fA-F]{3}$")
+_HEX6_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def _now() -> str:
@@ -25,6 +28,19 @@ def _now() -> str:
 def _normalize_card_tone(raw: str | None) -> str:
     tone = (raw or "").strip().lower()
     return tone if tone in CARD_TONES else ""
+
+
+def _normalize_card_bg_hex(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if not value.startswith("#"):
+        value = f"#{value}"
+    if _HEX3_RE.fullmatch(value):
+        value = "#" + "".join(ch * 2 for ch in value[1:])
+    if not _HEX6_RE.fullmatch(value):
+        raise HTTPException(status_code=400, detail="Invalid card background colour")
+    return value.lower()
 
 
 def _normalize_card_image_url(raw: str | None) -> str:
@@ -72,6 +88,10 @@ def _offer_row(row: Any) -> dict[str, Any]:
     data["card_tone"] = tone
     data["card_image_url"] = str(data.get("card_image_url") or "").strip()
     data["card_featured"] = bool(int(data.get("card_featured") or 0))
+    try:
+        data["card_bg_hex"] = _normalize_card_bg_hex(str(data.get("card_bg_hex") or ""))
+    except HTTPException:
+        data["card_bg_hex"] = ""
     return data
 
 
@@ -229,6 +249,7 @@ def upsert_offer(
     card_tone: str = "",
     card_image_url: str = "",
     card_featured: bool = False,
+    card_bg_hex: str = "",
 ) -> dict[str, Any]:
     key = normalize_feature_key(feature_key, title)
     title = title.strip()
@@ -239,6 +260,7 @@ def upsert_offer(
         raise HTTPException(status_code=400, detail="Invalid pricing type")
     tone = _normalize_card_tone(card_tone) or _default_card_tone(key, title)
     image_url = _normalize_card_image_url(card_image_url)
+    bg_hex = _normalize_card_bg_hex(card_bg_hex)
     featured = 1 if card_featured else 0
     now = _now()
     if offer_id:
@@ -264,7 +286,7 @@ def upsert_offer(
                 UPDATE platform_feature_offers
                 SET feature_key = %s, title = %s, description = %s, pricing_type = %s,
                     price_cents = %s, currency = %s, sort_order = %s, card_tone = %s,
-                    card_image_url = %s, card_featured = %s, updated_at = %s
+                    card_image_url = %s, card_featured = %s, card_bg_hex = %s, updated_at = %s
                 WHERE id = %s
                 """,
                 (
@@ -278,6 +300,7 @@ def upsert_offer(
                     tone,
                     image_url,
                     featured,
+                    bg_hex,
                     now,
                     offer_id,
                 ),
@@ -288,7 +311,7 @@ def upsert_offer(
                 UPDATE platform_feature_offers
                 SET feature_key = ?, title = ?, description = ?, pricing_type = ?,
                     price_cents = ?, currency = ?, sort_order = ?, card_tone = ?,
-                    card_image_url = ?, card_featured = ?, updated_at = ?
+                    card_image_url = ?, card_featured = ?, card_bg_hex = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -302,6 +325,7 @@ def upsert_offer(
                     tone,
                     image_url,
                     featured,
+                    bg_hex,
                     now,
                     offer_id,
                 ),
@@ -321,8 +345,8 @@ def upsert_offer(
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
                  catalog_status, sort_order, card_tone, card_image_url, card_featured,
-                 created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s, %s, %s)
+                 card_bg_hex, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -336,6 +360,7 @@ def upsert_offer(
                     tone,
                     image_url,
                     featured,
+                    bg_hex,
                     now,
                     now,
                 ),
@@ -347,8 +372,8 @@ def upsert_offer(
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
                  catalog_status, sort_order, card_tone, card_image_url, card_featured,
-                 created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+                 card_bg_hex, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     key,
@@ -361,6 +386,7 @@ def upsert_offer(
                     tone,
                     image_url,
                     featured,
+                    bg_hex,
                     now,
                     now,
                 ),
@@ -376,6 +402,7 @@ def upsert_offer(
             "feature_key": key,
             "pricing_type": pricing,
             "card_tone": tone,
+            "card_bg_hex": bg_hex,
             "card_featured": bool(featured),
         },
     )
