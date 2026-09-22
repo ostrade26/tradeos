@@ -78,6 +78,7 @@ export function LiftAllocationsForm({
   const eligibleSOs = orders.filter(o =>
     o.side === 'sale'
     && o.status !== 'cancelled'
+    && o.status !== 'completed'
     && (!itemFilter || o.itemName === itemFilter)
     && soMatchesSellerFilter(o, sellerFilter, orders),
   )
@@ -88,7 +89,9 @@ export function LiftAllocationsForm({
 
   const setSo = (row: LiftAllocationDraft, soRef: string) => {
     const so = orders.find(o => o.ref === soRef && o.side === 'sale')
-    const pool = so ? poolPOsForSo(so, orders) : []
+    const pool = so
+      ? poolPOsForSo(so, orders).filter(p => p.status !== 'completed' || p.ref === row.poRef)
+      : []
     const poRef = pool.some(p => p.ref === row.poRef)
       ? row.poRef
       : (pool.find(p => p.ref === so?.poRef) ?? pool[0])?.ref ?? ''
@@ -122,7 +125,9 @@ export function LiftAllocationsForm({
       onChange([...rows, newAllocationDraft()])
       return
     }
-    const pool = poolPOsForSo(next, orders).filter(p => remainingOnOrder(p, lifts, excludeLiftId) > 0)
+    const pool = poolPOsForSo(next, orders)
+      .filter(p => p.status !== 'completed')
+      .filter(p => remainingOnOrder(p, lifts, excludeLiftId) > 0)
     const po = pool.find(p => p.ref === next.poRef) ?? pool[0]
     const soLeft = remainingOnOrder(next, lifts, excludeLiftId)
     const poLeft = po
@@ -154,12 +159,11 @@ export function LiftAllocationsForm({
           const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
           const usedSos = new Set(rows.filter(r => r.id !== row.id).map(r => r.soRef).filter(Boolean))
           const soOptions = (() => {
-            // Show all matching non-cancelled SOs so legacy/missing links can be repaired
-            // even when remaining capacity looks like zero due to bad import totals.
             const opts = eligibleSOs.filter(s => {
               if (usedSos.has(s.ref) && s.ref !== row.soRef) return false
               return true
             })
+            // Keep a currently selected SO visible when editing (even if completed).
             if (row.soRef && !opts.some(s => s.ref === row.soRef)) {
               const currentSo = orders.find(o => o.ref === row.soRef && o.side === 'sale' && o.status !== 'cancelled')
               if (currentSo) opts.unshift(currentSo)
@@ -167,7 +171,9 @@ export function LiftAllocationsForm({
             return opts
           })()
           const poPool = (() => {
-            const pool = so ? [...poolPOsForSo(so, orders)] : []
+            const pool = so
+              ? poolPOsForSo(so, orders).filter(p => p.status !== 'completed' || p.ref === row.poRef)
+              : []
             if (row.poRef && !pool.some(p => p.ref === row.poRef)) {
               const currentPo = orders.find(o => o.ref === row.poRef && o.side === 'purchase' && o.status !== 'cancelled')
               if (currentPo) pool.unshift(currentPo)

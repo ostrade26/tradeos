@@ -35,11 +35,19 @@ export function StockLiftForm({
   const eligiblePOs = orders.filter(o =>
     o.side === 'purchase'
     && o.status !== 'cancelled'
+    && o.status !== 'completed'
     && (!itemFilter || o.itemName === itemFilter)
     && (!sellerFilter || (o.sellerName || o.partyName) === sellerFilter),
   )
 
-  const poOptions = eligiblePOs
+  const poOptions = (() => {
+    const opts = [...eligiblePOs]
+    if (value.poRef && !opts.some(o => o.ref === value.poRef)) {
+      const current = orders.find(o => o.ref === value.poRef && o.side === 'purchase' && o.status !== 'cancelled')
+      if (current) opts.unshift(current)
+    }
+    return opts
+  })()
 
   const po = orders.find(o => o.ref === value.poRef && o.side === 'purchase')
   const poLeft = po ? remainingOnOrder(po, lifts, excludeLiftId) : 0
