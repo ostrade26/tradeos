@@ -1461,6 +1461,8 @@ def platform_mark_seat_request_paid(
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "subscriptions.manage")
+    from .email_lifecycle import send_seat_request_lifecycle_email
+
     if uses_postgres():
         with _pg_connect() as conn:
             req = mark_seat_request_paid(
@@ -1470,6 +1472,7 @@ def platform_mark_seat_request_paid(
                 payment_reference=body.payment_reference,
             )
             conn.commit()
+            send_seat_request_lifecycle_email(conn, req, decision="paid")
             return {"request": req}
     with _sqlite_connect() as conn:
         req = mark_seat_request_paid(
@@ -1479,6 +1482,7 @@ def platform_mark_seat_request_paid(
             payment_reference=body.payment_reference,
         )
         conn.commit()
+        send_seat_request_lifecycle_email(conn, req, decision="paid")
         return {"request": req}
 
 
@@ -1491,6 +1495,8 @@ def platform_approve_seat_request(
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "subscriptions.manage")
+    from .email_lifecycle import send_seat_request_lifecycle_email
+
     if uses_postgres():
         with _pg_connect() as conn:
             result = approve_seat_request(
@@ -1501,6 +1507,7 @@ def platform_approve_seat_request(
                 admin_note=body.admin_note,
             )
             conn.commit()
+            send_seat_request_lifecycle_email(conn, result["request"], decision="approved")
             return result
     with _sqlite_connect() as conn:
         result = approve_seat_request(
@@ -1511,6 +1518,7 @@ def platform_approve_seat_request(
             admin_note=body.admin_note,
         )
         conn.commit()
+        send_seat_request_lifecycle_email(conn, result["request"], decision="approved")
         return result
 
 
@@ -1523,6 +1531,8 @@ def platform_reject_seat_request(
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "subscriptions.manage")
+    from .email_lifecycle import send_seat_request_lifecycle_email
+
     if uses_postgres():
         with _pg_connect() as conn:
             req = reject_seat_request(
@@ -1532,6 +1542,7 @@ def platform_reject_seat_request(
                 admin_note=body.admin_note,
             )
             conn.commit()
+            send_seat_request_lifecycle_email(conn, req, decision="rejected")
             return {"request": req}
     with _sqlite_connect() as conn:
         req = reject_seat_request(
@@ -1541,6 +1552,7 @@ def platform_reject_seat_request(
             admin_note=body.admin_note,
         )
         conn.commit()
+        send_seat_request_lifecycle_email(conn, req, decision="rejected")
         return {"request": req}
 
 
@@ -1670,16 +1682,19 @@ def approve_feature_interest(
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "organisations.edit")
+    from .email_lifecycle import send_feature_interest_lifecycle_email
     from .feature_interests_repository import approve_interest
 
     if uses_postgres():
         with _pg_connect() as conn:
             item = approve_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
             conn.commit()
+            send_feature_interest_lifecycle_email(conn, item, decision="approved")
             return {"interest": item}
     with _sqlite_connect() as conn:
         item = approve_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
         conn.commit()
+        send_feature_interest_lifecycle_email(conn, item, decision="approved")
         return {"interest": item}
 
 
@@ -1692,16 +1707,19 @@ def reject_feature_interest(
     session = _session(request)
     auth.require_platform(session)
     auth.require_permission(session, "organisations.edit")
+    from .email_lifecycle import send_feature_interest_lifecycle_email
     from .feature_interests_repository import reject_interest
 
     if uses_postgres():
         with _pg_connect() as conn:
             item = reject_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
             conn.commit()
+            send_feature_interest_lifecycle_email(conn, item, decision="rejected")
             return {"interest": item}
     with _sqlite_connect() as conn:
         item = reject_interest(conn, interest_id=interest_id, actor_user_id=session.user.id, note=body.note)
         conn.commit()
+        send_feature_interest_lifecycle_email(conn, item, decision="rejected")
         return {"interest": item}
 
 

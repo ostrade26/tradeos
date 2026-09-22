@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import auth
-from .billing_repository import organisation_detail
+from .billing_repository import generate_temp_password, organisation_detail
 from .org_members_repository import (
     create_organisation_member,
     list_organisation_members,
@@ -188,7 +188,7 @@ def submit_product_request(body: ProductRequestBody, request: Request) -> dict[s
 class CreateMemberBody(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     name: str = ""
-    password: str = Field(min_length=4)
+    password: str = ""
     role_slug: str = Field(pattern="^(organisation_admin|operator|view_only)$")
     phone: str = ""
     account_type: str = Field(default="wholesaler_retailer", pattern="^(wholesaler_retailer|broker)$")
@@ -205,6 +205,56 @@ class MemberPasswordBody(BaseModel):
 
 class ResetSignInBody(BaseModel):
     username: str = ""
+
+
+def _create_member_with_welcome(
+    conn,
+    *,
+    organisation_id: int,
+    body: CreateMemberBody,
+    actor_user_id: int,
+) -> dict[str, Any]:
+    from .email_welcome import send_teammate_welcome_email
+
+    password = (body.password or "").strip()
+    if password and len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    if not password:
+        password = generate_temp_password()
+
+    email = body.email.strip()
+    name = body.name.strip() or email
+    user_id = create_organisation_member(
+        conn,
+        organisation_id=organisation_id,
+        email=email,
+        name=name,
+        password=password,
+        role_slug=body.role_slug,
+        phone=body.phone,
+        account_type=body.account_type,
+        actor_user_id=actor_user_id,
+    )
+    conn.commit()
+
+    org_name = ""
+    if uses_postgres():
+        row = conn.execute("SELECT name FROM organisations WHERE id = %s", (organisation_id,)).fetchone()
+    else:
+        row = conn.execute("SELECT name FROM organisations WHERE id = ?", (organisation_id,)).fetchone()
+    if row:
+        from .billing_repository import _mapping
+
+        org_name = str(_mapping(row).get("name") or "")
+
+    welcome_email_sent = send_teammate_welcome_email(
+        to=email,
+        name=name,
+        organisation_name=org_name,
+        login_id=email.lower(),
+        temporary_password=password,
+    )
+    return {"id": user_id, "welcome_email_sent": welcome_email_sent}
 
 
 @router.get("/members", summary="Licensed organisation users")
@@ -230,33 +280,19 @@ def create_member(body: CreateMemberBody, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="Organisation context required")
     if uses_postgres():
         with _pg_connect() as conn:
-            user_id = create_organisation_member(
+            return _create_member_with_welcome(
                 conn,
                 organisation_id=org_id,
-                email=body.email,
-                name=body.name,
-                password=body.password,
-                role_slug=body.role_slug,
-                phone=body.phone,
-                account_type=body.account_type,
+                body=body,
                 actor_user_id=session.user.id,
             )
-            conn.commit()
-            return {"id": user_id}
     with _sqlite_connect() as conn:
-        user_id = create_organisation_member(
+        return _create_member_with_welcome(
             conn,
             organisation_id=org_id,
-            email=body.email,
-            name=body.name,
-            password=body.password,
-            role_slug=body.role_slug,
-            phone=body.phone,
-            account_type=body.account_type,
+            body=body,
             actor_user_id=session.user.id,
         )
-        conn.commit()
-        return {"id": user_id}
 
 
 @router.patch("/members/{user_id}", summary="Activate or deactivate member")

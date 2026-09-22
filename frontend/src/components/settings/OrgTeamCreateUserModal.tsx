@@ -39,7 +39,7 @@ function AddUserFormFields({
   return (
     <>
       <p className="text-sm text-muted mb-4">
-        Email is used to sign in. Share the password you set here with the user securely.
+        Email is used to sign in. We email login credentials to this address. Leave the password blank to auto-generate one.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
@@ -65,11 +65,12 @@ function AddUserFormFields({
           className="sm:col-span-2"
         />
         <PasswordInput
-          label="Password"
+          label="Password (optional)"
           value={password}
           onChange={e => setPassword(e.target.value)}
           autoComplete="new-password"
           className="sm:col-span-2"
+          placeholder="Leave blank to auto-generate"
         />
       </div>
     </>
@@ -169,15 +170,25 @@ export function OrgTeamCreateUserModal({
 
   const submit = async () => {
     if (seatWarning?.blocksCreate) return
+    const trimmedPassword = password.trim()
+    if (trimmedPassword && trimmedPassword.length < 4) {
+      toast.error('Password must be at least 4 characters, or leave blank to auto-generate')
+      return
+    }
     setSubmitting(true)
     try {
-      const { id } = await organisationApi.createMember({
+      const result = await organisationApi.createMember({
         email: email.trim(),
         name: name.trim(),
-        password,
+        password: trimmedPassword || undefined,
         role_slug: roleSlug,
       })
-      await onCreated(id)
+      await onCreated(result.id)
+      if (result.welcome_email_sent) {
+        toast.success(`Welcome email sent to ${email.trim()}`)
+      } else {
+        toast.error('User created, but the welcome email could not be sent. Share the password manually if you set one.')
+      }
       onClose()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not create user')
@@ -187,7 +198,8 @@ export function OrgTeamCreateUserModal({
   }
 
   const valid =
-    email.trim().includes('@') && password.length >= 4 && !seatWarning?.blocksCreate && !billingLoading
+    email.trim().includes('@') && !seatWarning?.blocksCreate && !billingLoading
+    && (!password.trim() || password.trim().length >= 4)
 
   const planHref = settingsPath('plan')
 

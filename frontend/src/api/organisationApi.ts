@@ -88,12 +88,12 @@ export const organisationApi = {
   createMember: (body: {
     email: string
     name?: string
-    password: string
+    password?: string
     role_slug: OrgRoleSlug
     phone?: string
     account_type?: 'wholesaler_retailer' | 'broker'
   }) =>
-    apiFetch<{ id: number }>('/organisation/members', {
+    apiFetch<{ id: number; welcome_email_sent?: boolean }>('/organisation/members', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

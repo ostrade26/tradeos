@@ -298,7 +298,7 @@ export function SettingsTeamPanel({
         open={createSuccessOpen}
         onClose={() => setCreateSuccessOpen(false)}
         title="User created"
-        description="The user is on a licensed seat. Share their email and password securely so they can sign in."
+        description="They are on a licensed seat. A welcome email with sign-in details is sent to their address when email is configured."
       />
       <OrgTeamPasswordModal
         member={passwordUser}

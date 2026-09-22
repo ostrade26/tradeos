@@ -404,3 +404,31 @@ def find_primary_admin_user(conn, organisation_id: int) -> dict[str, Any] | None
         "name": r.get("name") or "",
         "login_id": _login_identifier(str(r.get("username") or ""), str(r.get("email") or "")),
     }
+
+
+def user_email_row(conn, user_id: int) -> dict[str, Any] | None:
+    """Return email/name/username for lifecycle emails, or None if missing."""
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT id, username, email, name, status FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id, username, email, name, status FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return None
+    r = dict(_mapping(row))
+    email = str(r.get("email") or "").strip()
+    username = str(r.get("username") or "").strip()
+    name = str(r.get("name") or "").strip()
+    return {
+        "user_id": int(r["id"]),
+        "email": email,
+        "username": username,
+        "name": name,
+        "login_id": _login_identifier(username, email),
+        "status": str(r.get("status") or ""),
+    }
