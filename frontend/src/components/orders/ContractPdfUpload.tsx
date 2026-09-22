@@ -250,7 +250,7 @@ export function ContractPdfUpload({ side, onParsed, onBeforeApply, embedded = fa
       <div className={shellClass}>
         {imported ? (
           <>
-            <div className={cn('flex items-start gap-3', embedded ? 'pb-1' : 'p-6')}>
+            <div className={cn('flex items-start gap-3', embedded ? 'pb-1' : 'p-8')}>
               <button
                 type="button"
                 onClick={toggleCollapsed}
@@ -288,14 +288,14 @@ export function ContractPdfUpload({ side, onParsed, onBeforeApply, embedded = fa
             {!collapsed && preview && (
               <div className={cn(
                 'border-t border-gray-200 dark:border-gray-700',
-                embedded ? 'mt-4 pt-4' : 'px-6 py-4',
+                embedded ? 'mt-4 pt-4' : 'px-8 py-4',
               )}>
                 <PdfImportReview parsed={preview} isPO={isPO} itemCorrection={itemCorrection} />
               </div>
             )}
           </>
         ) : (
-          <div className={embedded ? undefined : 'p-6'}>
+          <div className={embedded ? undefined : 'p-8'}>
             {!embedded && (
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
                 <FileUp className="h-4 w-4 text-accent" />

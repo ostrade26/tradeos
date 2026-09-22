@@ -14,7 +14,7 @@ function MetricCard({
 }) {
   return (
     <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
-      <div className="p-4">
+      <div className="p-8">
         <p className="text-xs font-medium text-muted">{label}</p>
         <p className={`text-lg font-semibold tabular-nums mt-1 ${valueClassName ?? 'text-heading'}`}>{value}</p>
         {detail ? <p className="text-xs text-muted mt-1.5 leading-relaxed">{detail}</p> : null}

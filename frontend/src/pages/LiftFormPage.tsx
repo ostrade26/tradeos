@@ -11,12 +11,16 @@ import { QtyInput } from '../components/ui/QtyInput'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
 import { TABLE_QTY_NOTE } from '../components/ui/DataTable'
-import { CaptionCard } from '../components/ui/CaptionCard'
 import {
   LiftTankersForm,
   buildLiftTankerAvailabilityCaption,
-  buildLoadOnRiskCaption,
 } from '../components/lifts/LiftTankersForm'
+import { Checkbox } from '../components/ui/Checkbox'
+import {
+  LOAD_ON_RISK_DETAIL,
+  LOAD_ON_RISK_DETAIL_ACTIVE,
+  LOAD_ON_RISK_LABEL,
+} from '../lib/loadOnRisk'
 import { LiftAllocationsForm, newAllocationDraft, type LiftAllocationDraft } from '../components/lifts/LiftAllocationsForm'
 import { StockLiftForm, type StockLiftDraft } from '../components/lifts/StockLiftForm'
 import { cn, formatQty, formatDate, normalizeDateToIso } from '../lib/utils'
@@ -112,6 +116,20 @@ function SidebarMetaRow({
   )
 }
 
+function FormFieldGroup({
+  children,
+  columns = 'grid-cols-1 sm:grid-cols-3',
+}: {
+  children: ReactNode
+  columns?: string
+}) {
+  return (
+    <section>
+      <div className={cn('grid gap-3', columns)}>{children}</div>
+    </section>
+  )
+}
+
 function LiftFormSidebar({
   lastLift,
   isStockMode,
@@ -121,6 +139,7 @@ function LiftFormSidebar({
   balanceApplied,
   isSelfLift,
   isDeliveredActual = false,
+  previewNotes,
   saveError,
   onSave,
   onCancel,
@@ -136,6 +155,7 @@ function LiftFormSidebar({
   balanceApplied: number
   isSelfLift: boolean
   isDeliveredActual?: boolean
+  previewNotes?: { label: string; value: ReactNode; valueClassName?: string }[]
   saveError: string
   onSave: () => void
   onCancel: () => void
@@ -148,11 +168,27 @@ function LiftFormSidebar({
   const tankerQtyLabel = isDeliveredActual
     ? `Total actual quantity (${tankerCount === 1 ? 'tanker' : 'tankers'})`
     : `Planned on tanker${tankerCount === 1 ? '' : 's'}`
+  const notes = previewNotes ?? []
 
   return (
-    <div className="space-y-4 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
+    <div className="space-y-3 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
+      {notes.length > 0 && (
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
+          <div className="flex flex-wrap items-stretch divide-x divide-gray-200 bg-gray-100/90 px-3 py-3 dark:divide-gray-700 dark:bg-gray-800/50">
+            {notes.map(note => (
+              <div key={note.label} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0 py-1">
+                <p className="text-xs font-medium text-muted leading-tight">{note.label}</p>
+                <div className={cn('mt-1 text-sm font-semibold tabular-nums text-heading leading-tight', note.valueClassName)}>
+                  {note.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {lastLift && (
-        <Card>
+        <Card className="p-8" padding={false}>
           <h3 className="text-sm font-semibold text-heading mb-3">Last entry in register</h3>
           <div className="space-y-2 text-sm">
             <SidebarMetaRow label="Lift ref" value={formatLiftRef(lastLift.liftRef)} />
@@ -164,7 +200,7 @@ function LiftFormSidebar({
         </Card>
       )}
 
-      <Card>
+      <Card className="p-8" padding={false}>
         <h3 className="text-sm font-semibold text-heading mb-3">Summary</h3>
         <div className="space-y-2 text-sm">
           <SidebarMetaRow label="Mode" value={isStockMode ? STOCK_LIFT_LABEL : 'Customer dispatch'} />
@@ -572,10 +608,14 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
       : 'One tanker can cover several SOs — add each order and split the load'
 
   const canSave = parsedAllocations.some(a => a.qtyMt > 0)
+  const availabilityCaption = buildLiftTankerAvailabilityCaption({
+    tankers,
+    maxQtyMt: allocTotal > 0 ? allocTotal : undefined,
+  })
 
   return (
     <>
-    <div className="animate-fade-in w-full mx-auto max-w-3xl lg:max-w-5xl pb-24 sm:pb-0">
+    <div className="animate-fade-in w-full pb-24 sm:pb-0">
       <PageHeader
         title={pageTitle}
         subtitle={pageSubtitle}
@@ -590,13 +630,12 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
         <FieldValidationBanner className="mb-4" />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          {!isEdit && (
-            <Card>
-              <h3 className="text-sm font-semibold mb-4">Lift for</h3>
-              <div className="space-y-4">
-                <div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-3">
+          <Card className="p-8" padding={false}>
+            <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-100 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-800">
+              {!isEdit && (
+                <section className="space-y-3">
                   <SegmentedControl
                     ariaLabel="Lift purpose"
                     options={[
@@ -609,160 +648,154 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                       if (next === 'stock') setIsSelfLift('true')
                     }}
                   />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select
-                    label="Item"
-                    searchable
-                    options={[
-                      { value: '', label: 'All items' },
-                      ...itemOptions.map(item => ({ value: item, label: item })),
-                    ]}
-                    value={itemFilter}
-                    onChange={e => setItemFilter(e.target.value)}
-                  />
-                  <Select
-                    label="Seller"
-                    searchable
-                    options={[
-                      { value: '', label: 'All sellers' },
-                      ...sellerOptions.map(seller => ({ value: seller, label: seller })),
-                    ]}
-                    value={sellerFilter}
-                    onChange={e => setSellerFilter(e.target.value)}
-                  />
-                </div>
-              </div>
-            </Card>
-          )}
-
-          <CaptionCard
-            caption={
-              (!isEdit || editingLift?.status === 'pending') && outstandingBalance > 0 && singlePair
-                ? {
-                  label: 'Remaining balance',
-                  value: `${formatQty(outstandingBalance)} owed on this PO/SO pair`,
-                  detail: balanceApplied > 0
-                    ? `Total dispatch: ${formatQty(totalPlanned + balanceApplied)} (${formatQty(totalPlanned)} new + ${formatQty(balanceApplied)} balance)`
-                    : 'Apply this on the next lift to clear short deliveries or qty carried from a closed order.',
-                }
-                : undefined
-            }
-          >
-            {isStockMode ? (
-              <StockLiftForm
-                value={stockLift}
-                onChange={setStockLift}
-                orders={store.tradeOrders}
-                lifts={store.lifts}
-                itemFilter={itemFilter}
-                sellerFilter={sellerFilter}
-                excludeLiftId={editingLift?.id}
-              />
-            ) : (
-              <LiftAllocationsForm
-                rows={allocations}
-                onChange={setAllocations}
-                orders={store.tradeOrders}
-                lifts={store.lifts}
-                itemFilter={itemFilter}
-                sellerFilter={sellerFilter}
-                excludeLiftId={editingLift?.id}
-              />
-            )}
-
-            {crossPoMessages.length > 0 && (
-              <div className="mt-4">
-                <CrossPoNotice messages={crossPoMessages} />
-              </div>
-            )}
-
-            {(!isEdit || editingLift?.status === 'pending') && outstandingBalance > 0 && singlePair && (
-              <div className="sm:max-w-xs mt-4">
-                <QtyInput
-                  label="Apply balance in this lift (MT)"
-                  value={balanceAppliedQty}
-                  maxQty={outstandingBalance > 0 ? outstandingBalance : undefined}
-                  maxQtyMessage={`Cannot exceed ${formatQty(outstandingBalance)} outstanding`}
-                  onChange={e => setBalanceAppliedQty(sanitizeQtyInput(e.target.value))}
-                  placeholder={`Up to ${formatQty(outstandingBalance)}`}
-                />
-              </div>
-            )}
-
-            {!isEdit && !isStockMode && firstPoRef && parsedAllocations.length === 0 && (
-              <div className="mt-4">
-                <Button to={`/sales-orders/new?poRef=${encodeURIComponent(firstPoRef)}`} variant="outline" size="sm">
-                  Create SO for {formatPoRef(firstPoRef)}
-                </Button>
-              </div>
-            )}
-          </CaptionCard>
-
-          <Card>
-            <h3 className="text-sm font-semibold mb-4">Lift details</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Lift Ref. No."
-                value={formatLiftRef(isEdit && editLiftRef != null ? editLiftRef : store.counters.lift + 1)}
-                readOnly
-              />
-              <DatePicker label="Lift Date" value={date} onChange={setDate} />
-              <Select
-                searchable={false}
-                label="Lift Type"
-                options={[
-                  { value: 'false', label: 'Broker / Third Party' },
-                  { value: 'true', label: 'Self Lift' },
-                ]}
-                value={isSelfLift}
-                onChange={e => {
-                  setIsSelfLift(e.target.value)
-                  if (e.target.value === 'true') setRemarks('')
-                }}
-              />
-              {isEdit && editingLift?.status === 'delivered' && (
-                <Input
-                  label="Sales Invoice No."
-                  value={salesInvoiceNo}
-                  onChange={e => setSalesInvoiceNo(e.target.value)}
-                  className="text-base"
-                />
+                  <FormFieldGroup>
+                    <Select
+                      label="Item / Material"
+                      searchable
+                      options={[
+                        { value: '', label: 'All items' },
+                        ...itemOptions.map(item => ({ value: item, label: item })),
+                      ]}
+                      value={itemFilter}
+                      onChange={e => setItemFilter(e.target.value)}
+                    />
+                    <Select
+                      label="Seller Name"
+                      searchable
+                      options={[
+                        { value: '', label: 'All sellers' },
+                        ...sellerOptions.map(seller => ({ value: seller, label: seller })),
+                      ]}
+                      value={sellerFilter}
+                      onChange={e => setSellerFilter(e.target.value)}
+                    />
+                  </FormFieldGroup>
+                </section>
               )}
-              {isSelfLift === 'false' && (
-                <div className="sm:col-span-2">
+
+              <section className="space-y-3">
+                <FormFieldGroup>
                   <Input
-                    label="Remarks"
-                    value={remarks}
-                    onChange={e => setRemarks(e.target.value)}
-                    placeholder="Optional notes for this lift"
+                    label="Lift Ref. No."
+                    value={formatLiftRef(isEdit && editLiftRef != null ? editLiftRef : store.counters.lift + 1)}
+                    readOnly
                   />
-                </div>
-              )}
+                  <DatePicker label="Lift Date" value={date} onChange={setDate} />
+                  <Select
+                    searchable={false}
+                    label="Lift Type"
+                    options={[
+                      { value: 'false', label: 'Broker / Third Party' },
+                      { value: 'true', label: 'Self Lift' },
+                    ]}
+                    value={isSelfLift}
+                    onChange={e => {
+                      setIsSelfLift(e.target.value)
+                      if (e.target.value === 'true') setRemarks('')
+                    }}
+                  />
+                </FormFieldGroup>
+                {((isEdit && editingLift?.status === 'delivered') || isSelfLift === 'false') && (
+                  <FormFieldGroup>
+                    {isEdit && editingLift?.status === 'delivered' ? (
+                      <Input
+                        label="Sales Invoice No."
+                        value={salesInvoiceNo}
+                        onChange={e => setSalesInvoiceNo(e.target.value)}
+                      />
+                    ) : null}
+                    {isSelfLift === 'false' ? (
+                      <div className={isEdit && editingLift?.status === 'delivered' ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                        <Input
+                          label="Remarks"
+                          value={remarks}
+                          onChange={e => setRemarks(e.target.value)}
+                          placeholder="Optional notes for this lift"
+                        />
+                      </div>
+                    ) : null}
+                  </FormFieldGroup>
+                )}
+              </section>
+
+              <section>
+                {isStockMode ? (
+                  <StockLiftForm
+                    value={stockLift}
+                    onChange={setStockLift}
+                    orders={store.tradeOrders}
+                    lifts={store.lifts}
+                    itemFilter={itemFilter}
+                    sellerFilter={sellerFilter}
+                    excludeLiftId={editingLift?.id}
+                  />
+                ) : (
+                  <LiftAllocationsForm
+                    rows={allocations}
+                    onChange={setAllocations}
+                    orders={store.tradeOrders}
+                    lifts={store.lifts}
+                    itemFilter={itemFilter}
+                    sellerFilter={sellerFilter}
+                    excludeLiftId={editingLift?.id}
+                  />
+                )}
+
+                {crossPoMessages.length > 0 && (
+                  <div className="mt-4">
+                    <CrossPoNotice messages={crossPoMessages} />
+                  </div>
+                )}
+
+                {(!isEdit || editingLift?.status === 'pending') && outstandingBalance > 0 && singlePair && (
+                  <div className="sm:max-w-xs mt-4">
+                    <QtyInput
+                      label="Apply balance in this lift (MT)"
+                      value={balanceAppliedQty}
+                      maxQty={outstandingBalance > 0 ? outstandingBalance : undefined}
+                      maxQtyMessage={`Cannot exceed ${formatQty(outstandingBalance)} outstanding`}
+                      onChange={e => setBalanceAppliedQty(sanitizeQtyInput(e.target.value))}
+                      placeholder={`Up to ${formatQty(outstandingBalance)}`}
+                    />
+                  </div>
+                )}
+
+                {!isEdit && !isStockMode && firstPoRef && parsedAllocations.length === 0 && (
+                  <div className="mt-4">
+                    <Button to={`/sales-orders/new?poRef=${encodeURIComponent(firstPoRef)}`} variant="outline" size="sm">
+                      Create SO for {formatPoRef(firstPoRef)}
+                    </Button>
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-semibold mb-3">Tankers</h3>
+                <LiftTankersForm
+                  tankers={tankers}
+                  maxQtyMt={allocTotal > 0 ? allocTotal : undefined}
+                  qtyMode={isEdit && editingLift?.status === 'delivered' ? 'actual' : 'planned'}
+                  fieldErrors={tankerFieldErrors}
+                  onChange={next => {
+                    setTankerFieldErrors({})
+                    setTankers(next)
+                  }}
+                />
+              </section>
+
+              <section className="space-y-1.5">
+                <Checkbox
+                  compact
+                  label={LOAD_ON_RISK_LABEL}
+                  checked={loadOnRisk}
+                  onChange={e => setLoadOnRisk(e.target.checked)}
+                />
+                <p className="text-xs text-muted leading-relaxed">
+                  {loadOnRisk ? LOAD_ON_RISK_DETAIL_ACTIVE : LOAD_ON_RISK_DETAIL}
+                </p>
+              </section>
             </div>
           </Card>
-
-          <CaptionCard
-            captions={[
-              buildLiftTankerAvailabilityCaption({
-                tankers,
-                maxQtyMt: allocTotal > 0 ? allocTotal : undefined,
-              }),
-              buildLoadOnRiskCaption(loadOnRisk, setLoadOnRisk),
-            ].filter((strip): strip is NonNullable<typeof strip> => strip != null)}
-          >
-            <h3 className="text-sm font-semibold mb-4">Tankers</h3>
-            <LiftTankersForm
-              tankers={tankers}
-              maxQtyMt={allocTotal > 0 ? allocTotal : undefined}
-              qtyMode={isEdit && editingLift?.status === 'delivered' ? 'actual' : 'planned'}
-              fieldErrors={tankerFieldErrors}
-              onChange={next => {
-                setTankerFieldErrors({})
-                setTankers(next)
-              }}
-            />
-          </CaptionCard>
         </div>
 
         <LiftFormSidebar
@@ -774,6 +807,20 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
           balanceApplied={balanceApplied}
           isSelfLift={isSelfLift === 'true'}
           isDeliveredActual={isEdit && editingLift?.status === 'delivered'}
+          previewNotes={[
+            ...((!isEdit || editingLift?.status === 'pending') && outstandingBalance > 0 && singlePair
+              ? [{
+                  label: 'Remaining balance',
+                  value: `${formatQty(outstandingBalance)} owed on this PO/SO pair`,
+                }]
+              : []),
+            ...(availabilityCaption
+              ? [{
+                  label: availabilityCaption.label,
+                  value: availabilityCaption.value,
+                }]
+              : []),
+          ]}
           saveError={saveError}
           onSave={handleSave}
           onCancel={handleCancel}

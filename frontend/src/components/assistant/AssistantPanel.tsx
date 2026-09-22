@@ -416,7 +416,7 @@ export function AssistantPanel() {
                     ? 'Ask about orgs, seats, licences…'
                     : 'Ask about earnings, balances, orders…'
                 }
-                className="max-h-24 min-h-[2.25rem] flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-heading placeholder:text-muted focus:outline-none"
+                className="max-h-24 min-h-[2.25rem] flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-heading placeholder:text-placeholder focus:outline-none"
                 {...noAutofill}
               />
               <button

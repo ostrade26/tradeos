@@ -218,22 +218,22 @@ export function PartyPage() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card className="p-4">
+        <Card className="p-8">
           <p className="text-xs uppercase tracking-wider text-muted">Purchase orders</p>
           <p className="text-xl font-semibold mt-1">{pos.length}</p>
           {pendingPoQty > 0 && <p className="text-xs text-warning mt-0.5">{formatQty(pendingPoQty)} to lift</p>}
         </Card>
-        <Card className="p-4">
+        <Card className="p-8">
           <p className="text-xs uppercase tracking-wider text-muted">Sales orders</p>
           <p className="text-xl font-semibold mt-1">{sos.length}</p>
           {pendingSoQty > 0 && <p className="text-xs text-warning mt-0.5">{formatQty(pendingSoQty)} to lift</p>}
         </Card>
-        <Card className="p-4">
+        <Card className="p-8">
           <p className="text-xs uppercase tracking-wider text-muted">Lifts</p>
           <p className="text-xl font-semibold mt-1">{lifts.length}</p>
           <p className="text-xs text-muted mt-0.5">{formatQty(lifts.reduce((s, l) => s + l.liftedQty, 0))} lifted</p>
         </Card>
-        <Card className="p-4">
+        <Card className="p-8">
           <p className="text-xs uppercase tracking-wider text-muted">Total volume</p>
           <p className="text-lg font-semibold mt-1">{formatCurrency(totalBusiness)}</p>
         </Card>

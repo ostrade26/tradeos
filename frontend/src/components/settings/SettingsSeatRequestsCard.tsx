@@ -59,14 +59,14 @@ export function SettingsSeatRequestsCard({
         'dark:border-gray-700',
       )}
     >
-      <div className="border-b border-gray-200/90 px-6 py-4 sm:px-7 dark:border-gray-700/80">
+      <div className="border-b border-gray-200/90 px-8 py-4 sm:px-9 dark:border-gray-700/80">
         <div className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5 shrink-0 text-muted" aria-hidden />
           <h2 className="text-lg font-semibold tracking-tight text-heading">Your requests</h2>
         </div>
       </div>
 
-      <div className="p-6 sm:p-7">
+      <div className="p-8 sm:p-9">
         {loading ? (
           <p className="text-sm text-muted">Loading requests…</p>
         ) : requests.length === 0 ? (

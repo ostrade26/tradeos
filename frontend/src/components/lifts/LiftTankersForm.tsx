@@ -123,8 +123,8 @@ export function LiftTankersForm({
     onChange(tankers.filter((_, i) => i !== index))
   }
 
-  const gridGap = compactDelivery ? 'gap-3' : 'gap-4'
-  const fieldSize = compactDelivery ? '' : 'text-base'
+  const gridGap = compactDelivery ? 'gap-3' : 'gap-3'
+  const fieldSize = compactDelivery ? '' : undefined
 
   const transportFields = (tanker: LiftTankerFormValues, index: number) => (
     <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
@@ -140,7 +140,7 @@ export function LiftTankersForm({
         value={tanker.lrNo}
         onChange={e => updateTanker(index, { lrNo: e.target.value.toUpperCase() })}
         className={cn(fieldSize, 'uppercase')}
-        placeholder="LR-4521"
+        placeholder="LR number"
       />
       <Input
         label="Driver mobile"
@@ -149,13 +149,13 @@ export function LiftTankersForm({
         className={fieldSize}
         type="tel"
         inputMode="tel"
-        placeholder="9876543210"
+        placeholder="10-digit mobile"
       />
     </div>
   )
 
   return (
-    <div className={cn(compactDelivery ? 'space-y-5' : 'space-y-3')}>
+    <div className={cn(compactDelivery ? 'space-y-5' : 'space-y-4')}>
       {needsMoreTankers && totalEntered > TANKER_CAPACITY_MT && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           Add {suggested - tankers.length} more tanker{suggested - tankers.length === 1 ? '' : 's'} for this quantity.
@@ -163,7 +163,11 @@ export function LiftTankersForm({
       )}
 
       <div className={cn(
-        deliverySectionPerTanker ? 'space-y-8' : compactDelivery ? 'space-y-6' : 'space-y-3',
+        deliverySectionPerTanker
+          ? 'space-y-8'
+          : compactDelivery
+            ? 'space-y-6'
+            : 'space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-100 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-800',
       )}>
         {tankers.map((tanker, index) => {
           const tankerQty = parseFloat(tanker.actualQty) || 0
@@ -174,15 +178,15 @@ export function LiftTankersForm({
 
           const useSectionHeading = deliverySectionPerTanker
           const tankerShell = compactDelivery
-            ? cn(!useSectionHeading && index > 0 && 'pt-6 border-t border-gray-200 dark:border-gray-700', 'space-y-3')
-            : 'rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-3 space-y-3'
+            ? cn(!useSectionHeading && index > 0 && 'pt-6 border-t border-gray-100 dark:border-gray-800', 'space-y-3')
+            : 'space-y-4'
 
           const tankerBody = (
           <div className={useSectionHeading ? 'space-y-3' : tankerShell}>
             {!(compactDelivery && hideQty && tankers.length === 1) && !useSectionHeading && (
               <div className="flex items-center justify-between gap-2">
                 <p className={cn(
-                  compactDelivery ? 'text-sm font-medium text-heading' : 'text-xs font-semibold uppercase tracking-wide text-muted',
+                  compactDelivery ? 'text-sm font-medium text-heading' : 'text-sm font-semibold text-heading',
                 )}>
                   {tankers.length > 1 ? `Tanker ${index + 1}` : 'Tanker'}
                 </p>
@@ -246,7 +250,7 @@ export function LiftTankersForm({
               />
             )}
             {!(showSalesInvoicePerTanker && !hideQty) && (
-              <div className={cn('grid grid-cols-1 sm:grid-cols-2', gridGap)}>
+              <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
                 {!hideQty && (
                   <QtyInput
                     label={qtyLabel}
@@ -291,7 +295,7 @@ export function LiftTankersForm({
                       className={cn(fieldSize, 'uppercase font-mono sm:max-w-md')}
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="MH-12-RF-4236"
+                      placeholder="e.g. MH-12-RF-4236"
                     />
                   )}
                   {transportFields(tanker, index)}

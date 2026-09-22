@@ -69,7 +69,7 @@ export function SettingsPlanCard({
 
   if (!sub && !licence) {
     return (
-      <div className="rounded-md bg-card p-6 sm:p-7 shadow-[var(--shadow-card)]">
+      <div className="rounded-md bg-card p-8 sm:p-9 shadow-[var(--shadow-card)]">
         <p className="text-sm font-medium text-heading">{org.name}</p>
         <p className="text-sm text-muted mt-2">No active plan on this organisation.</p>
       </div>
@@ -84,7 +84,7 @@ export function SettingsPlanCard({
 
   return (
     <article className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)]">
-      <div className="p-6 sm:p-7">
+      <div className="p-8 sm:p-9">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -141,7 +141,7 @@ export function SettingsPlanCard({
       </div>
 
       {(memberSince || renewal) ? (
-        <div className="flex flex-wrap gap-x-8 gap-y-2 border-t border-gray-200 bg-gray-100/90 px-6 py-3.5 text-xs tabular-nums sm:px-7 dark:border-gray-700 dark:bg-gray-800/50">
+        <div className="flex flex-wrap gap-x-8 gap-y-2 border-t border-gray-200 bg-gray-100/90 px-8 py-3.5 text-xs tabular-nums sm:px-9 dark:border-gray-700 dark:bg-gray-800/50">
           {memberSince ? (
             <p className="text-muted">
               Active since{' '}

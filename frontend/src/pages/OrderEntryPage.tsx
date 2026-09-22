@@ -1003,7 +1003,7 @@ function SOEntryForm({
               </div>
             </details>
           )}
-          <CaptionCard bodyClassName="p-4">
+          <CaptionCard bodyClassName="p-8">
             <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
               <Package className="h-4 w-4 text-accent" /> {sellFromLot ? 'Purchase Order' : 'Link to Purchase Order'}
             </h3>
@@ -1208,8 +1208,8 @@ function OrderFormFields({
 
   return (
     <>
-      <Card className="p-4" padding={false}>
-        <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-200 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-700">
+      <Card className="p-8" padding={false}>
+        <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-100 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-800">
           <FormFieldGroup>
             <DatePicker
               label="Date"
@@ -1359,7 +1359,7 @@ function OrderFormFields({
             />
           </FormFieldGroup>
 
-          <FormFieldGroup columns="grid-cols-2 lg:grid-cols-4">
+          <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
             <div>
               <Select
                 searchable={false}
@@ -1403,44 +1403,46 @@ function OrderFormFields({
                 }}
               />
             ) : null}
-            <div className="col-span-full grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Select
-                label="Broker Name"
-                placeholder="Select broker..."
-                searchPlaceholder="Search brokers..."
-                allowCreate
-                createLabel="Add new broker"
-                onCreate={async (name) => {
-                  const broker = await store.addBroker({ name })
-                  toast.success('Broker added to directory', { description: broker.name })
-                  return { value: broker.name, label: broker.name }
-                }}
-                options={brokers.map(b => ({ value: b.name, label: b.name }))}
-                value={form.brokerName}
-                onChange={e => {
-                  const brokerName = e.target.value
-                  form.set('brokerName', brokerName)
-                  const broker = store.brokers.find(b => b.name === brokerName)
-                  const terms = broker
-                    ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', form.itemName)
-                    : undefined
-                  if (terms) {
-                    form.setValues(v => ({ ...v, brokerName, ...brokerageTermsToFormPatch(terms) }))
-                  }
-                }}
-                emptyMessage="No brokers in directory — add one below"
-              />
-              <BrokerageInput
-                mode={form.brokerageType === 'percent' ? 'percent' : 'perTon'}
-                value={form.brokerageType === 'percent' ? form.brokeragePct : form.brokeragePerTon}
-                onModeChange={handleBrokerageModeChange}
-                onChange={v => form.set(form.brokerageType === 'percent' ? 'brokeragePct' : 'brokeragePerTon', v)}
-              />
-              <Input label="Payment Terms" value={form.paymentTerms} onChange={e => form.set('paymentTerms', e.target.value)} />
-            </div>
-            <div className="col-span-full">
-              <Input label="Remarks" value={form.remarks} onChange={e => form.set('remarks', e.target.value)} />
-            </div>
+          </FormFieldGroup>
+
+          <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
+            <Select
+              label="Broker Name"
+              placeholder="Select broker..."
+              searchPlaceholder="Search brokers..."
+              allowCreate
+              createLabel="Add new broker"
+              onCreate={async (name) => {
+                const broker = await store.addBroker({ name })
+                toast.success('Broker added to directory', { description: broker.name })
+                return { value: broker.name, label: broker.name }
+              }}
+              options={brokers.map(b => ({ value: b.name, label: b.name }))}
+              value={form.brokerName}
+              onChange={e => {
+                const brokerName = e.target.value
+                form.set('brokerName', brokerName)
+                const broker = store.brokers.find(b => b.name === brokerName)
+                const terms = broker
+                  ? resolveBrokerageTerms(broker, isPO ? 'purchase' : 'sale', form.itemName)
+                  : undefined
+                if (terms) {
+                  form.setValues(v => ({ ...v, brokerName, ...brokerageTermsToFormPatch(terms) }))
+                }
+              }}
+              emptyMessage="No brokers in directory — add one below"
+            />
+            <BrokerageInput
+              mode={form.brokerageType === 'percent' ? 'percent' : 'perTon'}
+              value={form.brokerageType === 'percent' ? form.brokeragePct : form.brokeragePerTon}
+              onModeChange={handleBrokerageModeChange}
+              onChange={v => form.set(form.brokerageType === 'percent' ? 'brokeragePct' : 'brokeragePerTon', v)}
+            />
+            <Input label="Payment Terms" value={form.paymentTerms} onChange={e => form.set('paymentTerms', e.target.value)} />
+          </FormFieldGroup>
+
+          <FormFieldGroup columns="grid-cols-1">
+            <Input label="Remarks" value={form.remarks} onChange={e => form.set('remarks', e.target.value)} />
           </FormFieldGroup>
         </div>
       </Card>
@@ -1545,7 +1547,7 @@ function OrderFormSidebar({
         </div>
       )}
 
-      <Card className="p-4" padding={false}>
+      <Card className="p-8" padding={false}>
         <h3 className="text-sm font-semibold mb-3">Summary</h3>
         <div className="space-y-3 text-sm">
           <div className="flex justify-between gap-3">

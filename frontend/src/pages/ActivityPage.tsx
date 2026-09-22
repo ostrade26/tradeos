@@ -115,7 +115,7 @@ export function ActivityPage() {
                         )}
                       </div>
                       <Card padding={false} className="flex-1 min-w-0 hover:shadow-md transition-shadow">
-                        <div className="p-4">
+                        <div className="p-8">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-medium text-heading">{a.title}</p>
                             <Badge variant="default">{config.label}</Badge>

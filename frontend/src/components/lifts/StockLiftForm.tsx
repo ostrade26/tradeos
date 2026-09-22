@@ -63,7 +63,7 @@ export function StockLiftForm({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Select
           label="Purchase order"
           searchable
@@ -86,13 +86,13 @@ export function StockLiftForm({
             onChange={e => onChange({ ...value, qty: e.target.value })}
           />
         )}
-
-        {po && rowQty > 0 && (
-          <p className="text-xs text-muted sm:col-span-2">
-            {po.itemName} from {po.partyName} · {formatQty(rowQty)} MT → your inventory
-          </p>
-        )}
       </div>
+
+      {po && rowQty > 0 && (
+        <p className="text-xs text-muted">
+          {po.itemName} from {po.partyName} · {formatQty(rowQty)} MT → your inventory
+        </p>
+      )}
     </div>
   )
 }

@@ -595,7 +595,7 @@ export function DashboardStatSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:gap-6">
       {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-3">
+        <div key={i} className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-3">
           <div className="skeleton h-3 w-24 rounded" />
           <div className="skeleton h-8 w-32 rounded" />
           <div className="skeleton h-3 w-40 rounded" />

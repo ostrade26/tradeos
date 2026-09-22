@@ -54,7 +54,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             aria-describedby={error ? `${id}-error` : undefined}
             className={cn(
               'h-11 sm:h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-heading',
-              'placeholder:text-muted transition-colors duration-150',
+              'placeholder:text-placeholder transition-colors duration-150',
               'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
               'dark:border-gray-600 dark:bg-card dark:text-heading',
               // Temporary autofill lock uses readOnly — keep the same surface as an editable field.

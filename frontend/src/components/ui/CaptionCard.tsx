@@ -55,9 +55,9 @@ export function CaptionCard({
 
   return (
     <div className={cn('rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden', className)}>
-      <div className={cn('p-6', bodyClassName)}>{children}</div>
+      <div className={cn('p-8', bodyClassName)}>{children}</div>
       {strips.length > 0 && (
-        <div className="border-t border-gray-200 bg-gray-100/90 px-6 py-4 dark:border-gray-700 dark:bg-gray-800/50">
+        <div className="border-t border-gray-200 bg-gray-100/90 px-8 py-4 dark:border-gray-700 dark:bg-gray-800/50">
           {noteVariant ? (
             <>
               <InfoNoteRow items={strips as InfoNoteItem[]} />

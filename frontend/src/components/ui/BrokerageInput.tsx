@@ -52,7 +52,7 @@ export function BrokerageInput({
           onChange={e => onChange(sanitizeDecimalInput(e.target.value))}
           className={cn(
             'h-9 w-full rounded-md border border-gray-200 bg-white pl-3 pr-[4.25rem] text-sm text-heading',
-            'placeholder:text-muted transition-colors duration-150',
+            'placeholder:text-placeholder transition-colors duration-150',
             'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
             'dark:border-gray-600 dark:bg-card dark:text-heading',
             disabled && 'opacity-60 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50',

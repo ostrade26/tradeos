@@ -3,12 +3,10 @@ import { Modal } from '../ui/Drawer'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
-import { Checkbox } from '../ui/Checkbox'
 import { OrganisationLocationFields } from './OrganisationLocationFields'
 import { loginEmailError } from '../../lib/email'
 import { DEFAULT_ORGANISATION_COUNTRY } from '../../lib/organisationLocations'
 import type { PlatformOrganisation, PrimaryAdminUserSummary } from '../../api/platformApi'
-import { organisationIsTest } from './platformAdminRegisterColumns'
 
 export type EditOrganisationPatch = {
   name: string
@@ -21,7 +19,6 @@ export type EditOrganisationPatch = {
   country: string
   pincode: string
   status: string
-  is_test: boolean
   primary_contact_name: string
   primary_contact_email: string
   primary_contact_mobile: string
@@ -56,7 +53,6 @@ export function PlatformEditOrganisationModal({
     country: '',
     pincode: '',
     status: 'active',
-    is_test: false,
     primary_contact_name: '',
     primary_contact_email: '',
     primary_contact_mobile: '',
@@ -79,7 +75,6 @@ export function PlatformEditOrganisationModal({
         organisation.status === 'disabled' || organisation.status === 'inactive'
           ? 'inactive'
           : 'active',
-      is_test: organisationIsTest(organisation),
       primary_contact_name:
         organisation.primary_contact_name?.trim() ||
         primaryAdmin?.name?.trim() ||
@@ -97,29 +92,7 @@ export function PlatformEditOrganisationModal({
     form.name.trim() && form.business_address.trim() && form.city.trim(),
   )
   const contactValid = Boolean(form.primary_contact_name.trim() && !emailError)
-  const isSandbox = Boolean(organisation?.sandbox_tools)
   const loginId = primaryAdmin?.login_id || primaryAdmin?.username || ''
-
-  const testAccountControl = (
-    <div className="flex min-w-0 items-start gap-2">
-      <Checkbox
-        id="edit-org-is-test"
-        compact
-        checked={form.is_test}
-        onChange={e => setForm(f => ({ ...f, is_test: e.target.checked }))}
-        aria-label="Test account"
-        className="mt-0.5"
-      />
-      <label htmlFor="edit-org-is-test" className="min-w-0 cursor-pointer">
-        <p className="text-sm text-heading">Test account</p>
-        <p className="text-xs text-muted mt-0.5 leading-relaxed">
-          {isSandbox
-            ? 'For QA only — listed under Test. The system sandbox cannot be deleted.'
-            : 'For QA only — listed under Test and safe to delete later.'}
-        </p>
-      </label>
-    </div>
-  )
 
   return (
     <Modal
@@ -132,36 +105,29 @@ export function PlatformEditOrganisationModal({
           : 'Primary admin — email and login details.'
       }
       size="lg"
-      footerClassName="w-full items-center justify-between gap-3"
       footer={
         step === 1 ? (
-          <>
-            {testAccountControl}
-            <div className="flex shrink-0 gap-2">
-              <Button variant="outline" onClick={onClose} disabled={loading}>
-                Cancel
-              </Button>
-              <Button disabled={!accountValid} onClick={() => setStep(2)}>
-                Next
-              </Button>
-            </div>
-          </>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button disabled={!accountValid} onClick={() => setStep(2)}>
+              Next
+            </Button>
+          </div>
         ) : (
-          <>
-            {testAccountControl}
-            <div className="flex shrink-0 gap-2">
-              <Button variant="outline" onClick={() => setStep(1)} disabled={loading}>
-                Back
-              </Button>
-              <Button
-                loading={loading}
-                disabled={!contactValid || loading}
-                onClick={() => onSubmit(form)}
-              >
-                Save changes
-              </Button>
-            </div>
-          </>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setStep(1)} disabled={loading}>
+              Back
+            </Button>
+            <Button
+              loading={loading}
+              disabled={!contactValid || loading}
+              onClick={() => onSubmit(form)}
+            >
+              Save changes
+            </Button>
+          </div>
         )
       }
     >
@@ -204,42 +170,41 @@ export function PlatformEditOrganisationModal({
           />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+        <div className="grid gap-4 sm:grid-cols-2 pt-1">
+          <div className="sm:col-span-2 rounded-md border border-gray-200 bg-gray-50/80 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/40">
             <p className="text-sm font-medium text-heading">Primary Admin</p>
-            <p className="text-xs text-muted mt-1">
+            <p className="text-xs text-muted mt-1 leading-relaxed">
               Uses the first included seat · we email their login ID and temporary password to the
               address below when credentials are issued. Updating email also updates the primary
-              admin user (for welcome / forgot password).
+              admin login.
             </p>
           </div>
           <div className="sm:col-span-2">
             <Input
-              label="Email *"
               type="email"
-              autoComplete="off"
-              placeholder="admin@company.com"
+              label="Admin email *"
+              autoComplete="email"
               value={form.primary_contact_email}
               error={emailError ?? undefined}
               onChange={e => setForm(f => ({ ...f, primary_contact_email: e.target.value }))}
             />
           </div>
           <Input
-            label="Admin name *"
+            label="Contact name *"
             value={form.primary_contact_name}
             onChange={e => setForm(f => ({ ...f, primary_contact_name: e.target.value }))}
           />
           <Input
-            label="Username (login ID) *"
-            value={loginId || '—'}
-            readOnly
-          />
-          <Input
             label="Mobile"
-            className="sm:col-span-2"
             value={form.primary_contact_mobile}
             onChange={e => setForm(f => ({ ...f, primary_contact_mobile: e.target.value }))}
           />
+          {loginId ? (
+            <div className="sm:col-span-2">
+              <p className="text-xs font-medium text-muted">Current login ID</p>
+              <p className="text-sm font-mono text-heading mt-1 break-all">{loginId}</p>
+            </div>
+          ) : null}
         </div>
       )}
     </Modal>

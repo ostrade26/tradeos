@@ -170,7 +170,7 @@ export function SpecialStatesGalleryPage() {
           <h2 className="text-base font-semibold text-heading">Service issues</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {SAMPLE_SERVICE_ISSUES.map(issue => (
-              <div key={issue.kind} className="rounded-md bg-card shadow-[var(--shadow-card)] p-4 space-y-3">
+              <div key={issue.kind} className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-3">
                 <p className="text-sm font-semibold text-heading">{issue.kind}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => setOpen({ type: 'service-modal', issue })}>

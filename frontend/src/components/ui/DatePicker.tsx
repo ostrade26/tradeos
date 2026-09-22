@@ -67,7 +67,7 @@ export function DatePicker({
           'transition-colors attex-focus cursor-pointer dark:border-gray-600 dark:bg-card',
           open && 'border-accent ring-1 ring-accent/30',
           error && inputErrorClassName,
-          !value && 'text-muted',
+          !value && 'text-placeholder',
           disabled && 'opacity-60 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50',
         )}
       >

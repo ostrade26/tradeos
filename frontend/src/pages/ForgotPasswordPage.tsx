@@ -49,7 +49,7 @@ export function ForgotPasswordPage() {
         </div>
 
         {sent ? (
-          <div className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4">
+          <div className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-4">
             <p className="text-sm text-heading leading-relaxed">
               If an account exists for that email, we sent a password reset link. Check your inbox
               (and spam folder). The link expires in one hour.
@@ -64,7 +64,7 @@ export function ForgotPasswordPage() {
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
+            className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-4"
           >
             <Input
               label="Email address"

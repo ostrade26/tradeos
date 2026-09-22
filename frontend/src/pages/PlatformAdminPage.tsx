@@ -1237,7 +1237,6 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     country: string
     pincode: string
     status: string
-    is_test: boolean
     primary_contact_name: string
     primary_contact_email: string
     primary_contact_mobile: string

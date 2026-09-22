@@ -136,7 +136,7 @@ export function CreateContractPage() {
         <div className="space-y-4 animate-fade-in">
           <Card>
             <h3 className="text-sm font-semibold text-heading mb-4">Contract Summary</h3>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-8 space-y-4">
               <div className="text-center border-b border-gray-200 dark:border-gray-700 pb-4">
                 <p className="text-xs text-muted uppercase tracking-wider">Contract Confirmation</p>
                 <p className="text-lg font-semibold text-heading mt-1">New contract</p>

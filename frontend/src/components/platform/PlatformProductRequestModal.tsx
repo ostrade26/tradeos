@@ -84,7 +84,7 @@ export function PlatformProductRequestModal({
                 onChange={e => setReply(e.target.value)}
                 rows={4}
                 maxLength={2000}
-                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-heading placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 dark:border-gray-600 dark:bg-card"
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-heading placeholder:text-placeholder focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 dark:border-gray-600 dark:bg-card"
                 placeholder="Optional. They see this in notifications."
               />
             </label>

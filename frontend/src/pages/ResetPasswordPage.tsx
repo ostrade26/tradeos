@@ -90,7 +90,7 @@ export function ResetPasswordPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
+          className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-4"
         >
           <PasswordInput
             label="New password"

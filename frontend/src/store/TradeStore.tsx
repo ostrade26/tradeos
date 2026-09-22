@@ -351,7 +351,7 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
   if (isAuthError) {
     return (
       <div className="flex h-viewport items-center justify-center bg-body p-6">
-        <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-6 text-center space-y-4">
+        <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-8 text-center space-y-4">
           <p className="text-sm text-heading font-medium">Your session expired</p>
           <p className="text-sm text-muted">Sign in again to continue.</p>
           <button
@@ -368,7 +368,7 @@ function TradeStoreError({ message, onRetry }: { message: string; onRetry: () =>
 
   return (
     <div className="flex h-viewport items-center justify-center bg-body p-6">
-      <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-6 text-center space-y-4">
+      <div className="max-w-md rounded-md bg-card shadow-[var(--shadow-card)] p-8 text-center space-y-4">
         <p className="text-sm font-medium text-heading">Could not load organisation data</p>
         {!SERVICE_ISSUE_UI_ENABLED ? (
           <p className="text-sm text-danger text-left whitespace-pre-wrap break-words">{message}</p>

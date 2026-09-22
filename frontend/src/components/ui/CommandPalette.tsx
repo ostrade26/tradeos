@@ -78,7 +78,7 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
             placeholder="Search orders, parties, lifts, tankers..."
             aria-label="Search commands"
             {...noAutofill}
-            className="flex-1 h-12 bg-transparent text-sm text-heading placeholder:text-muted focus:outline-none"
+            className="flex-1 h-12 bg-transparent text-sm text-heading placeholder:text-placeholder focus:outline-none"
           />
           <kbd className="hidden sm:flex items-center gap-0.5 rounded border border-gray-200 dark:border-gray-600 px-1.5 py-0.5 text-[10px] text-muted">
             <Command className="h-3 w-3" />K

@@ -29,6 +29,7 @@
   --color-body: #f2f2f7;
   --color-card: #ffffff;
   --color-muted: #4b5563;
+  --color-placeholder: #9ca3af;
   --color-caption: #6c7b8f;
   --color-heading: #313a46;
   --color-ink: #0b1220;
@@ -55,6 +56,7 @@
   --color-body: #2a303c;
   --color-card: #313a46;
   --color-muted: #c5ced8;
+  --color-placeholder: #6b7280;
   --color-caption: #8b97a8;
   --color-heading: #eef2f7;
 }
@@ -112,6 +114,12 @@ body {
   font-size: var(--text-base);
   line-height: var(--text-base--line-height);
   height: 100%;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-placeholder);
+  opacity: 1;
 }
 
 .skip-to-main {

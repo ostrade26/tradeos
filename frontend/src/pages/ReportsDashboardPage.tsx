@@ -28,7 +28,7 @@ function ReportGroupCard({ groupId }: { groupId: ReportGroupId }) {
 
   return (
     <Card padding={false} className="h-full">
-      <div className="p-6">
+      <div className="p-8">
         <CardHeader title={group.label} />
         <ul className="divide-y divide-gray-100 dark:divide-gray-800 border-t border-gray-100 dark:border-gray-800">
           {REPORTS.filter(r => r.group === groupId).map(report => (

@@ -86,7 +86,7 @@ export function LoginPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-md bg-card shadow-[var(--shadow-card)] p-6 space-y-4"
+          className="rounded-md bg-card shadow-[var(--shadow-card)] p-8 space-y-4"
         >
           <Input
             label="Username or email"

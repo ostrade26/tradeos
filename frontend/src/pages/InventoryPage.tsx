@@ -71,7 +71,7 @@ function InventoryItemStat({
         selected && 'ring-2 ring-accent ring-offset-2 dark:ring-offset-[var(--color-card)]',
       )}
     >
-      <div className={compact ? 'p-3' : 'p-4'}>
+      <div className={compact ? 'p-4' : 'p-8'}>
         <h5 className={cn('font-medium text-caption truncate', density.text)}>{commodity}</h5>
         <p className={cn('font-semibold text-heading mt-0.5 tabular-nums', compact ? 'text-base' : 'text-lg')}>
           {formatQty(remaining, unit)}
@@ -80,7 +80,7 @@ function InventoryItemStat({
       </div>
       <div className={cn(
         'border-t border-gray-200 bg-gray-100/90 dark:border-gray-700 dark:bg-gray-800/50',
-        compact ? 'px-3 py-2' : 'px-4 py-3',
+        compact ? 'px-3 py-2' : 'px-8 py-4',
       )}>
         <div className="grid grid-cols-2 gap-3">
           <div className="min-w-0">
@@ -127,7 +127,7 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
         return (
           <Link key={lot.id} to={`/inventory/${lot.id}`} className="block h-full">
             <Card hover padding={false} className="h-full overflow-hidden">
-              <div className="p-4 pb-5">
+              <div className="p-8 pb-5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs font-mono text-muted">{lot.lotNumber}</p>
@@ -163,7 +163,7 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
                 )}
               </div>
 
-              <div className="border-t border-gray-200 bg-gray-100/90 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+              <div className="border-t border-gray-200 bg-gray-100/90 px-8 py-4 dark:border-gray-700 dark:bg-gray-800/50">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                   <p className="text-sm font-semibold tabular-nums text-heading">
                     {formatContractRate(lot.purchasePrice)}
@@ -510,7 +510,7 @@ export function InventoryPage() {
       </FilterBar>
 
       {filtersOpen && (
-        <Card className="mb-4 p-4">
+        <Card className="mb-4 p-8">
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
             <div className="w-full sm:w-56">
               <Select

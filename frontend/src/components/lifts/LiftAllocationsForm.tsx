@@ -143,13 +143,13 @@ export function LiftAllocationsForm({
   const total = rows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0)
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">Orders on this tanker</h3>
         <p className="text-sm font-semibold tabular-nums shrink-0">{formatQty(total)}</p>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-100 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-800">
         {rows.map((row, index) => {
           const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
           const usedSos = new Set(rows.filter(r => r.id !== row.id).map(r => r.soRef).filter(Boolean))
@@ -196,13 +196,10 @@ export function LiftAllocationsForm({
             : undefined
 
           return (
-            <div
-              key={row.id}
-              className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-3 space-y-3"
-            >
+            <div key={row.id} className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <p className="text-sm font-semibold text-heading">
                     SO {index + 1}
                   </p>
                   {so && row.poRef && isCrossPoAllocation(so, row.poRef) && (
@@ -221,7 +218,7 @@ export function LiftAllocationsForm({
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Select
                     label="Sales Order"

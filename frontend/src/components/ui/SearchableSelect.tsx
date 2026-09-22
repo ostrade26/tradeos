@@ -319,7 +319,7 @@ export function SearchableSelect({
           className={cn(
             'w-full rounded-md border border-gray-200 bg-white pr-9 text-sm text-heading',
             compact ? 'h-8 pr-8 text-[14px] tabular-nums' : 'h-11 sm:h-9',
-            'placeholder:text-muted transition-colors duration-150',
+            'placeholder:text-placeholder transition-colors duration-150',
             'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
             'dark:border-gray-600 dark:bg-card dark:text-heading',
             showSearchIcon ? 'pl-9' : compact ? 'pl-2.5 text-center' : 'pl-3',

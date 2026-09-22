@@ -18,7 +18,7 @@ export function Card({ children, className, padding = true, hover, onClick }: Ca
       className={cn(
         'rounded-md bg-card shadow-[var(--shadow-card)]',
         'dark:bg-card',
-        padding && 'p-6',
+        padding && 'p-8',
         hover && 'transition-shadow duration-200 hover:shadow-md cursor-pointer',
         onClick && 'cursor-pointer',
         className
@@ -55,7 +55,7 @@ export function StatCard({ label, value, change, changeType, icon, to, onClick, 
 }) {
   const dense = compact && !change && !details?.length
   const body = (
-    <Card hover={!!to || !!onClick} onClick={onClick} padding={false} className={cn('h-full min-w-0 overflow-hidden', compact ? 'p-3' : 'p-4 sm:p-6', className)}>
+    <Card hover={!!to || !!onClick} onClick={onClick} padding={false} className={cn('h-full min-w-0 overflow-hidden', compact ? 'p-4' : 'p-6 sm:p-8', className)}>
       <div className={cn('flex h-full min-h-0', dense ? 'flex-row items-start justify-between gap-2' : 'flex-col gap-3')}>
         <div className="flex items-start justify-between gap-2 min-w-0 flex-1">
           <div className="min-w-0 flex-1">

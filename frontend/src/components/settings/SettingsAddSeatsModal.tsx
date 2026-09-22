@@ -208,7 +208,7 @@ export function SettingsAddSeatsModal({
               rows={2}
               className={cn(
                 'w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-heading',
-                'placeholder:text-muted transition-colors duration-150',
+                'placeholder:text-placeholder transition-colors duration-150',
                 'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
                 'dark:border-gray-600 dark:bg-card dark:text-heading',
               )}

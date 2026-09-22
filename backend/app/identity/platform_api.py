@@ -790,8 +790,10 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         raise HTTPException(status_code=400, detail="Nothing to update")
     if data.get("status") == "disabled":
         data["status"] = "inactive"
-    if "is_test" in data:
-        data["is_test"] = 1 if data["is_test"] else 0
+    # Test flag is set only at create time — ignore on edit.
+    data.pop("is_test", None)
+    if not data:
+        raise HTTPException(status_code=400, detail="Nothing to update")
     if "primary_contact_email" in data:
         data["primary_contact_email"] = optional_contact_email(
             str(data.get("primary_contact_email") or "")
