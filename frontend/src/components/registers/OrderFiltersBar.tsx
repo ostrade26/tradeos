@@ -4,6 +4,7 @@ import { FilterBar } from '../ui/CommandPalette'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { MultiSelect } from '../ui/MultiSelect'
+import { Select } from '../ui/Select'
 import {
   clearFilterField,
   emptyOrderFilters,
@@ -25,6 +26,8 @@ interface OrderFiltersBarProps {
   brokers: string[]
   spots: string[]
   onExport: () => void
+  /** Show Unlinked-only control (sales orders). */
+  showUnlinkedFilter?: boolean
 }
 
 export function OrderFiltersBar({
@@ -39,6 +42,7 @@ export function OrderFiltersBar({
   brokers,
   spots,
   onExport,
+  showUnlinkedFilter = false,
 }: OrderFiltersBarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
@@ -91,7 +95,10 @@ export function OrderFiltersBar({
         'rounded-md border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-card',
         !filtersOpen && 'hidden lg:block',
       )}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className={cn(
+          'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3',
+          showUnlinkedFilter ? 'xl:grid-cols-7' : 'xl:grid-cols-6',
+        )}>
           <DateFilterPicker
             label="Created date"
             dateFrom={filters.dateFrom}
@@ -142,6 +149,19 @@ export function OrderFiltersBar({
             onChange={values => setFilter('spots', values)}
             emptyMessage="No spots in list"
           />
+          {showUnlinkedFilter ? (
+            <Select
+              label="PO link"
+              placeholder="All SOs"
+              searchable={false}
+              options={[
+                { value: 'all', label: 'All SOs' },
+                { value: 'unlinked', label: 'Unlinked only' },
+              ]}
+              value={filters.unlinkedOnly ? 'unlinked' : 'all'}
+              onChange={e => setFilter('unlinkedOnly', e.target.value === 'unlinked')}
+            />
+          ) : null}
         </div>
 
         <AppliedFilterChips chips={chips} onRemove={handleRemoveChip} onClearAll={handleClearAll} />

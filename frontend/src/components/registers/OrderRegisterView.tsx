@@ -871,6 +871,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         brokers={brokers}
         spots={spots}
         onExport={handleExport}
+        showUnlinkedFilter={!isPO}
       />
 
       {mode !== 'deleted' && (

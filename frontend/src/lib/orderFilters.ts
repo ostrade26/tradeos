@@ -10,6 +10,8 @@ export interface OrderFilterState {
   parties: string[]
   brokers: string[]
   spots: string[]
+  /** SO only — show orders with no linked PO. */
+  unlinkedOnly: boolean
 }
 
 export const emptyOrderFilters: OrderFilterState = {
@@ -21,6 +23,7 @@ export const emptyOrderFilters: OrderFilterState = {
   parties: [],
   brokers: [],
   spots: [],
+  unlinkedOnly: false,
 }
 
 export function hasActiveOrderFilters(filters: OrderFilterState, search = '') {
@@ -33,7 +36,8 @@ export function hasActiveOrderFilters(filters: OrderFilterState, search = '') {
     || filters.items.length
     || filters.parties.length
     || filters.brokers.length
-    || filters.spots.length,
+    || filters.spots.length
+    || filters.unlinkedOnly,
   )
 }
 
@@ -78,6 +82,7 @@ export function applyOrderFilters<T extends {
   itemName: string
   spot: string
   brokerName: string
+  poRef?: string
 }>(
   items: T[],
   filters: OrderFilterState,
@@ -98,6 +103,9 @@ export function applyOrderFilters<T extends {
   if (filters.spots.length) {
     result = result.filter(o => filters.spots.includes(o.spot))
   }
+  if (filters.unlinkedOnly) {
+    result = result.filter(o => !(o.poRef || '').trim())
+  }
 
   if (search) {
     const q = search.toLowerCase()
@@ -106,7 +114,8 @@ export function applyOrderFilters<T extends {
       || o.partyName.toLowerCase().includes(q)
       || o.itemName.toLowerCase().includes(q)
       || o.spot.toLowerCase().includes(q)
-      || o.brokerName.toLowerCase().includes(q),
+      || o.brokerName.toLowerCase().includes(q)
+      || (o.poRef || '').toLowerCase().includes(q),
     )
   }
 
@@ -155,6 +164,7 @@ export function getAppliedFilterChips(
   for (const party of filters.parties) chips.push({ id: `parties:${party}`, prefix: partyLabel, value: party })
   for (const broker of filters.brokers) chips.push({ id: `brokers:${broker}`, prefix: 'Broker', value: broker })
   for (const spot of filters.spots) chips.push({ id: `spots:${spot}`, prefix: 'Spot', value: spot })
+  if (filters.unlinkedOnly) chips.push({ id: 'unlinkedOnly', prefix: 'Link', value: 'Unlinked only' })
   if (search.trim()) chips.push({ id: 'search', prefix: 'Search', value: search.trim() })
   return chips
 }
@@ -165,6 +175,7 @@ export function clearFilterField(
 ): OrderFilterState {
   if (id === 'date') return { ...filters, dateFrom: '', dateTo: '' }
   if (id === 'deliveryPeriod') return { ...filters, deliveryPeriodFrom: '', deliveryPeriodTo: '' }
+  if (id === 'unlinkedOnly') return { ...filters, unlinkedOnly: false }
 
   const multiMatch = id.match(/^(items|parties|brokers|spots):(.+)$/)
   if (multiMatch) {

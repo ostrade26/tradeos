@@ -220,7 +220,7 @@ export interface TradeStoreValue extends TradeData {
   getPORegister: () => TradeOrder[]
   getSORegister: () => TradeOrder[]
   getLastOrder: (side: OrderSide) => TradeOrder | undefined
-  getPOsAvailableForSO: () => TradeOrder[]
+  getPOsAvailableForSO: (opts?: { includeRef?: string; itemName?: string }) => TradeOrder[]
   getRemainingSellQty: (poRef: string) => number
   getSOsForPO: (poRef: string) => TradeOrder[]
   revenueData: { month: string; purchase: number; sales: number }[]
@@ -821,14 +821,24 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getPOsAvailableForSO = useCallback(
-    () =>
-      data.tradeOrders.filter(
+    (opts?: { includeRef?: string; itemName?: string }) => {
+      const includeRef = (opts?.includeRef || '').trim()
+      const itemName = (opts?.itemName || '').trim().toLowerCase()
+      const open = data.tradeOrders.filter(
         o =>
           o.side === 'purchase'
           && o.status !== 'cancelled'
           && o.status !== 'completed'
           && !o.deleteScheduledAt,
-      ),
+      )
+      const withAvail = open.filter(o => {
+        if (includeRef && o.ref === includeRef) return true
+        return getRemainingSellQty(data.tradeOrders, o.ref) > 0
+      })
+      if (!itemName) return withAvail
+      const sameItem = withAvail.filter(o => o.itemName.trim().toLowerCase() === itemName)
+      return sameItem.length > 0 ? sameItem : withAvail
+    },
     [data.tradeOrders],
   )
 

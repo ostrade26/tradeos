@@ -790,13 +790,15 @@ function SOEntryForm({
 }) {
   const { name: accountTrader } = useAccountTrader()
   const availablePOs = useMemo(() => {
-    const base = store.getPOsAvailableForSO()
+    const itemName = form.itemName.trim() || editingOrder?.itemName || ''
+    const includeRef = isEdit && editingOrder?.poRef ? editingOrder.poRef : undefined
+    const base = store.getPOsAvailableForSO({ includeRef, itemName })
     if (isEdit && editingOrder?.poRef && !base.some(p => p.ref === editingOrder.poRef)) {
       const linked = store.getOrderByRef(editingOrder.poRef, 'purchase')
       return linked ? [linked, ...base] : base
     }
     return base
-  }, [store, isEdit, editingOrder?.poRef])
+  }, [store, isEdit, editingOrder?.poRef, editingOrder?.itemName, form.itemName])
   const partyOptions = buildAllPartyOptions(store.companies, store.producers, store.retailers)
 
   const poLinked = !!editingOrder?.poRef
