@@ -176,6 +176,7 @@ def session_to_dict(session: Session) -> dict[str, Any]:
         "permissions": sorted(u.permissions),
         "isPlatformAdmin": u.role_slug == "platform_admin",
         "organisationSandboxTools": u.organisation_sandbox_tools,
+        "organisationIsTest": u.organisation_is_test,
         "appliedUpdates": applied_feature_keys_for_user(u.id, u.organisation_id),
         "appliedVersion": applied_version_for_user(u.id, u.organisation_id),
     }

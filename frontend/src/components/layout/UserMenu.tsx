@@ -23,7 +23,7 @@ export function UserMenu({ onBrandBar = false }: { onBrandBar?: boolean } = {}) 
     roleSlug === 'platform_admin'
       ? orgRoleLabel(roleSlug)
       : roleSlug === 'organisation_admin'
-        ? 'Organisation Admin'
+        ? 'Admin'
         : roleSlug === 'operator'
           ? 'Operator'
           : roleSlug === 'view_only'

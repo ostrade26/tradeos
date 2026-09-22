@@ -88,7 +88,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
   const platformAdminMode = isPlatformAdminPath(location.pathname)
   const platformSettingsMode = platformAdminMode && isPlatformSettingsAreaPath(location.pathname)
   const settingsMode = !platformAdminMode && isSettingsAreaPath(location.pathname)
-  const { isPlatformAdmin } = useAuth()
+  const { isPlatformAdmin, organisationIsTest } = useAuth()
   const { hasPermission } = usePermissions()
   const canManageOrganisation = hasPermission('organisation.edit')
   const showPlanInSettings =
@@ -162,9 +162,9 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
         )}
       >
         <div className={cn(
-          'flex h-[70px] items-center shrink-0 border-b',
+          'flex shrink-0 border-b',
           dividerClass,
-          iconOnly ? 'justify-center px-2' : 'justify-between px-4',
+          iconOnly ? 'h-[70px] items-center justify-center px-2' : 'min-h-[70px] items-center justify-between gap-2 px-4 py-2.5',
         )}>
           {showLabels ? (
             <div className="flex items-center gap-2.5 min-w-0">
@@ -173,21 +173,42 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                   <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className={cn('text-lg font-semibold truncate', themed ? 'text-white' : 'text-heading')}>
-                Tradeal
-              </span>
+              <div className="min-w-0 flex flex-col gap-0 leading-none">
+                <span className={cn('text-lg font-semibold truncate leading-tight', themed ? 'text-white' : 'text-heading')}>
+                  Tradeal
+                </span>
+                {organisationIsTest ? (
+                  <span
+                    className={cn(
+                      'mt-0.5 text-[10px] font-semibold uppercase tracking-wide truncate',
+                      themed ? 'text-amber-200' : 'text-warning',
+                    )}
+                  >
+                    Test account
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : (
-            <div className={brandMarkClass}>
+            <div
+              className={cn('relative', brandMarkClass)}
+              title={organisationIsTest ? 'Test account' : undefined}
+            >
               <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
                 <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
+              {organisationIsTest ? (
+                <span
+                  className={cn('absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full bg-warning ring-2', badgeRing)}
+                  aria-hidden
+                />
+              ) : null}
             </div>
           )}
           {!iconOnly && (
             <button
               onClick={() => mobileOpen ? onMobileClose?.() : onToggleCollapse()}
-              className={iconBtnClass}
+              className={cn(iconBtnClass, 'shrink-0')}
               aria-label={mobileOpen ? 'Close menu' : 'Collapse sidebar'}
             >
               {mobileOpen ? <X className="h-5 w-5" /> : (

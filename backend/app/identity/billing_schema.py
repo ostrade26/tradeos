@@ -21,8 +21,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def org_code_for_id(org_id: int) -> str:
-    return f"ORG-{org_id:05d}"
+def org_code_for_id(org_id: int, *, is_test: bool = False) -> str:
+    """Live orgs: ORG-00042. Test orgs: T-ORG-00042 (same id padding, distinct prefix)."""
+    prefix = "T-ORG" if is_test else "ORG"
+    return f"{prefix}-{int(org_id):05d}"
 
 
 SEAT_TYPE_CODES: dict[str, str] = {
@@ -36,9 +38,15 @@ def seat_type_code(seat_type: str) -> str:
     return SEAT_TYPE_CODES.get(seat_type, "OP")
 
 
-def format_seat_label(org_id: int, seat_type: str, sequence: int) -> str:
-    """Human-readable seat key: ORG-00001-ST-OP-0001 (seq per org + seat type)."""
-    return f"{org_code_for_id(org_id)}-ST-{seat_type_code(seat_type)}-{sequence:04d}"
+def format_seat_label(
+    org_id: int,
+    seat_type: str,
+    sequence: int,
+    *,
+    is_test: bool = False,
+) -> str:
+    """Human-readable seat key: ORG-00001-ST-OP-0001 (or T-ORG-… for test)."""
+    return f"{org_code_for_id(org_id, is_test=is_test)}-ST-{seat_type_code(seat_type)}-{sequence:04d}"
 
 
 def _table_columns_sqlite(conn, table: str) -> set[str]:
@@ -360,6 +368,7 @@ def _create_seat_requests_table_sqlite(conn) -> None:
 def _backfill_seat_labels(conn) -> None:
     """Canonical labels for all seats (legacy ORG-*-SEAT-* → ORG-*-ST-{AD|OP|VR}-*)."""
     if uses_postgres():
+        org_rows = conn.execute("SELECT id, is_test FROM organisations").fetchall()
         rows = conn.execute(
             """
             SELECT id, organisation_id, seat_type, seat_label
@@ -368,6 +377,7 @@ def _backfill_seat_labels(conn) -> None:
             """
         ).fetchall()
     else:
+        org_rows = conn.execute("SELECT id, is_test FROM organisations").fetchall()
         rows = conn.execute(
             """
             SELECT id, organisation_id, seat_type, seat_label
@@ -375,6 +385,7 @@ def _backfill_seat_labels(conn) -> None:
             ORDER BY organisation_id, seat_type, id
             """
         ).fetchall()
+    org_is_test = {int(row_dict(r)["id"]): bool(row_dict(r).get("is_test")) for r in org_rows}
     counters: dict[tuple[int, str], int] = {}
     for row in rows:
         r = row_dict(row)
@@ -385,7 +396,7 @@ def _backfill_seat_labels(conn) -> None:
             st = "operator"
         key = (org_id, st)
         counters[key] = counters.get(key, 0) + 1
-        label = format_seat_label(org_id, st, counters[key])
+        label = format_seat_label(org_id, st, counters[key], is_test=org_is_test.get(org_id, False))
         current = (r.get("seat_label") or "").strip()
         if current == label:
             continue
@@ -523,18 +534,57 @@ def _seed_plans(conn, execute: Callable, fetchone: Callable, commit: Callable) -
 
 
 def _backfill_org_codes(conn, execute: Callable, fetchall: Callable, commit: Callable) -> None:
-    rows = fetchall("SELECT id, org_code FROM organisations ORDER BY id")
+    rows = fetchall("SELECT id, org_code, is_test FROM organisations ORDER BY id")
     for row in rows:
         r = row_dict(row)
         org_id = int(r["id"])
         code = (r.get("org_code") or "").strip()
         if code:
             continue
-        new_code = org_code_for_id(org_id)
+        new_code = org_code_for_id(org_id, is_test=bool(r.get("is_test")))
         if uses_postgres():
             execute("UPDATE organisations SET org_code = %s WHERE id = %s", (new_code, org_id))
         else:
             execute("UPDATE organisations SET org_code = ? WHERE id = ?", (new_code, org_id))
+    commit()
+
+
+def _migrate_test_org_code_prefix(conn, execute: Callable, fetchall: Callable, commit: Callable) -> None:
+    """Retarget test orgs from ORG-##### to T-ORG-##### (and matching seat labels)."""
+    rows = fetchall("SELECT id, org_code, is_test FROM organisations ORDER BY id")
+    for row in rows:
+        r = row_dict(row)
+        org_id = int(r["id"])
+        is_test = bool(r.get("is_test"))
+        old_code = (r.get("org_code") or "").strip()
+        new_code = org_code_for_id(org_id, is_test=is_test)
+        if not old_code or old_code == new_code:
+            continue
+        # Only rewrite canonical ORG-/T-ORG- codes for this id
+        expected_live = org_code_for_id(org_id, is_test=False)
+        expected_test = org_code_for_id(org_id, is_test=True)
+        if old_code not in (expected_live, expected_test):
+            continue
+        if uses_postgres():
+            execute("UPDATE organisations SET org_code = %s WHERE id = %s", (new_code, org_id))
+            execute(
+                """
+                UPDATE organisation_seats
+                SET seat_label = %s || substr(seat_label, %s)
+                WHERE organisation_id = %s AND seat_label LIKE %s
+                """,
+                (new_code, len(old_code) + 1, org_id, old_code + "%"),
+            )
+        else:
+            execute("UPDATE organisations SET org_code = ? WHERE id = ?", (new_code, org_id))
+            execute(
+                """
+                UPDATE organisation_seats
+                SET seat_label = ? || substr(seat_label, ?)
+                WHERE organisation_id = ? AND seat_label LIKE ?
+                """,
+                (new_code, len(old_code) + 1, org_id, old_code + "%"),
+            )
     commit()
 
 
@@ -755,6 +805,7 @@ def _init_billing_pg() -> None:
 
         _seed_plans(conn, execute, fetchone, conn.commit)
         _backfill_org_codes(conn, execute, fetchall, conn.commit)
+        _migrate_test_org_code_prefix(conn, execute, fetchall, conn.commit)
         _backfill_memberships(conn, execute, fetchone, fetchall, conn.commit)
         _dedupe_test_organisations(conn)
         _backfill_seat_types(conn)
@@ -781,6 +832,7 @@ def _init_billing_sqlite() -> None:
 
         _seed_plans(conn, execute, fetchone, conn.commit)
         _backfill_org_codes(conn, execute, fetchall, conn.commit)
+        _migrate_test_org_code_prefix(conn, execute, fetchall, conn.commit)
         _backfill_memberships(conn, execute, fetchone, fetchall, conn.commit)
         _dedupe_test_organisations(conn)
         _backfill_seat_types(conn)

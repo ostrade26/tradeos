@@ -3,7 +3,13 @@ import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
-import type { PaymentStatus, PaymentType, PlatformOrganisation } from '../../api/platformApi'
+import type {
+  OrganisationPayment,
+  PaymentStatus,
+  PaymentType,
+  PlatformOrganisation,
+} from '../../api/platformApi'
+import { organisationIsTest } from './platformAdminRegisterColumns'
 
 function centsFromRupees(value: string): number {
   const n = Number(value.replace(/,/g, '').trim())
@@ -11,11 +17,28 @@ function centsFromRupees(value: string): number {
   return Math.round(n * 100)
 }
 
+function rupeesFromCents(cents: number): string {
+  if (!Number.isFinite(cents)) return ''
+  const rupees = cents / 100
+  return Number.isInteger(rupees) ? String(rupees) : rupees.toFixed(2)
+}
+
+export type PaymentFormPayload = {
+  organisation_id: number
+  payment_type: PaymentType
+  amount_cents: number
+  payment_date: string
+  payment_reference: string
+  status: PaymentStatus
+  notes: string
+}
+
 export function PlatformRecordPaymentModal({
   open,
   onClose,
   organisations,
   defaultOrganisationId,
+  payment,
   loading,
   onSubmit,
 }: {
@@ -23,17 +46,11 @@ export function PlatformRecordPaymentModal({
   onClose: () => void
   organisations: PlatformOrganisation[]
   defaultOrganisationId?: number | null
+  payment?: OrganisationPayment | null
   loading: boolean
-  onSubmit: (payload: {
-    organisation_id: number
-    payment_type: PaymentType
-    amount_cents: number
-    payment_date: string
-    payment_reference: string
-    status: PaymentStatus
-    notes: string
-  }) => void
+  onSubmit: (payload: PaymentFormPayload) => void
 }) {
+  const editing = payment != null
   const [organisationId, setOrganisationId] = useState('')
   const [paymentType, setPaymentType] = useState<PaymentType>('licence')
   const [amountRupees, setAmountRupees] = useState('')
@@ -44,6 +61,16 @@ export function PlatformRecordPaymentModal({
 
   useEffect(() => {
     if (!open) return
+    if (payment) {
+      setOrganisationId(String(payment.organisation_id))
+      setPaymentType((payment.payment_type as PaymentType) || 'licence')
+      setAmountRupees(rupeesFromCents(payment.amount_cents))
+      setPaymentDate(String(payment.payment_date || '').slice(0, 10))
+      setReference(payment.payment_reference ?? '')
+      setStatus((payment.status as PaymentStatus) || 'paid')
+      setNotes(payment.notes ?? '')
+      return
+    }
     setOrganisationId(defaultOrganisationId ? String(defaultOrganisationId) : '')
     setPaymentType('licence')
     setAmountRupees('')
@@ -51,13 +78,13 @@ export function PlatformRecordPaymentModal({
     setReference('')
     setStatus('paid')
     setNotes('')
-  }, [open, defaultOrganisationId])
+  }, [open, defaultOrganisationId, payment])
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Record payment"
+      title={editing ? 'Edit payment' : 'Record payment'}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -79,7 +106,7 @@ export function PlatformRecordPaymentModal({
               })
             }
           >
-            Save payment
+            {editing ? 'Save changes' : 'Save payment'}
           </Button>
         </div>
       }
@@ -90,9 +117,10 @@ export function PlatformRecordPaymentModal({
             label="Organisation"
             value={organisationId}
             onChange={e => setOrganisationId(e.target.value)}
+            disabled={editing}
             options={organisations.map(o => ({
               value: String(o.id),
-              label: o.name,
+              label: organisationIsTest(o) ? `${o.name} (Test)` : o.name,
               description: o.org_code ?? undefined,
             }))}
           />

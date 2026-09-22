@@ -20,6 +20,7 @@ export function sessionFromApi(result: AuthMeResponse, token: string): AuthSessi
     permissions: result.permissions ?? [],
     isPlatformAdmin: !!result.isPlatformAdmin,
     organisationSandboxTools: !!result.organisationSandboxTools,
+    organisationIsTest: !!result.organisationIsTest,
     appliedUpdates: result.appliedUpdates ?? [],
     appliedVersion: result.appliedVersion ?? '',
   }

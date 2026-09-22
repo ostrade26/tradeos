@@ -644,7 +644,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
 
                 conn.execute(
                     "UPDATE organisations SET org_code = %s WHERE id = %s",
-                    (org_code_for_id(org_id), org_id),
+                    (org_code_for_id(org_id, is_test=bool(body.is_test)), org_id),
                 )
                 set_pg_organisation_context(conn, org_id)
                 conn.execute(
@@ -750,7 +750,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
 
             conn.execute(
                 "UPDATE organisations SET org_code = ? WHERE id = ?",
-                (org_code_for_id(org_id), org_id),
+                (org_code_for_id(org_id, is_test=bool(body.is_test)), org_id),
             )
             conn.execute(
                 "INSERT OR IGNORE INTO trade_state (organisation_id, data) VALUES (?, ?)",
@@ -847,6 +847,58 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
             tuple(params),
         )
 
+    def _sync_org_code_prefix(conn) -> None:
+        """Keep ORG- vs T-ORG- in sync when test flag changes."""
+        if "is_test" not in data:
+            return
+        from .billing_schema import org_code_for_id
+
+        is_test = bool(data.get("is_test"))
+        row = (
+            conn.execute("SELECT org_code FROM organisations WHERE id = %s", (org_id,)).fetchone()
+            if uses_postgres()
+            else conn.execute("SELECT org_code FROM organisations WHERE id = ?", (org_id,)).fetchone()
+        )
+        old_code = str((dict(row).get("org_code") if row else None) or "").strip()
+        new_code = org_code_for_id(org_id, is_test=is_test)
+        if not old_code or old_code == new_code:
+            if not old_code:
+                if uses_postgres():
+                    conn.execute(
+                        "UPDATE organisations SET org_code = %s WHERE id = %s",
+                        (new_code, org_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE organisations SET org_code = ? WHERE id = ?",
+                        (new_code, org_id),
+                    )
+            return
+        expected_live = org_code_for_id(org_id, is_test=False)
+        expected_test = org_code_for_id(org_id, is_test=True)
+        if old_code not in (expected_live, expected_test):
+            return
+        if uses_postgres():
+            conn.execute("UPDATE organisations SET org_code = %s WHERE id = %s", (new_code, org_id))
+            conn.execute(
+                """
+                UPDATE organisation_seats
+                SET seat_label = %s || substr(seat_label, %s)
+                WHERE organisation_id = %s AND seat_label LIKE %s
+                """,
+                (new_code, len(old_code) + 1, org_id, old_code + "%"),
+            )
+        else:
+            conn.execute("UPDATE organisations SET org_code = ? WHERE id = ?", (new_code, org_id))
+            conn.execute(
+                """
+                UPDATE organisation_seats
+                SET seat_label = ? || substr(seat_label, ?)
+                WHERE organisation_id = ? AND seat_label LIKE ?
+                """,
+                (new_code, len(old_code) + 1, org_id, old_code + "%"),
+            )
+
     if uses_postgres():
         with _pg_connect() as conn:
             old = conn.execute("SELECT * FROM organisations WHERE id = %s", (org_id,)).fetchone()
@@ -855,6 +907,7 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
             old_status = str(dict(old).get("status") or "")
             conn.execute(sql, tuple(values))
             _sync_primary_admin_contact(conn)
+            _sync_org_code_prefix(conn)
             conn.commit()
             detail = organisation_detail(conn, org_id)
             action = "organisation.updated"
@@ -883,6 +936,7 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         old_status = str(dict(old).get("status") or "")
         conn.execute(sql, tuple(values))
         _sync_primary_admin_contact(conn)
+        _sync_org_code_prefix(conn)
         conn.commit()
         detail = organisation_detail(conn, org_id)
         action = "organisation.updated"
@@ -1904,6 +1958,9 @@ class PaymentBody(BaseModel):
 
 
 class PaymentPatchBody(BaseModel):
+    payment_type: str | None = None
+    amount_cents: int | None = None
+    payment_date: str | None = None
     status: str | None = None
     notes: str | None = None
     payment_reference: str | None = None
@@ -2044,6 +2101,24 @@ def patch_org_payment(payment_id: int, body: PaymentPatchBody, request: Request)
         payment = update_payment(conn, payment_id, patch, session.user.id)
         conn.commit()
         return {"payment": payment}
+
+
+@router.delete("/payments/{payment_id}", summary="Remove a recorded payment")
+def delete_org_payment(payment_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "subscriptions.manage")
+    from .licence_repository import delete_payment
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            payment = delete_payment(conn, payment_id, session.user.id)
+            conn.commit()
+            return {"deleted": payment}
+    with _sqlite_connect() as conn:
+        payment = delete_payment(conn, payment_id, session.user.id)
+        conn.commit()
+        return {"deleted": payment}
 
 
 class SendNotificationBody(BaseModel):

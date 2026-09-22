@@ -8,11 +8,11 @@ export function accountTypeLabel(type: AccountType): string {
 export function orgRoleLabel(slug: string): string {
   switch (slug) {
     case 'organisation_admin':
-      return 'Organisation Admin'
+      return 'Admin'
     case 'operator':
-      return 'Organisation Operator'
+      return 'Operator'
     case 'view_only':
-      return 'Organisation Viewer'
+      return 'Viewer'
     case 'platform_admin':
       return 'Tradeal Admin'
     default:
@@ -84,7 +84,7 @@ export function productRequestPriorityShort(priority: string): string {
 export function seatTypeLabel(seatType: string): string {
   switch (seatType) {
     case 'organisation_admin':
-      return 'Organisation Admin'
+      return 'Admin'
     case 'operator':
       return 'Operator'
     case 'view_only':
@@ -95,7 +95,7 @@ export function seatTypeLabel(seatType: string): string {
 }
 
 export const ORG_ROLE_OPTIONS: { value: OrgRoleSlug; label: string }[] = [
-  { value: 'organisation_admin', label: 'Organisation Admin' },
-  { value: 'operator', label: 'Organisation Operator' },
-  { value: 'view_only', label: 'Organisation Viewer' },
+  { value: 'organisation_admin', label: 'Admin' },
+  { value: 'operator', label: 'Operator' },
+  { value: 'view_only', label: 'Viewer' },
 ]

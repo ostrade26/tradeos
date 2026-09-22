@@ -177,7 +177,7 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <p className="text-sm font-medium text-heading">Primary Organisation Admin</p>
+            <p className="text-sm font-medium text-heading">Primary Admin</p>
             <p className="text-xs text-muted mt-1">
               Uses the first included seat · we email their login ID and temporary password to the
               address below, and also show it once after create

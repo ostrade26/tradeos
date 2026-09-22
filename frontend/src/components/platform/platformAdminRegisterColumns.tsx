@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { sortRows } from '../../lib/registerSort'
 import { Badge } from '../ui/Badge'
 import type {
@@ -19,9 +20,9 @@ import { releaseCategoryLabel } from '../../lib/releaseVersion'
 
 export function platformStatusBadge(status: string) {
   const variant =
-    status === 'active' || status === 'paid' || status === 'included'
+    status === 'active' || status === 'paid' || status === 'included' || status === 'assigned'
       ? 'success'
-      : status === 'due_soon' || status === 'pending'
+      : status === 'due_soon' || status === 'pending' || status === 'available'
         ? 'info'
         : status === 'grace_period' || status === 'suspended' || status === 'failed'
           ? 'warning'
@@ -585,7 +586,11 @@ export function amcColumns(handlers: {
   ]
 }
 
-export function paymentColumns(): Column<OrganisationPayment>[] {
+export function paymentColumns(handlers?: {
+  onEdit?: (row: OrganisationPayment) => void
+  onDelete?: (row: OrganisationPayment) => void
+  busyId?: number | null
+}): Column<OrganisationPayment>[] {
   return [
     {
       key: 'organisation_name',
@@ -631,6 +636,47 @@ export function paymentColumns(): Column<OrganisationPayment>[] {
       sortValue: r => r.status,
       render: r => platformStatusBadge(String(r.status)),
     },
+    ...(handlers?.onEdit || handlers?.onDelete
+      ? [
+          {
+            key: 'actions',
+            header: '',
+            render: (r: OrganisationPayment) => (
+              <div className="flex items-center justify-end gap-2">
+                {handlers.onEdit ? (
+                  <button
+                    type="button"
+                    disabled={handlers.busyId === r.id}
+                    onClick={e => {
+                      e.stopPropagation()
+                      handlers.onEdit?.(r)
+                    }}
+                    className="inline-flex items-center text-muted hover:text-heading disabled:opacity-50"
+                    aria-label="Edit payment"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </button>
+                ) : null}
+                {handlers.onDelete ? (
+                  <button
+                    type="button"
+                    disabled={handlers.busyId === r.id}
+                    onClick={e => {
+                      e.stopPropagation()
+                      handlers.onDelete?.(r)
+                    }}
+                    className="inline-flex items-center text-muted hover:text-danger disabled:opacity-50"
+                    aria-label="Remove payment"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            ),
+            className: 'w-16 text-right',
+          } satisfies Column<OrganisationPayment>,
+        ]
+      : []),
   ]
 }
 

@@ -52,9 +52,9 @@ PERMISSIONS: list[tuple[str, str]] = [
 
 ROLE_DEFS: list[tuple[str, str, str]] = [
     ("platform_admin", "Tradeal Admin", "platform"),
-    ("organisation_admin", "Organisation Admin", "organisation"),
-    ("operator", "Organisation Operator", "organisation"),
-    ("view_only", "Organisation Viewer", "organisation"),
+    ("organisation_admin", "Admin", "organisation"),
+    ("operator", "Operator", "organisation"),
+    ("view_only", "Viewer", "organisation"),
 ]
 
 _BUSINESS = {slug for slug, _ in PERMISSIONS if not slug.startswith(("users.", "organisations.", "platform."))}

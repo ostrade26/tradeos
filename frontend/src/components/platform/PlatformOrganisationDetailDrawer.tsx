@@ -7,7 +7,7 @@ import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { EmptyState } from '../ui/EmptyState'
 import { DetailPanelMenu, groupMenuItems } from '../ui/DetailPanelMenu'
-import type { OrganisationDetailResponse } from '../../api/platformApi'
+import type { OrganisationDetailResponse, OrganisationPayment } from '../../api/platformApi'
 import { OrganisationSubscriptionPanel } from './OrganisationSubscriptionPanel'
 import { organisationIsTest } from './platformAdminRegisterColumns'
 import { platformBroadcastLabels } from '../../lib/inboxLabels'
@@ -34,6 +34,10 @@ interface PlatformOrganisationDetailDrawerProps {
   onDelete?: () => void
   onResetPrimaryAdminSignIn?: () => void
   onNotify?: () => void
+  onRecordPayment?: () => void
+  onEditPayment?: (payment: OrganisationPayment) => void
+  onDeletePayment?: (payment: OrganisationPayment) => void
+  payments?: OrganisationPayment[]
 }
 
 export function PlatformOrganisationDetailDrawer({
@@ -51,6 +55,10 @@ export function PlatformOrganisationDetailDrawer({
   onDelete,
   onResetPrimaryAdminSignIn,
   onNotify,
+  onRecordPayment,
+  onEditPayment,
+  onDeletePayment,
+  payments = [],
 }: PlatformOrganisationDetailDrawerProps) {
   const org = detail?.organisation
   const title = org?.name ?? 'Organisation'
@@ -195,6 +203,10 @@ export function PlatformOrganisationDetailDrawer({
   ) : (
     <OrganisationSubscriptionPanel
       detail={detail}
+      payments={payments}
+      onRecordPayment={onRecordPayment}
+      onEditPayment={onEditPayment}
+      onDeletePayment={onDeletePayment}
     />
   )
 

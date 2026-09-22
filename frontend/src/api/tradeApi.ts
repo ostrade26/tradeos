@@ -211,6 +211,7 @@ export interface AuthMeResponse {
   permissions?: string[]
   isPlatformAdmin?: boolean
   organisationSandboxTools?: boolean
+  organisationIsTest?: boolean
   appliedUpdates?: string[]
   appliedVersion?: string
   isFirstLogin?: boolean

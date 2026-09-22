@@ -665,10 +665,23 @@ export const platformApi = {
       body: JSON.stringify(body),
     }),
 
-  updatePayment: (paymentId: number, body: Partial<Pick<OrganisationPayment, 'status' | 'notes' | 'payment_reference'>>) =>
+  updatePayment: (
+    paymentId: number,
+    body: Partial<
+      Pick<
+        OrganisationPayment,
+        'payment_type' | 'amount_cents' | 'payment_date' | 'status' | 'notes' | 'payment_reference'
+      >
+    >,
+  ) =>
     apiFetch<{ payment: OrganisationPayment }>(`/platform/payments/${paymentId}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }),
+
+  deletePayment: (paymentId: number) =>
+    apiFetch<{ deleted: OrganisationPayment }>(`/platform/payments/${paymentId}`, {
+      method: 'DELETE',
     }),
 
   sendNotification: (body: {

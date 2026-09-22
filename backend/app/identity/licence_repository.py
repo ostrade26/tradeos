@@ -631,26 +631,45 @@ def update_payment(conn, payment_id: int, patch: dict[str, Any], actor_user_id: 
     if not old:
         raise HTTPException(status_code=404, detail="Payment not found")
     old_d = dict(_mapping(old))
+    types = {"licence", "amc", "additional_seat", "other"}
+    statuses = {"pending", "paid", "failed", "refunded"}
+    payment_type = patch.get("payment_type", old_d.get("payment_type") or "other")
     status = patch.get("status", old_d["status"])
     notes = patch.get("notes", old_d.get("notes") or "")
     ref = patch.get("payment_reference", old_d.get("payment_reference") or "")
+    payment_date = patch.get("payment_date", old_d.get("payment_date") or "")
+    amount_cents = patch.get("amount_cents", old_d.get("amount_cents") or 0)
+    if payment_type not in types:
+        raise HTTPException(status_code=400, detail="Invalid payment type")
+    if status not in statuses:
+        raise HTTPException(status_code=400, detail="Invalid payment status")
+    try:
+        amount_cents = int(amount_cents)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid amount") from exc
+    if amount_cents < 0:
+        raise HTTPException(status_code=400, detail="Amount must be zero or more")
     now = _now_iso()
     if uses_postgres():
         conn.execute(
             """
             UPDATE organisation_payments
-            SET status = %s, notes = %s, payment_reference = %s, updated_at = %s WHERE id = %s
+            SET payment_type = %s, amount_cents = %s, payment_date = %s,
+                status = %s, notes = %s, payment_reference = %s, updated_at = %s
+            WHERE id = %s
             """,
-            (status, notes, ref, now, payment_id),
+            (payment_type, amount_cents, payment_date, status, notes, ref, now, payment_id),
         )
         row = conn.execute("SELECT * FROM organisation_payments WHERE id = %s", (payment_id,)).fetchone()
     else:
         conn.execute(
             """
             UPDATE organisation_payments
-            SET status = ?, notes = ?, payment_reference = ?, updated_at = ? WHERE id = ?
+            SET payment_type = ?, amount_cents = ?, payment_date = ?,
+                status = ?, notes = ?, payment_reference = ?, updated_at = ?
+            WHERE id = ?
             """,
-            (status, notes, ref, now, payment_id),
+            (payment_type, amount_cents, payment_date, status, notes, ref, now, payment_id),
         )
         row = conn.execute("SELECT * FROM organisation_payments WHERE id = ?", (payment_id,)).fetchone()
     append_audit_log(
@@ -659,11 +678,47 @@ def update_payment(conn, payment_id: int, patch: dict[str, Any], actor_user_id: 
         action="payment.updated",
         entity_type="organisation_payment",
         entity_id=str(payment_id),
-        old_value={"status": old_d.get("status")},
-        new_value={"status": status},
+        old_value={
+            "payment_type": old_d.get("payment_type"),
+            "amount_cents": old_d.get("amount_cents"),
+            "payment_date": old_d.get("payment_date"),
+            "status": old_d.get("status"),
+            "payment_reference": old_d.get("payment_reference"),
+        },
+        new_value={
+            "payment_type": payment_type,
+            "amount_cents": amount_cents,
+            "payment_date": payment_date,
+            "status": status,
+            "payment_reference": ref,
+        },
         conn=conn,
     )
     return dict(_mapping(row))
+
+
+def delete_payment(conn, payment_id: int, actor_user_id: int) -> dict[str, Any]:
+    if uses_postgres():
+        old = conn.execute("SELECT * FROM organisation_payments WHERE id = %s", (payment_id,)).fetchone()
+    else:
+        old = conn.execute("SELECT * FROM organisation_payments WHERE id = ?", (payment_id,)).fetchone()
+    if not old:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    old_d = dict(_mapping(old))
+    if uses_postgres():
+        conn.execute("DELETE FROM organisation_payments WHERE id = %s", (payment_id,))
+    else:
+        conn.execute("DELETE FROM organisation_payments WHERE id = ?", (payment_id,))
+    append_audit_log(
+        organisation_id=int(old_d["organisation_id"]),
+        actor_user_id=actor_user_id,
+        action="payment.deleted",
+        entity_type="organisation_payment",
+        entity_id=str(payment_id),
+        old_value=old_d,
+        conn=conn,
+    )
+    return old_d
 
 
 def dashboard_metrics(conn) -> dict[str, Any]:

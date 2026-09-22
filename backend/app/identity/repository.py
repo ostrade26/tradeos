@@ -31,6 +31,7 @@ class AuthUser:
     organisation_name: str | None
     account_type: str
     organisation_sandbox_tools: bool
+    organisation_is_test: bool
     permissions: frozenset[str]
 
 
@@ -179,6 +180,7 @@ def _row_to_user(row: Any, permissions: frozenset[str]) -> AuthUser:
         organisation_name=r.get("organisation_name"),
         account_type=r["account_type"],
         organisation_sandbox_tools=bool(r.get("sandbox_tools")),
+        organisation_is_test=bool(r.get("is_test")),
         permissions=permissions,
     )
 
@@ -190,6 +192,7 @@ def _fetch_user_by_username(username: str) -> AuthUser | None:
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
                o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.is_test AS is_test,
                o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id
@@ -238,6 +241,7 @@ def _fetch_user_by_id(user_id: int) -> AuthUser | None:
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
                o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.is_test AS is_test,
                o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id
@@ -285,6 +289,7 @@ def authenticate(username: str, password: str) -> AuthUser:
                u.phone, u.location, u.preferences,
                r.slug AS role_slug, r.name AS role_name,
                o.name AS organisation_name, o.sandbox_tools AS sandbox_tools,
+               o.is_test AS is_test,
                o.status AS organisation_status
         FROM users u
         JOIN roles r ON r.id = u.role_id

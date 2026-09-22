@@ -30,6 +30,7 @@ import {
 import { loadRegisterSort, saveRegisterSort, toggleSort } from '../lib/registerSort'
 import { ackUnreadDeployReviews } from '../lib/ackDeployReviews'
 import { formatDateTime } from '../lib/utils'
+import { formatInrCents } from '../lib/platformLabels'
 import {
   amcColumns,
   auditLogColumns,
@@ -200,7 +201,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [deletePlanConfirmOpen, setDeletePlanConfirmOpen] = useState(false)
   const [deletingPlan, setDeletingPlan] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<OrganisationPayment | null>(null)
   const [savingPayment, setSavingPayment] = useState(false)
+  const [paymentToDelete, setPaymentToDelete] = useState<OrganisationPayment | null>(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [notifyAudience, setNotifyAudience] = useState<NotificationAudience>('org')
   const [savingNotice, setSavingNotice] = useState(false)
@@ -505,7 +509,18 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const orgColumns = useMemo(() => organisationColumns(), [])
   const seatColumns = useMemo(() => platformSeatColumns(), [])
   const planColumns = useMemo(() => subscriptionPlanColumns(), [])
-  const payColumns = useMemo(() => paymentColumns(), [])
+  const payColumns = useMemo(
+    () =>
+      paymentColumns({
+        busyId: deletingPayment ? paymentToDelete?.id ?? null : null,
+        onEdit: row => {
+          setEditingPayment(row)
+          setPaymentModalOpen(true)
+        },
+        onDelete: row => setPaymentToDelete(row),
+      }),
+    [deletingPayment, paymentToDelete?.id],
+  )
   const auditColumns = useMemo(() => auditLogColumns(), [])
 
   const activeOrganisationCount = useMemo(
@@ -807,14 +822,54 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }) => {
     setSavingPayment(true)
     try {
-      await platformApi.recordPayment(payload)
-      toast.success('Payment recorded')
+      if (editingPayment) {
+        await platformApi.updatePayment(editingPayment.id, {
+          payment_type: payload.payment_type,
+          amount_cents: payload.amount_cents,
+          payment_date: payload.payment_date,
+          payment_reference: payload.payment_reference,
+          status: payload.status,
+          notes: payload.notes,
+        })
+        toast.success('Payment updated')
+      } else {
+        await platformApi.recordPayment(payload)
+        toast.success('Payment recorded')
+      }
       setPaymentModalOpen(false)
+      setEditingPayment(null)
       await load()
+      if (orgDetailOpen && selectedOrgId != null) {
+        void loadOrgDetail(selectedOrgId, selectedLinkedRowId ?? undefined)
+      }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not record payment')
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : editingPayment
+            ? 'Could not update payment'
+            : 'Could not record payment',
+      )
     } finally {
       setSavingPayment(false)
+    }
+  }
+
+  const confirmDeletePayment = async () => {
+    if (!paymentToDelete || deletingPayment) return
+    setDeletingPayment(true)
+    try {
+      await platformApi.deletePayment(paymentToDelete.id)
+      toast.success('Payment removed')
+      setPaymentToDelete(null)
+      await load()
+      if (orgDetailOpen && selectedOrgId != null) {
+        void loadOrgDetail(selectedOrgId, selectedLinkedRowId ?? undefined)
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not remove payment')
+    } finally {
+      setDeletingPayment(false)
     }
   }
 
@@ -1279,7 +1334,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         New plan
       </Button>
     ) : section === 'payments' ? (
-      <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
+      <Button size="sm" onClick={() => { setEditingPayment(null); setPaymentModalOpen(true) }}>
         <Wallet className="h-4 w-4" aria-hidden />
         Record payment
       </Button>
@@ -1623,7 +1678,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                 title="No payments"
                 description="Record licence, AMC, or seat payments."
                 action={
-                  <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
+                  <Button size="sm" onClick={() => { setEditingPayment(null); setPaymentModalOpen(true) }}>
                     Record payment
                   </Button>
                 }
@@ -1745,9 +1800,14 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
 
       <PlatformRecordPaymentModal
         open={paymentModalOpen}
-        onClose={() => !savingPayment && setPaymentModalOpen(false)}
-        organisations={organisations.filter(org => !organisationIsTest(org))}
+        onClose={() => {
+          if (savingPayment) return
+          setPaymentModalOpen(false)
+          setEditingPayment(null)
+        }}
+        organisations={organisations}
         defaultOrganisationId={selectedOrgId}
+        payment={editingPayment}
         loading={savingPayment}
         onSubmit={payload => void submitPayment(payload)}
       />
@@ -1784,6 +1844,23 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         onDelete={() => setDeleteTestConfirmOpen(true)}
         onResetPrimaryAdminSignIn={openResetPrimaryAdminSignIn}
         onNotify={() => void openNotify('org')}
+        onRecordPayment={() => {
+          setEditingPayment(null)
+          setPaymentModalOpen(true)
+        }}
+        onEditPayment={payment => {
+          setEditingPayment(payment)
+          setPaymentModalOpen(true)
+        }}
+        onDeletePayment={payment => setPaymentToDelete(payment)}
+        payments={
+          selectedOrgId == null
+            ? []
+            : payments
+                .filter(p => p.organisation_id === selectedOrgId)
+                .slice()
+                .sort((a, b) => String(b.payment_date).localeCompare(String(a.payment_date)))
+        }
       />
 
       <PlatformReleaseDetailDrawer
@@ -1960,6 +2037,31 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           ) : null}{' '}
           from Plans &amp; Pricing. Organisations still on this plan are moved to another active plan
           automatically.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={paymentToDelete != null}
+        onClose={() => !deletingPayment && setPaymentToDelete(null)}
+        onConfirm={() => void confirmDeletePayment()}
+        title="Remove payment?"
+        confirmLabel="Remove payment"
+        slideLabel="Slide to remove"
+        variant="danger"
+        confirmLoading={deletingPayment}
+      >
+        <p className="text-sm text-muted leading-relaxed">
+          Remove{' '}
+          <span className="font-medium text-heading tabular-nums">
+            {paymentToDelete ? formatInrCents(paymentToDelete.amount_cents) : ''}
+          </span>
+          {paymentToDelete?.organisation_name ? (
+            <>
+              {' '}
+              for <span className="font-medium text-heading">{paymentToDelete.organisation_name}</span>
+            </>
+          ) : null}
+          . Paid and pending totals will update. This cannot be undone.
         </p>
       </ConfirmDialog>
     </div>

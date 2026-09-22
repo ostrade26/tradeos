@@ -46,6 +46,7 @@ interface AuthContextValue {
   isAdmin: boolean
   isPlatformAdmin: boolean
   organisationSandboxTools: boolean
+  organisationIsTest: boolean
   hasPermission: (permission: string) => boolean
   hasAppliedUpdate: (featureKey: string) => boolean
   login: (username: string, password: string, options?: { keepSignedIn?: boolean }) => Promise<void>
@@ -132,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: isAdmin(session),
       isPlatformAdmin: !!session?.isPlatformAdmin,
       organisationSandboxTools: !!session?.organisationSandboxTools,
+      organisationIsTest: !!session?.organisationIsTest,
       hasPermission: perm,
       hasAppliedUpdate: (featureKey: string) => hasAppliedUpdate(session, featureKey),
       login,
@@ -159,6 +161,7 @@ export function usePermissions() {
     isAdmin: auth.isAdmin,
     isPlatformAdmin: auth.isPlatformAdmin,
     organisationSandboxTools: auth.organisationSandboxTools,
+    organisationIsTest: auth.organisationIsTest,
     role: auth.role,
     roleSlug: auth.roleSlug,
     roleLabel: auth.roleLabel,

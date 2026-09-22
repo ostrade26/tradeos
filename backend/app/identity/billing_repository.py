@@ -192,6 +192,20 @@ def _next_seat_sequence(conn, organisation_id: int, seat_type: str) -> int:
     return n + 1
 
 
+def _organisation_is_test(conn, organisation_id: int) -> bool:
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT is_test FROM organisations WHERE id = %s",
+            (organisation_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT is_test FROM organisations WHERE id = ?",
+            (organisation_id,),
+        ).fetchone()
+    return bool(row_get(row, "is_test")) if row else False
+
+
 def sync_seat_entitlements(
     conn,
     organisation_id: int,
@@ -256,7 +270,12 @@ def sync_seat_entitlements(
         else:
             seat_type = purchased_seat_type
         seq = _next_seat_sequence(conn, organisation_id, seat_type)
-        label = format_seat_label(organisation_id, seat_type, seq)
+        label = format_seat_label(
+            organisation_id,
+            seat_type,
+            seq,
+            is_test=_organisation_is_test(conn, organisation_id),
+        )
         if uses_postgres():
             conn.execute(
                 """
@@ -1044,7 +1063,7 @@ def create_organisation_with_primary_admin(
     if not org_name:
         raise HTTPException(status_code=400, detail="Name is required")
 
-    admin_name = primary_admin.get("name", "").strip() or "Organisation Admin"
+    admin_name = primary_admin.get("name", "").strip() or "Admin"
     username = require_login_username(primary_admin.get("username", ""))
     email = optional_contact_email(primary_admin.get("email", ""))
     mobile = primary_admin.get("mobile", "").strip()
@@ -1088,7 +1107,7 @@ def create_organisation_with_primary_admin(
             ),
         ).fetchone()
         org_id = int(row["id"])
-        code = org_code_for_id(org_id)
+        code = org_code_for_id(org_id, is_test=bool(is_test))
         conn.execute("UPDATE organisations SET org_code = %s WHERE id = %s", (code, org_id))
         set_pg_organisation_context(conn, org_id)
         conn.execute(
@@ -1129,7 +1148,7 @@ def create_organisation_with_primary_admin(
             ),
         )
         org_id = int(cur.lastrowid)
-        code = org_code_for_id(org_id)
+        code = org_code_for_id(org_id, is_test=bool(is_test))
         conn.execute("UPDATE organisations SET org_code = ? WHERE id = ?", (code, org_id))
         conn.execute(
             "INSERT OR IGNORE INTO trade_state (organisation_id, data) VALUES (?, ?)",

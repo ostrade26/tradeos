@@ -37,6 +37,7 @@ export interface AuthSession {
   permissions: string[]
   isPlatformAdmin: boolean
   organisationSandboxTools: boolean
+  organisationIsTest: boolean
   appliedUpdates: string[]
   appliedVersion: string
 }
@@ -90,6 +91,9 @@ function parseAuthSession(raw: string | null): AuthSession | null {
     if (!Array.isArray(parsed.permissions)) parsed.permissions = []
     if (typeof parsed.organisationSandboxTools !== 'boolean') {
       parsed.organisationSandboxTools = false
+    }
+    if (typeof parsed.organisationIsTest !== 'boolean') {
+      parsed.organisationIsTest = false
     }
     if (typeof parsed.isPlatformAdmin !== 'boolean') {
       parsed.isPlatformAdmin = parsed.roleSlug === 'platform_admin'
