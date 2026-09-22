@@ -360,7 +360,11 @@ export function OrderDetailDrawer({
           {content}
         </DockedPanel>
         <BuyBackModal order={order} open={buyBackOpen} onClose={() => setBuyBackOpen(false)} />
-        <CloseOrderModal order={order} open={closeOpen} onClose={() => setCloseOpen(false)} />
+        <CloseOrderModal
+          orders={order ? [order] : []}
+          open={closeOpen}
+          onClose={() => setCloseOpen(false)}
+        />
       </>
     )
   }
@@ -371,7 +375,11 @@ export function OrderDetailDrawer({
         {content}
       </Drawer>
       <BuyBackModal order={order} open={buyBackOpen} onClose={() => setBuyBackOpen(false)} />
-      <CloseOrderModal order={order} open={closeOpen} onClose={() => setCloseOpen(false)} />
+      <CloseOrderModal
+        orders={order ? [order] : []}
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+      />
     </>
   )
 }

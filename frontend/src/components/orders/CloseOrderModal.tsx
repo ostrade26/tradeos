@@ -12,7 +12,8 @@ import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
 
 interface CloseOrderModalProps {
-  order: TradeOrder | null
+  /** One or more orders to close. */
+  orders: TradeOrder[]
   open: boolean
   onClose: () => void
   onComplete?: () => void
@@ -33,7 +34,7 @@ const METHOD_LABELS: Record<CloseOrderMethod, { title: string; description: stri
   },
 }
 
-export function CloseOrderModal({ order, open, onClose, onComplete }: CloseOrderModalProps) {
+export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrderModalProps) {
   const store = useTradeStore()
   const toast = useToast()
   const [method, setMethod] = useState<CloseOrderMethod>('cash')
@@ -42,135 +43,270 @@ export function CloseOrderModal({ order, open, onClose, onComplete }: CloseOrder
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const context = useMemo(
-    () => (order ? canCloseOrder(order, store.lifts, store.balanceSettlements ?? [], store.tradeOrders) : null),
-    [order, store.lifts, store.balanceSettlements, store.tradeOrders],
+  const assessments = useMemo(
+    () =>
+      orders.map(order => ({
+        order,
+        context: canCloseOrder(order, store.lifts, store.balanceSettlements ?? [], store.tradeOrders),
+      })),
+    [orders, store.lifts, store.balanceSettlements, store.tradeOrders],
   )
 
+  const closable = useMemo(() => assessments.filter(a => a.context.ok), [assessments])
+  const blocked = useMemo(() => assessments.filter(a => !a.context.ok), [assessments])
+  const isBulk = orders.length > 1
+  const single = !isBulk && assessments[0] ? assessments[0] : null
+
+  const availableMethods = useMemo(() => {
+    if (closable.length === 0) return [] as CloseOrderMethod[]
+    const first = new Set(closable[0].context.availableMethods)
+    return closable[0].context.availableMethods.filter(m =>
+      closable.every(a => a.context.availableMethods.includes(m) && first.has(m)),
+    )
+  }, [closable])
+
+  const bulkCloseQty = useMemo(
+    () => closable.reduce((sum, a) => sum + a.context.balanceOwed + a.context.toBeLifted, 0),
+    [closable],
+  )
+
+  const availableMethodsKey = availableMethods.join(',')
+  const orderIdsKey = orders.map(o => o.id).join(',')
+
   useEffect(() => {
-    if (!open || !order || !context?.ok) return
-    setMethod(context.availableMethods[0] ?? 'cash')
+    if (!open || closable.length === 0) return
+    setMethod((availableMethodsKey.split(',')[0] as CloseOrderMethod) || 'cash')
     setNotes('')
     setSettledAt(new Date().toISOString().slice(0, 10))
     setError('')
-  }, [open, order, context])
+  }, [open, orderIdsKey, availableMethodsKey, closable.length])
 
-  if (!order || !context) return null
+  if (orders.length === 0) return null
 
-  const contractRate = contractRateFromOrder(order.rate, order.rateBasis, order.ratePerBasis)
-  const closeQty = context.balanceOwed + context.toBeLifted
-  const closeAmount = orderLineAmount(closeQty, contractRate, order.rateBasis)
-  const shortLabel = order.side === 'purchase' ? 'PO' : 'SO'
+  const shortLabel = orders[0]?.side === 'purchase' ? 'PO' : 'SO'
 
   const handleSubmit = async () => {
     setError('')
-    if (!context.ok) {
-      setError(context.reason ?? 'Cannot close this order.')
+    if (closable.length === 0) {
+      setError('None of the selected orders can be closed.')
       return
     }
-    if (!context.availableMethods.includes(method)) {
+    if (!availableMethods.includes(method)) {
       setError('Choose a valid close method.')
       return
     }
 
     setSaving(true)
+    let closed = 0
+    const failures: string[] = []
     try {
-      await store.closeOrder(order.id, {
-        method,
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
-        ...(method !== 'short_closed' ? { settledAt } : {}),
-      })
+      for (const { order } of closable) {
+        try {
+          await store.closeOrder(order.id, {
+            method,
+            ...(notes.trim() ? { notes: notes.trim() } : {}),
+            ...(method !== 'short_closed' ? { settledAt } : {}),
+          })
+          closed += 1
+        } catch (err) {
+          failures.push(
+            `${formatOrderRef(order.ref, order.side)}: ${err instanceof Error ? err.message : 'Failed'}`,
+          )
+        }
+      }
+
       const methodTitle = METHOD_LABELS[method].title
-      toast.success('Order closed', { description: `${formatOrderRef(order.ref, order.side)} · ${methodTitle}` })
-      onComplete?.()
-      onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not close order.')
-      toast.error('Could not close order', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+      if (closed > 0 && failures.length === 0) {
+        toast.success(closed === 1 ? 'Order closed' : `${closed} orders closed`, {
+          description:
+            closed === 1
+              ? `${formatOrderRef(closable[0].order.ref, closable[0].order.side)} · ${methodTitle}`
+              : `${methodTitle}${blocked.length > 0 ? ` · ${blocked.length} skipped` : ''}`,
+        })
+        onComplete?.()
+        onClose()
+      } else if (closed > 0) {
+        toast.success(`${closed} closed, ${failures.length} failed`, {
+          description: failures[0],
+        })
+        onComplete?.()
+        onClose()
+      } else {
+        setError(failures[0] ?? 'Could not close orders.')
+        toast.error('Could not close orders', { description: failures[0] })
+      }
     } finally {
       setSaving(false)
     }
   }
 
+  const title = isBulk ? `Close ${orders.length} ${shortLabel}s` : 'Close order'
+  const canSubmit = closable.length > 0 && availableMethods.includes(method)
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Close order"
+      title={title}
       size="md"
       footer={(
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={() => void handleSubmit()} loading={saving} disabled={saving || !context.ok}>
-            Close order
+          <Button onClick={() => void handleSubmit()} loading={saving} disabled={saving || !canSubmit}>
+            {isBulk ? `Close ${closable.length}` : 'Close order'}
           </Button>
         </div>
       )}
     >
       <div className="space-y-5 py-1">
-        <div className="rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50">
-          <p className="text-sm font-medium text-heading">{formatOrderRef(order.ref, order.side)} · {order.itemName}</p>
-          {context.poRef && context.soRef && (
-            <p className="text-xs text-muted mt-1">
-              {shortLabel} vs {order.side === 'sale' ? formatPoRef(context.poRef) : formatSoRef(context.soRef)}
+        {single ? (
+          <div className="rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50">
+            <p className="text-sm font-medium text-heading">
+              {formatOrderRef(single.order.ref, single.order.side)} · {single.order.itemName}
             </p>
-          )}
-        </div>
+            {single.context.poRef && single.context.soRef && (
+              <p className="text-xs text-muted mt-1">
+                {shortLabel} vs{' '}
+                {single.order.side === 'sale'
+                  ? formatPoRef(single.context.poRef)
+                  : formatSoRef(single.context.soRef)}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-md bg-gray-100/90 px-4 py-3 dark:bg-gray-800/50 space-y-1.5">
+            <p className="text-sm font-medium text-heading">
+              {closable.length} of {orders.length} can be closed
+            </p>
+            {blocked.length > 0 && (
+              <ul className="text-xs text-muted space-y-1 max-h-28 overflow-y-auto">
+                {blocked.map(({ order, context }) => (
+                  <li key={order.id}>
+                    <span className="font-medium text-heading">
+                      {formatOrderRef(order.ref, order.side)}
+                    </span>
+                    {' — '}
+                    {context.reason ?? 'Cannot close'}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
-        {!context.ok ? (
-          <p className="text-sm text-warning">{context.reason}</p>
+        {closable.length === 0 ? (
+          <p className="text-sm text-warning">
+            {single?.context.reason ?? 'None of the selected orders can be closed.'}
+          </p>
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <div>
-                <dt className="text-muted">Delivered</dt>
-                <dd className="font-semibold tabular-nums text-heading">{formatQty(order.liftedQty)} MT</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Ordered</dt>
-                <dd className="font-semibold tabular-nums text-heading">{formatQty(order.orderQty)} MT</dd>
-              </div>
-              {context.toBeLifted > 0 && (
+            {single ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div>
-                  <dt className="text-muted">To be lifted</dt>
-                  <dd className="font-semibold tabular-nums text-warning">{formatQty(context.toBeLifted)} MT</dd>
+                  <dt className="text-muted">Delivered</dt>
+                  <dd className="font-semibold tabular-nums text-heading">
+                    {formatQty(single.order.liftedQty)} MT
+                  </dd>
                 </div>
-              )}
-              {context.balanceOwed > 0 && (
                 <div>
-                  <dt className="text-muted">Balance owed</dt>
-                  <dd className="font-semibold tabular-nums text-warning">{formatQty(context.balanceOwed)} MT</dd>
+                  <dt className="text-muted">Ordered</dt>
+                  <dd className="font-semibold tabular-nums text-heading">
+                    {formatQty(single.order.orderQty)} MT
+                  </dd>
                 </div>
-              )}
-            </dl>
+                {single.context.toBeLifted > 0 && (
+                  <div>
+                    <dt className="text-muted">To be lifted</dt>
+                    <dd className="font-semibold tabular-nums text-warning">
+                      {formatQty(single.context.toBeLifted)} MT
+                    </dd>
+                  </div>
+                )}
+                {single.context.balanceOwed > 0 && (
+                  <div>
+                    <dt className="text-muted">Balance owed</dt>
+                    <dd className="font-semibold tabular-nums text-warning">
+                      {formatQty(single.context.balanceOwed)} MT
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-muted">Closing</dt>
+                  <dd className="font-semibold tabular-nums text-heading">
+                    {closable.length} {shortLabel}
+                    {closable.length === 1 ? '' : 's'}
+                  </dd>
+                </div>
+                {bulkCloseQty > 0 && (
+                  <div>
+                    <dt className="text-muted">Qty to settle</dt>
+                    <dd className="font-semibold tabular-nums text-warning">
+                      {formatQty(bulkCloseQty)} MT
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
 
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted">How are you closing this?</p>
-              {context.availableMethods.map(m => (
-                <label
-                  key={m}
-                  className="flex cursor-pointer gap-3 rounded-md border border-gray-200 px-4 py-3 dark:border-gray-700 has-[:checked]:border-accent has-[:checked]:bg-accent-muted/30"
-                >
-                  <Radio
-                    name="closeMethod"
-                    value={m}
-                    checked={method === m}
-                    onChange={() => setMethod(m)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-heading">{METHOD_LABELS[m].title}</span>
-                    <span className="block text-xs text-muted mt-0.5">{METHOD_LABELS[m].description}</span>
-                    {m === 'cash' && closeQty > 0 && (
-                      <span className="block text-xs font-medium tabular-nums text-heading mt-1">
-                        {formatQty(closeQty)} @ {formatContractRate(order.rate, order.rateBasis, order.ratePerBasis)} = {formatCurrency(closeAmount)}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
+              {availableMethods.map(m => {
+                const cashLine =
+                  m === 'cash' && single
+                    ? (() => {
+                        const closeQty = single.context.balanceOwed + single.context.toBeLifted
+                        const contractRate = contractRateFromOrder(
+                          single.order.rate,
+                          single.order.rateBasis,
+                          single.order.ratePerBasis,
+                        )
+                        const closeAmount = orderLineAmount(
+                          closeQty,
+                          contractRate,
+                          single.order.rateBasis,
+                        )
+                        return closeQty > 0 ? (
+                          <span className="block text-xs font-medium tabular-nums text-heading mt-1">
+                            {formatQty(closeQty)} @{' '}
+                            {formatContractRate(
+                              single.order.rate,
+                              single.order.rateBasis,
+                              single.order.ratePerBasis,
+                            )}{' '}
+                            = {formatCurrency(closeAmount)}
+                          </span>
+                        ) : null
+                      })()
+                    : m === 'cash' && isBulk && bulkCloseQty > 0
+                      ? (
+                          <span className="block text-xs font-medium tabular-nums text-heading mt-1">
+                            {formatQty(bulkCloseQty)} MT across {closable.length} orders
+                          </span>
+                        )
+                      : null
+                return (
+                  <label
+                    key={m}
+                    className="flex cursor-pointer gap-3 rounded-md border border-gray-200 px-4 py-3 dark:border-gray-700 has-[:checked]:border-accent has-[:checked]:bg-accent-muted/30"
+                  >
+                    <Radio
+                      name="closeMethod"
+                      value={m}
+                      checked={method === m}
+                      onChange={() => setMethod(m)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-heading">{METHOD_LABELS[m].title}</span>
+                      <span className="block text-xs text-muted mt-0.5">{METHOD_LABELS[m].description}</span>
+                      {cashLine}
+                    </span>
+                  </label>
+                )
+              })}
             </div>
 
             {method !== 'short_closed' && (
@@ -189,15 +325,21 @@ export function CloseOrderModal({ order, open, onClose, onComplete }: CloseOrder
               placeholder="e.g. Month-end cash settlement"
             />
 
-            {method === 'carried_forward' && context.toBeLifted > 0 && (
+            {method === 'carried_forward' && single && single.context.toBeLifted > 0 && (
               <p className="text-xs text-muted">
-                Effective {formatDate(new Date().toISOString())} · {formatQty(context.toBeLifted)}
+                Effective {formatDate(new Date().toISOString())} · {formatQty(single.context.toBeLifted)}
                 will sit as seller balance and can be applied on the next lift
               </p>
             )}
-            {method === 'short_closed' && context.toBeLifted > 0 && (
+            {method === 'short_closed' && single && single.context.toBeLifted > 0 && (
               <p className="text-xs text-muted">
-                Effective {formatDate(new Date().toISOString())} · order qty will reduce to {formatQty(order.liftedQty)} MT
+                Effective {formatDate(new Date().toISOString())} · order qty will reduce to{' '}
+                {formatQty(single.order.liftedQty)} MT
+              </p>
+            )}
+            {isBulk && (
+              <p className="text-xs text-muted">
+                The same close method will be applied to each closable {shortLabel}.
               </p>
             )}
           </>

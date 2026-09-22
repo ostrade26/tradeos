@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, FileText, Trash2, Undo2, X } from 'lucide-react'
+import { Plus, FileText, Trash2, Undo2, X, CircleCheck } from 'lucide-react'
 import { PageHeader } from '../ui/CommandPalette'
 import { Breadcrumb, Tabs, EmptyState } from '../ui/Tabs'
 import { Button } from '../ui/Button'
@@ -94,7 +94,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const [permanentDeleteError, setPermanentDeleteError] = useState('')
   const [blockedDelete, setBlockedDelete] = useState<{ name: string; reason: string } | null>(null)
   const [cancelTarget, setCancelTarget] = useState<TradeOrder | null>(null)
-  const [closeTarget, setCloseTarget] = useState<TradeOrder | null>(null)
+  const [closeTargets, setCloseTargets] = useState<TradeOrder[]>([])
   const [buyBackTarget, setBuyBackTarget] = useState<TradeOrder | null>(null)
   const [checkedOrderIds, setCheckedOrderIds] = useState<string[]>([])
   const selectionAnchorRef = useRef<string | null>(null)
@@ -341,6 +341,16 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const checkedOrders = useMemo(
     () => sortedFiltered.filter(o => checkedOrderIds.includes(o.id)),
     [sortedFiltered, checkedOrderIds],
+  )
+
+  const closableCheckedOrders = useMemo(
+    () =>
+      mode !== 'deleted'
+        ? checkedOrders.filter(
+            o => canCloseOrder(o, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok,
+          )
+        : [],
+    [checkedOrders, mode, store.lifts, store.balanceSettlements, store.tradeOrders],
   )
 
   const selectionTotals = useMemo(() => {
@@ -616,7 +626,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
           sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
           deletedTab={mode === 'deleted'}
-          onCloseOrder={() => setCloseTarget(r)}
+          onCloseOrder={() => setCloseTargets([r])}
           onBuyBack={() => setBuyBackTarget(r)}
           onScheduleDelete={() => {
             openDeleteForOrders([r])
@@ -952,6 +962,19 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
               Delete
             </Button>
           )}
+          {mode !== 'deleted' && closableCheckedOrders.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCloseTargets(checkedOrders)}
+            >
+              <CircleCheck className="h-4 w-4" />
+              Close
+              {closableCheckedOrders.length !== checkedOrders.length
+                ? ` (${closableCheckedOrders.length})`
+                : ''}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -1016,7 +1039,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                           canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
                           sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
                           deletedTab={mode === 'deleted'}
-                          onCloseOrder={() => setCloseTarget(r)}
+                          onCloseOrder={() => setCloseTargets([r])}
                           onBuyBack={() => setBuyBackTarget(r)}
                           onScheduleDelete={() => {
                             openDeleteForOrders([r])
@@ -1155,10 +1178,14 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       />
 
       <CloseOrderModal
-        order={closeTarget}
-        open={!!closeTarget}
-        onClose={() => setCloseTarget(null)}
-        onComplete={() => setCloseTarget(null)}
+        orders={closeTargets}
+        open={closeTargets.length > 0}
+        onClose={() => setCloseTargets([])}
+        onComplete={() => {
+          setCloseTargets([])
+          setCheckedOrderIds([])
+          selectionAnchorRef.current = null
+        }}
       />
       <BuyBackModal
         order={buyBackTarget}
