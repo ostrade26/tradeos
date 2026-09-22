@@ -1,5 +1,6 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, type ReactNode } from 'react'
 import { cn, formatDeliveryPeriodRange, formatMt } from '../../lib/utils'
+import { attachShiftWheelHorizontalScroll } from '../../lib/horizontalScroll'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { EmptyState, emptyStateShellClass } from './Tabs'
 
@@ -31,6 +32,12 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
   emptyMessage = 'No records found',
 }: GroupedDataTableProps<T>) {
   const { classes: density } = useTableDensity()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    return attachShiftWheelHorizontalScroll(el)
+  }, [])
 
   if (data.length === 0) {
     const state = emptyState ?? <EmptyState title={emptyMessage} />
@@ -47,7 +54,10 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
   const sumColumns = columns.filter(c => c.sumKey)
 
   return (
-    <div className="overflow-x-auto rounded-md bg-card shadow-[var(--shadow-card)] dark:border-gray-700">
+    <div
+      ref={scrollRef}
+      className="overflow-x-auto scrollbar-on-hover rounded-md bg-card shadow-[var(--shadow-card)] dark:border-gray-700"
+    >
       <table className={cn('w-full border-collapse', density.text, density.leading)}>
         <thead>
           <tr>

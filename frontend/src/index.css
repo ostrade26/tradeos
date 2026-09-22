@@ -287,12 +287,16 @@ body {
 }
 
 .is-scrolling::-webkit-scrollbar-thumb,
-.scrollbar-focused::-webkit-scrollbar-thumb {
+.scrollbar-focused::-webkit-scrollbar-thumb,
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb,
+.overflow-x-auto:has(table):hover::-webkit-scrollbar-thumb {
   background: #cbd5e1;
 }
 
 .dark .is-scrolling::-webkit-scrollbar-thumb,
-.dark .scrollbar-focused::-webkit-scrollbar-thumb {
+.dark .scrollbar-focused::-webkit-scrollbar-thumb,
+.dark .scrollbar-on-hover:hover::-webkit-scrollbar-thumb,
+.dark .overflow-x-auto:has(table):hover::-webkit-scrollbar-thumb {
   background: #4b5563;
 }
 
@@ -303,12 +307,16 @@ body {
   }
 
   .is-scrolling:not(.scrollbar-none),
-  .scrollbar-focused:not(.scrollbar-none) {
+  .scrollbar-focused:not(.scrollbar-none),
+  .scrollbar-on-hover:not(.scrollbar-none):hover,
+  .overflow-x-auto:has(table):not(.scrollbar-none):hover {
     scrollbar-color: #cbd5e1 transparent;
   }
 
   .dark .is-scrolling:not(.scrollbar-none),
-  .dark .scrollbar-focused:not(.scrollbar-none) {
+  .dark .scrollbar-focused:not(.scrollbar-none),
+  .dark .scrollbar-on-hover:not(.scrollbar-none):hover,
+  .dark .overflow-x-auto:has(table):not(.scrollbar-none):hover {
     scrollbar-color: #4b5563 transparent;
   }
 }

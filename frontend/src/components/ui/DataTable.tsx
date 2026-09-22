@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { attachShiftWheelHorizontalScroll } from '../../lib/horizontalScroll'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { Button } from './Button'
 import { Select } from './Select'
@@ -239,6 +240,12 @@ export function DataTable<T extends { id?: string | number }>({
   fullWidth = false,
 }: DataTableProps<T>) {
   const { classes: density } = useTableDensity()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    return attachShiftWheelHorizontalScroll(el)
+  }, [])
   const hasCheckboxColumn = Boolean(onSelectRow && getRowId)
   const stickyRefLeft = hasCheckboxColumn ? 'left-0 md:left-14' : 'left-0'
   const lastColIndex = columns.length - 1
@@ -332,7 +339,10 @@ export function DataTable<T extends { id?: string | number }>({
         </div>
       )}
 
-      <div className={cn('overflow-x-auto', mobileRender && 'hidden md:block')}>
+      <div
+        ref={scrollRef}
+        className={cn('overflow-x-auto scrollbar-on-hover', mobileRender && 'hidden md:block')}
+      >
         <table
           data-register-table
           className={cn(
