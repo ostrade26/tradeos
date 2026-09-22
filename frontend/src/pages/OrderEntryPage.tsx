@@ -48,6 +48,7 @@ import {
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
+import { uniqueSorted } from '../lib/orderFilters'
 import { collapseRepeatedPartyLocation, formatSellerBalanceDetail } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
 import { shareOrderOnWhatsApp } from '../lib/whatsappShare'
@@ -789,17 +790,59 @@ function SOEntryForm({
   saveLoading?: boolean
 }) {
   const { name: accountTrader } = useAccountTrader()
+  const [poLinkItem, setPoLinkItem] = useState('')
+  const [poLinkSeller, setPoLinkSeller] = useState('')
+  const [poLinkSpot, setPoLinkSpot] = useState('')
+
+  const poLinkEditable = !((isEdit && !!editingOrder?.poRef) || !!sellFromLot || !!linkedPoRef)
+
   const availablePOs = useMemo(() => {
-    const itemName = form.itemName.trim() || editingOrder?.itemName || ''
     const includeRef = isEdit && editingOrder?.poRef ? editingOrder.poRef : undefined
-    const base = store.getPOsAvailableForSO({ includeRef, itemName })
+    // Do not auto-narrow by SO item — use explicit Item/Seller/Spot filters below.
+    let base = store.getPOsAvailableForSO({ includeRef })
     if (isEdit && editingOrder?.poRef && !base.some(p => p.ref === editingOrder.poRef)) {
       const linked = store.getOrderByRef(editingOrder.poRef, 'purchase')
-      return linked ? [linked, ...base] : base
+      if (linked) base = [linked, ...base]
     }
-    return base
-  }, [store, isEdit, editingOrder?.poRef, editingOrder?.itemName, form.itemName])
+    if (!poLinkEditable) return base
+
+    const itemQ = poLinkItem.trim().toLowerCase()
+    const sellerQ = poLinkSeller.trim().toLowerCase()
+    const spotQ = poLinkSpot.trim().toLowerCase()
+    return base.filter(po => {
+      if (itemQ && po.itemName.trim().toLowerCase() !== itemQ) return false
+      const seller = (po.sellerName || po.partyName || '').trim().toLowerCase()
+      if (sellerQ && seller !== sellerQ) return false
+      if (spotQ && (po.spot || '').trim().toLowerCase() !== spotQ) return false
+      return true
+    })
+  }, [
+    store,
+    isEdit,
+    editingOrder?.poRef,
+    poLinkEditable,
+    poLinkItem,
+    poLinkSeller,
+    poLinkSpot,
+  ])
+
+  const poFilterOptions = useMemo(() => {
+    const includeRef = isEdit && editingOrder?.poRef ? editingOrder.poRef : undefined
+    const pool = store.getPOsAvailableForSO({ includeRef })
+    const items = uniqueSorted(pool.map(p => p.itemName))
+    const sellers = uniqueSorted(pool.map(p => p.sellerName || p.partyName))
+    const spots = uniqueSorted(pool.map(p => p.spot))
+    return { items, sellers, spots }
+  }, [store, isEdit, editingOrder?.poRef])
+
   const partyOptions = buildAllPartyOptions(store.companies, store.producers, store.retailers)
+
+  useEffect(() => {
+    if (!poLinkEditable || !form.poRef) return
+    if (!availablePOs.some(p => p.ref === form.poRef)) {
+      form.set('poRef', '')
+    }
+  }, [poLinkEditable, availablePOs, form.poRef, form])
 
   const poLinked = !!editingOrder?.poRef
   const qtyCap = sellFromLot?.available ?? maxSellQty
@@ -822,29 +865,71 @@ function SOEntryForm({
   ] : undefined
 
   const linkPoSelect = (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="min-w-0 flex-1">
-        <Select
-          label="Purchase Order (Lot)"
-          options={withPlaceholder(
-            availablePOs.map(po => orderDropdownOption(po, store.getRemainingSellQty(po.ref))),
-            'None — link later',
-          )}
-          value={form.poRef}
-          onChange={e => form.set('poRef', e.target.value)}
-          disabled={(isEdit && poLinked) || !!sellFromLot || !!linkedPoRef}
-        />
+    <div className="space-y-3">
+      {poLinkEditable ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Select
+            label="Item"
+            searchable
+            options={withPlaceholder(
+              poFilterOptions.items.map(item => ({ value: item, label: item })),
+              'All items',
+            )}
+            value={poLinkItem}
+            onChange={e => setPoLinkItem(e.target.value)}
+          />
+          <Select
+            label="Seller"
+            searchable
+            options={withPlaceholder(
+              poFilterOptions.sellers.map(seller => ({ value: seller, label: seller })),
+              'All sellers',
+            )}
+            value={poLinkSeller}
+            onChange={e => setPoLinkSeller(e.target.value)}
+          />
+          <Select
+            label="Spot"
+            searchable
+            options={withPlaceholder(
+              poFilterOptions.spots.map(spot => ({ value: spot, label: spot })),
+              'All spots',
+            )}
+            value={poLinkSpot}
+            onChange={e => setPoLinkSpot(e.target.value)}
+          />
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <Select
+            label="Purchase Order (Lot)"
+            options={withPlaceholder(
+              availablePOs.map(po => orderDropdownOption(po, store.getRemainingSellQty(po.ref))),
+              'None — link later',
+            )}
+            value={form.poRef}
+            onChange={e => form.set('poRef', e.target.value)}
+            disabled={(isEdit && poLinked) || !!sellFromLot || !!linkedPoRef}
+          />
+          {poLinkEditable ? (
+            <p className="mt-1.5 text-xs text-muted">
+              {availablePOs.length} open PO{availablePOs.length === 1 ? '' : 's'}
+              {(poLinkItem || poLinkSeller || poLinkSpot) ? ' matching filters' : ' with availability'}
+            </p>
+          ) : null}
+        </div>
+        {showPoRowAction && selectedPO && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 sm:mb-0.5"
+            onClick={onClearAll}
+          >
+            Clear all
+          </Button>
+        )}
       </div>
-      {showPoRowAction && selectedPO && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0 sm:mb-0.5"
-          onClick={onClearAll}
-        >
-          Clear all
-        </Button>
-      )}
     </div>
   )
 
