@@ -47,7 +47,7 @@ import {
   resolveBrokerageTerms,
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
-import { formatOrderRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
+import { formatOrderRef, formatPoRef } from '../lib/tradeRefs'
 import { uniqueSorted } from '../lib/orderFilters'
 import { collapseRepeatedPartyLocation } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
