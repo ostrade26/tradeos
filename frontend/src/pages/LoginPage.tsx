@@ -53,8 +53,10 @@ export function LoginPage() {
         setError(
           'Cannot reach the Tradeal API. Run npm run dev:all, open http://127.0.0.1:5173, and confirm http://127.0.0.1:8000/api/v1/health returns JSON.',
         )
+      } else if (err instanceof ApiError) {
+        setError(err.message)
       } else {
-        setError(err instanceof ApiError ? err.message : 'Could not sign in')
+        setError('Could not sign in')
       }
     } finally {
       setSubmitting(false)

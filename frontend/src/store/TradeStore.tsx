@@ -821,7 +821,14 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getPOsAvailableForSO = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'purchase' && o.status !== 'cancelled'),
+    () =>
+      data.tradeOrders.filter(
+        o =>
+          o.side === 'purchase'
+          && o.status !== 'cancelled'
+          && o.status !== 'completed'
+          && !o.deleteScheduledAt,
+      ),
     [data.tradeOrders],
   )
 

@@ -414,32 +414,6 @@ def touch_user_activity(user_id: int) -> None:
             conn.commit()
 
 
-def create_session(user: AuthUser, *, remember: bool = True) -> tuple[str, Session]:
-    import time
-
-    token = secrets.token_urlsafe(32)
-    created = _now_iso()
-    ttl_days = 30 if remember else 1
-    expires = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
-    if uses_postgres():
-        with _pg_connect() as conn:
-            conn.execute(
-                "INSERT INTO auth_sessions (token, user_id, created_at, expires_at) VALUES (%s, %s, %s, %s)",
-                (token, user.id, created, expires),
-            )
-            _prune_excess_sessions(conn, user.id, keep_token=token)
-            conn.commit()
-    else:
-        with _sqlite_connect() as conn:
-            conn.execute(
-                "INSERT INTO auth_sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-                (token, user.id, created, expires),
-            )
-            _prune_excess_sessions(conn, user.id, keep_token=token)
-            conn.commit()
-    return token, Session(token=token, user=user, created_at=time.time())
-
-
 MAX_ACTIVE_SESSIONS_PER_USER = 2
 SESSION_REVOKED_DEVICE_LIMIT = "device_limit"
 SESSION_REPLACED_DETAIL = {
@@ -449,10 +423,67 @@ SESSION_REPLACED_DETAIL = {
         "You can stay signed in on up to 2 devices (for example phone and computer)."
     ),
 }
+DEVICE_LIMIT_REACHED_DETAIL = {
+    "code": "device_limit_reached",
+    "message": (
+        "This account is already signed in on 2 devices. "
+        "Sign out on one of those devices (phone or computer), then try again."
+    ),
+}
+
+
+def count_active_sessions(conn, user_id: int) -> int:
+    """Non-expired sessions for this user."""
+    now = _now_iso()
+    if uses_postgres():
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM auth_sessions
+            WHERE user_id = %s AND (expires_at IS NULL OR expires_at > %s)
+            """,
+            (user_id, now),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM auth_sessions
+            WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
+            """,
+            (user_id, now),
+        ).fetchone()
+    return int(row_get(row, "n") or 0)
+
+
+def create_session(user: AuthUser, *, remember: bool = True) -> tuple[str, Session]:
+    import time
+
+    token = secrets.token_urlsafe(32)
+    created = _now_iso()
+    ttl_days = 30 if remember else 1
+    expires = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+    if uses_postgres():
+        with _pg_connect() as conn:
+            if count_active_sessions(conn, user.id) >= MAX_ACTIVE_SESSIONS_PER_USER:
+                raise HTTPException(status_code=403, detail=dict(DEVICE_LIMIT_REACHED_DETAIL))
+            conn.execute(
+                "INSERT INTO auth_sessions (token, user_id, created_at, expires_at) VALUES (%s, %s, %s, %s)",
+                (token, user.id, created, expires),
+            )
+            conn.commit()
+    else:
+        with _sqlite_connect() as conn:
+            if count_active_sessions(conn, user.id) >= MAX_ACTIVE_SESSIONS_PER_USER:
+                raise HTTPException(status_code=403, detail=dict(DEVICE_LIMIT_REACHED_DETAIL))
+            conn.execute(
+                "INSERT INTO auth_sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (token, user.id, created, expires),
+            )
+            conn.commit()
+    return token, Session(token=token, user=user, created_at=time.time())
 
 
 def _prune_excess_sessions(conn, user_id: int, *, keep_token: str) -> None:
-    """Keep the newest MAX_ACTIVE_SESSIONS_PER_USER sessions; revoke the rest."""
+    """Defensive cleanup if somehow more than MAX sessions exist; prefer keep_token."""
     if uses_postgres():
         rows = conn.execute(
             """
@@ -474,7 +505,6 @@ def _prune_excess_sessions(conn, user_id: int, *, keep_token: str) -> None:
 
     tokens = [str(row_get(r, "token") or "") for r in rows]
     tokens = [t for t in tokens if t]
-    # Prefer keeping the brand-new token even if ordering ties.
     ordered = [keep_token] + [t for t in tokens if t != keep_token]
     drop = ordered[MAX_ACTIVE_SESSIONS_PER_USER:]
     if not drop:

@@ -1,4 +1,4 @@
-/** Login-page notice after auth redirect (e.g. kicked for device limit). */
+/** Login-page notice after auth redirect (e.g. historical kick for device limit). */
 export const LOGIN_NOTICE_KEY = 'tradeal-login-notice'
 
 export type LoginNoticeCode = 'session_replaced'
