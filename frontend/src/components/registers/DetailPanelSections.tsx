@@ -40,7 +40,7 @@ export function DetailGroup({
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <Icon className="h-4 w-4 text-muted shrink-0" />
-          <h4 className="text-sm font-semibold text-heading">{title}</h4>
+          <h4 className="text-sm font-semibold text-muted">{title}</h4>
         </div>
         {trailing}
       </div>

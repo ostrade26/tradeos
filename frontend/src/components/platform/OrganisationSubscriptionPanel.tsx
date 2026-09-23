@@ -16,6 +16,7 @@ import {
   DetailInlineStat,
   DetailInlineStatRow,
   DetailPanelBody,
+  DetailRow,
 } from '../registers/DetailPanelSections'
 
 const SEATS_PREVIEW_COUNT = 2
@@ -177,17 +178,17 @@ export function OrganisationSubscriptionPanel({
           </DetailGroup>
 
           <DetailGroup title="Primary admin" icon={User}>
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-sm font-semibold text-heading leading-snug min-w-0 truncate pt-0.5">
-                {org.primary_contact_name?.trim() || '—'}
-              </p>
-              {primaryEmail || primaryMobile ? (
-                <div className="flex flex-col items-end gap-1.5 min-w-0 max-w-[70%]">
-                  {primaryEmail ? (
-                    <div className="flex items-center gap-1.5 min-w-0 max-w-full">
-                      <p className="text-sm text-muted text-right truncate min-w-0">
-                        {primaryEmail}
-                      </p>
+            <div className="space-y-2">
+              <DetailRow
+                label="Name"
+                value={org.primary_contact_name?.trim() || '—'}
+              />
+              {primaryEmail ? (
+                <DetailRow
+                  label="Email"
+                  value={
+                    <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
+                      <span className="truncate min-w-0">{primaryEmail}</span>
                       <button
                         type="button"
                         onClick={() => void copyValue(primaryEmail, 'email', 'Email copied')}
@@ -202,13 +203,16 @@ export function OrganisationSubscriptionPanel({
                           <Copy className="h-3.5 w-3.5" aria-hidden />
                         )}
                       </button>
-                    </div>
-                  ) : null}
-                  {primaryMobile ? (
-                    <div className="flex items-center gap-1.5 min-w-0 max-w-full">
-                      <p className="text-sm text-muted text-right tabular-nums truncate min-w-0">
-                        {primaryMobile}
-                      </p>
+                    </span>
+                  }
+                />
+              ) : null}
+              {primaryMobile ? (
+                <DetailRow
+                  label="Mobile"
+                  value={
+                    <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
+                      <span className="tabular-nums truncate min-w-0">{primaryMobile}</span>
                       <button
                         type="button"
                         onClick={() => void copyValue(primaryMobile, 'mobile', 'Phone copied')}
@@ -223,9 +227,9 @@ export function OrganisationSubscriptionPanel({
                           <Copy className="h-3.5 w-3.5" aria-hidden />
                         )}
                       </button>
-                    </div>
-                  ) : null}
-                </div>
+                    </span>
+                  }
+                />
               ) : null}
             </div>
           </DetailGroup>

@@ -92,7 +92,6 @@ export function PlatformEditOrganisationModal({
     form.name.trim() && form.business_address.trim() && form.city.trim(),
   )
   const contactValid = Boolean(form.primary_contact_name.trim() && !emailError)
-  const loginId = primaryAdmin?.login_id || primaryAdmin?.username || ''
 
   return (
     <Modal
@@ -199,12 +198,6 @@ export function PlatformEditOrganisationModal({
             value={form.primary_contact_mobile}
             onChange={e => setForm(f => ({ ...f, primary_contact_mobile: e.target.value }))}
           />
-          {loginId ? (
-            <div className="sm:col-span-2">
-              <p className="text-xs font-medium text-muted">Current login ID</p>
-              <p className="text-sm font-mono text-heading mt-1 break-all">{loginId}</p>
-            </div>
-          ) : null}
         </div>
       )}
     </Modal>

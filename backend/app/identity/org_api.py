@@ -74,6 +74,8 @@ def submit_seat_request(body: SeatRequestBody, request: Request) -> dict[str, An
     org_id = session.user.organisation_id
     if org_id is None:
         raise HTTPException(status_code=403, detail="Organisation context required")
+    from .email_lifecycle import send_seat_request_submitted_to_platform
+
     if uses_postgres():
         with _pg_connect() as conn:
             req = create_seat_request(
@@ -85,6 +87,7 @@ def submit_seat_request(body: SeatRequestBody, request: Request) -> dict[str, An
                 note=body.note,
             )
             conn.commit()
+            send_seat_request_submitted_to_platform(conn, req)
             return {"request": req}
     with _sqlite_connect() as conn:
         req = create_seat_request(
@@ -96,6 +99,7 @@ def submit_seat_request(body: SeatRequestBody, request: Request) -> dict[str, An
             note=body.note,
         )
         conn.commit()
+        send_seat_request_submitted_to_platform(conn, req)
         return {"request": req}
 
 

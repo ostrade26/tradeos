@@ -199,8 +199,27 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
 
 def _seat_items(conn, limit: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for row in list_seat_requests_platform(conn, limit=limit):
+    # Prefer open queue items so closed history cannot crowd out new requests.
+    open_rows = list_seat_requests_platform(conn, status="pending_payment", limit=limit)
+    paid_rows = list_seat_requests_platform(conn, status="paid", limit=limit)
+    seen: set[int] = set()
+    rows: list[dict[str, Any]] = []
+    for row in sorted(
+        open_rows + paid_rows,
+        key=lambda r: int(r.get("id") or 0),
+        reverse=True,
+    ):
+        rid = int(row["id"])
+        if rid in seen:
+            continue
+        seen.add(rid)
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    for row in rows:
         org = (row.get("organisation_name") or f"Organisation #{row.get('organisation_id')}").strip()
+        if row.get("org_is_test"):
+            org = f"{org} (test)"
         seats = int(row.get("requested_seats") or 1)
         open_ = _seat_open(str(row.get("status") or ""))
         seat_type = str(row.get("seat_type") or "operator").replace("_", " ")
@@ -218,6 +237,7 @@ def _seat_items(conn, limit: int) -> list[dict[str, Any]]:
                 from_label=org,
                 date_iso=str(row.get("created_at") or ""),
                 actionable=open_,
+                href="/platform-admin/seats?tab=requests",
                 seat_request=row,
             )
         )
@@ -449,11 +469,11 @@ def inbox_work_open_count(
     _ = organisation_id
     if role_slug == "platform_admin":
         from .feature_interests_repository import count_open_interests_platform
+        from .seat_request_repository import count_open_seat_requests
 
-        seats = list_seat_requests_platform(conn, limit=500)
         products = list_product_requests_platform(conn, limit=500)
         return (
-            sum(1 for s in seats if _seat_open(str(s.get("status") or "")))
+            count_open_seat_requests(conn)
             + sum(1 for p in products if _product_open(str(p.get("status") or "")))
             + count_open_interests_platform(conn)
         )

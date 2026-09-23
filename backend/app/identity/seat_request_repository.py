@@ -26,6 +26,8 @@ def _row_to_request(row) -> dict[str, Any]:
         d["reviewed_by_user_id"] = int(d["reviewed_by_user_id"])
     if d.get("request_note") is not None and not d.get("note"):
         d["note"] = str(d.get("request_note") or "")
+    if "org_is_test" in d:
+        d["org_is_test"] = bool(int(d.get("org_is_test") or 0))
     return d
 
 
@@ -91,14 +93,15 @@ def list_seat_requests_platform(
     status: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    """All orgs including test — match feature-interest / product-request platform queues."""
     if uses_postgres():
         if status:
             rows = conn.execute(
                 """
-                SELECT sr.*, o.name AS organisation_name
+                SELECT sr.*, o.name AS organisation_name, COALESCE(o.is_test, 0) AS org_is_test
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE sr.status = %s AND COALESCE(o.is_test, 0) = 0
+                WHERE sr.status = %s
                 ORDER BY sr.id DESC
                 LIMIT %s
                 """,
@@ -107,10 +110,9 @@ def list_seat_requests_platform(
         else:
             rows = conn.execute(
                 """
-                SELECT sr.*, o.name AS organisation_name
+                SELECT sr.*, o.name AS organisation_name, COALESCE(o.is_test, 0) AS org_is_test
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT %s
                 """,
@@ -120,10 +122,10 @@ def list_seat_requests_platform(
         if status:
             rows = conn.execute(
                 """
-                SELECT sr.*, o.name AS organisation_name
+                SELECT sr.*, o.name AS organisation_name, COALESCE(o.is_test, 0) AS org_is_test
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE sr.status = ? AND COALESCE(o.is_test, 0) = 0
+                WHERE sr.status = ?
                 ORDER BY sr.id DESC
                 LIMIT ?
                 """,
@@ -132,10 +134,9 @@ def list_seat_requests_platform(
         else:
             rows = conn.execute(
                 """
-                SELECT sr.*, o.name AS organisation_name
+                SELECT sr.*, o.name AS organisation_name, COALESCE(o.is_test, 0) AS org_is_test
                 FROM seat_requests sr
                 JOIN organisations o ON o.id = sr.organisation_id
-                WHERE COALESCE(o.is_test, 0) = 0
                 ORDER BY sr.id DESC
                 LIMIT ?
                 """,
