@@ -14,20 +14,28 @@ export const RELEASE_CATEGORIES: { value: ReleaseCategory; label: string; hint: 
   {
     value: 'bug_fix',
     label: 'Bug Fix',
-    hint: 'Fixes for issues users may have hit. Ships with production — publish from Releases.',
+    hint: 'Fixes for issues users may have hit. Choose Publish now or Ship later for the org notice.',
   },
   {
     value: 'design_improvements',
     label: 'Design Improvements',
-    hint: 'UI polish and layout improvements. Ships with production — publish from Releases.',
+    hint: 'UI polish and layout improvements. Choose Publish now or Ship later for the org notice.',
+  },
+  {
+    value: 'feature_enhancement',
+    label: 'Marketplace feature',
+    hint: 'Gated add-on — list from Features & Access. Not announced as a product update.',
   },
 ]
 
-/** Legacy gated categories (marketplace features). Kept for existing rows only. */
-const LEGACY_GATED: ReleaseCategory[] = ['feature_enhancement', 'new_feature', 'product_update']
+/** Legacy gated categories kept for existing rows only (new_feature / product_update aliases). */
+const LEGACY_GATED: ReleaseCategory[] = ['new_feature', 'product_update']
 const LEGACY_INFORM: ReleaseCategory[] = ['ui_and_fixes', 'improvement', 'cosmetic']
 
-export const GATED_RELEASE_CATEGORIES: ReleaseCategory[] = [...LEGACY_GATED]
+export const GATED_RELEASE_CATEGORIES: ReleaseCategory[] = [
+  'feature_enhancement',
+  ...LEGACY_GATED,
+]
 
 export function isGatedReleaseCategory(category: string): boolean {
   return GATED_RELEASE_CATEGORIES.includes(category as ReleaseCategory)
@@ -45,7 +53,7 @@ export function releaseCategoryLabel(category: string): string {
   const primary = RELEASE_CATEGORIES.find(c => c.value === category)
   if (primary) return primary.label
   const legacy: Record<string, string> = {
-    ui_and_fixes: 'Bug fix & UI uplift',
+    ui_and_fixes: 'Bug fix & improvements',
     feature_enhancement: 'Marketplace feature',
     improvement: 'Improvement',
     cosmetic: 'Cosmetic',

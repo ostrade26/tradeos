@@ -1930,7 +1930,16 @@ class ShipPlanningBody(BaseModel):
     ship_notes: str = ""
 
 
-@router.get("/ship-queue", summary="Draft offers and releases waiting to ship")
+class AnnounceProductUpdateBody(BaseModel):
+    audience: str = "active_licences"
+    organisation_id: int | None = None
+    recipient_user_id: int | None = None
+    recipient_scope: str = "org_admin"
+    exclude_expired_amc: bool = True
+    notify_organisations: bool = True
+
+
+@router.get("/ship-queue", summary="Draft offers, releases, and deferred product updates waiting to ship")
 def get_ship_queue(request: Request) -> dict[str, Any]:
     session = _session(request)
     auth.require_platform(session)
@@ -2014,6 +2023,75 @@ def patch_release_ship_planning(
         )
         conn.commit()
         return {"release": release}
+
+
+@router.patch(
+    "/release-items/{item_id}/ship-planning",
+    summary="Update deferred product-update ship planning",
+)
+def patch_release_item_ship_planning(
+    item_id: int,
+    body: ShipPlanningBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import update_release_item_ship_planning
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = update_release_item_ship_planning(
+                conn,
+                item_id,
+                ready_to_ship=body.ready_to_ship,
+                target_ship_date=body.target_ship_date,
+                ship_notes=body.ship_notes,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"item": item}
+    with _sqlite_connect() as conn:
+        item = update_release_item_ship_planning(
+            conn,
+            item_id,
+            ready_to_ship=body.ready_to_ship,
+            target_ship_date=body.target_ship_date,
+            ship_notes=body.ship_notes,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"item": item}
+
+
+@router.post(
+    "/release-items/{item_id}/announce",
+    summary="Announce a deferred product update from Ship queue",
+)
+def announce_release_item(item_id: int, body: AnnounceProductUpdateBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import announce_product_update
+
+    kwargs = dict(
+        audience=body.audience,
+        organisation_id=body.organisation_id,
+        recipient_user_id=body.recipient_user_id,
+        recipient_scope=body.recipient_scope,
+        exclude_expired_amc=body.exclude_expired_amc,
+        notify_organisations=body.notify_organisations,
+        actor_user_id=session.user.id,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            item = announce_product_update(conn, item_id, **kwargs)
+            conn.commit()
+            return {"item": item}
+    with _sqlite_connect() as conn:
+        item = announce_product_update(conn, item_id, **kwargs)
+        conn.commit()
+        return {"item": item}
 
 
 @router.get("/audit-logs", summary="Platform audit log")
@@ -2455,6 +2533,10 @@ class ReleaseItemBody(BaseModel):
     title: str
     detail: str = ""
     feature_key: str = ""
+    announce_timing: str = "now"
+    ready_to_ship: bool = False
+    target_ship_date: str = ""
+    ship_notes: str = ""
 
 
 class ReleaseBody(BaseModel):
@@ -2478,6 +2560,10 @@ class DeployReleaseItemBody(BaseModel):
     title: str
     detail: str = ""
     feature_key: str = ""
+    announce_timing: str = "now"
+    ready_to_ship: bool = False
+    target_ship_date: str = ""
+    ship_notes: str = ""
 
 
 class DeployReleaseBody(BaseModel):

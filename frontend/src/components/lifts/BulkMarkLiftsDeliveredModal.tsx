@@ -92,15 +92,9 @@ function BulkLiftTankerFields({
               </button>
             </div>
           )}
-          <div
-            className={
-              !hideQty && tankers.length > 1
-                ? 'grid grid-cols-1 gap-3 sm:grid-cols-3'
-                : 'grid grid-cols-1 gap-3 sm:grid-cols-2'
-            }
-          >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
-              label="Tanker No. (optional)"
+              label="Tanker No."
               value={tanker.tankerNo}
               error={fieldErrors?.[index]?.tankerNo}
               onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
@@ -109,7 +103,7 @@ function BulkLiftTankerFields({
               spellCheck={false}
               placeholder="e.g. MH-12-RF-4236"
             />
-            {!hideQty && (
+            {!hideQty ? (
               <QtyInput
                 label="Actual weight (MT)"
                 value={tanker.actualQty}
@@ -118,18 +112,31 @@ function BulkLiftTankerFields({
                 className="tabular-nums"
                 placeholder="e.g. 49.740"
               />
+            ) : (
+              <div className="hidden sm:block" aria-hidden />
             )}
-            {!hideQty && tankers.length > 1 && (
-              <Input
-                label="Sales invoice no."
-                value={tanker.salesInvoiceNo}
-                onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
-                className="font-mono uppercase"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="Optional"
-              />
-            )}
+            {!hideQty && tankers.length > 1 ? (
+              <>
+                <Input
+                  label="SO invoice no."
+                  value={tanker.salesInvoiceNo}
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                  className="font-mono uppercase"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+                <Input
+                  label="PO invoice no."
+                  value={tanker.poInvoiceNo}
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
+                  className="font-mono uppercase"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+              </>
+            ) : null}
           </div>
         </div>
       ))}
@@ -154,6 +161,7 @@ export function BulkMarkLiftsDeliveredModal({
   const [forms, setForms] = useState<Record<string, LiftTankerFormValues[]>>(() => buildTankerForms(lifts))
   const [soActuals, setSoActuals] = useState<Record<string, Record<string, string>>>(() => buildSoActuals(lifts))
   const [salesInvoiceNos, setSalesInvoiceNos] = useState<Record<string, string>>({})
+  const [poInvoiceNos, setPoInvoiceNos] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [tankerFieldErrors, setTankerFieldErrors] = useState<Record<string, LiftTankerFieldErrorMap>>({})
   const [soFieldErrors, setSoFieldErrors] = useState<Record<string, Record<string, string>>>({})
@@ -169,6 +177,7 @@ export function BulkMarkLiftsDeliveredModal({
     setForms(buildTankerForms(lifts))
     setSoActuals(buildSoActuals(lifts))
     setSalesInvoiceNos({})
+    setPoInvoiceNos({})
     setError('')
     setTankerFieldErrors({})
     setSoFieldErrors({})
@@ -191,7 +200,7 @@ export function BulkMarkLiftsDeliveredModal({
       const hideQty = tankers.length === 1
       const tankerValidation = collectLiftTankerFieldErrors(tankers, 'actual', {
         qtyRequired: !hideQty,
-        tankerNoRequired: false,
+        tankerNoRequired: true,
         requireRow: false,
       })
       if (tankerValidation.message) {
@@ -234,6 +243,9 @@ export function BulkMarkLiftsDeliveredModal({
           deliveredAt,
           ...(hideQty && salesInvoiceNos[lift.id]?.trim()
             ? { salesInvoiceNo: salesInvoiceNos[lift.id].trim() }
+            : {}),
+          ...(hideQty && poInvoiceNos[lift.id]?.trim()
+            ? { poInvoiceNo: poInvoiceNos[lift.id].trim() }
             : {}),
         }
         if (hideQty) {
@@ -351,15 +363,30 @@ export function BulkMarkLiftsDeliveredModal({
                   />
                 )}
                 {hideQty && (
-                  <Input
-                    label="Sales invoice no."
-                    value={salesInvoiceNos[lift.id] ?? ''}
-                    onChange={e => setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value }))}
-                    className="font-mono uppercase sm:max-w-xs"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="Optional"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      label="SO invoice no."
+                      value={salesInvoiceNos[lift.id] ?? ''}
+                      onChange={e =>
+                        setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value.toUpperCase() }))
+                      }
+                      className="font-mono uppercase"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="Optional"
+                    />
+                    <Input
+                      label="PO invoice no."
+                      value={poInvoiceNos[lift.id] ?? ''}
+                      onChange={e =>
+                        setPoInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value.toUpperCase() }))
+                      }
+                      className="font-mono uppercase"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="Optional"
+                    />
+                  </div>
                 )}
                 <BulkLiftTankerFields
                   tankers={tankers}

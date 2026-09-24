@@ -1428,7 +1428,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                     : section === 'payments'
                       ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
                         : section === 'ship-queue'
-                          ? 'Draft add-ons & releases waiting to push'
+                          ? 'Draft add-ons, releases & deferred product updates'
                         : section === 'add-ons'
                           ? addOnsOpenAccess > 0
                             ? `${addOnsOpenAccess} open access request${addOnsOpenAccess === 1 ? '' : 's'}`
@@ -1720,7 +1720,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         ))}
 
       {section === 'ship-queue' ? (
-        <PlatformShipQueuePanel ref={shipQueuePanelRef} />
+        <PlatformShipQueuePanel
+          ref={shipQueuePanelRef}
+          organisations={organisations}
+          users={orgUsers}
+        />
       ) : null}
 
       {section === 'add-ons' ? (

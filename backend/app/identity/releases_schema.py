@@ -43,12 +43,28 @@ def _create_tables(conn) -> None:
             title TEXT NOT NULL,
             detail TEXT NOT NULL DEFAULT '',
             feature_key TEXT NOT NULL DEFAULT '',
-            sort_order INTEGER NOT NULL DEFAULT 0
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            announce_timing TEXT NOT NULL DEFAULT 'now',
+            announced_at TEXT,
+            ready_to_ship INTEGER NOT NULL DEFAULT 0,
+            target_ship_date TEXT NOT NULL DEFAULT '',
+            ship_notes TEXT NOT NULL DEFAULT ''
         )
         """
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_platform_release_items_release ON platform_release_items(release_id, sort_order)"
+    )
+    _add_column(conn, "platform_release_items", "announce_timing", "TEXT NOT NULL DEFAULT 'now'")
+    _add_column(conn, "platform_release_items", "announced_at", "TEXT")
+    _add_column(conn, "platform_release_items", "ready_to_ship", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(conn, "platform_release_items", "target_ship_date", "TEXT NOT NULL DEFAULT ''")
+    _add_column(conn, "platform_release_items", "ship_notes", "TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_release_items_deferred
+        ON platform_release_items (announce_timing, announced_at)
+        """
     )
     conn.execute(
         f"""

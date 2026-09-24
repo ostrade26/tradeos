@@ -204,6 +204,13 @@ export function PlatformReleaseDetailDrawer({
                           {item.detail.trim()}
                         </p>
                       ) : null}
+                      {!item.gated && item.announce_timing === 'later' ? (
+                        <p className="text-xs text-muted mt-2">
+                          {item.announced_at
+                            ? `Announced ${formatDateTime(item.announced_at)}`
+                            : 'Ship later — announce from Ship queue'}
+                        </p>
+                      ) : null}
                       {item.feature_key?.trim() ? (
                         <p className="text-xs font-mono text-muted mt-2 truncate">
                           {item.feature_key.trim()}

@@ -10,6 +10,7 @@ import { formatCurrency, formatDate, formatQty } from '../../lib/utils'
 import { formatOrderRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
+import { DatePicker } from '../ui/DatePicker'
 
 interface CloseOrderModalProps {
   /** One or more orders to close. */
@@ -310,11 +311,10 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
             </div>
 
             {method !== 'short_closed' && (
-              <Input
+              <DatePicker
                 label="Settlement date"
-                type="date"
                 value={settledAt}
-                onChange={e => setSettledAt(e.target.value)}
+                onChange={setSettledAt}
               />
             )}
 

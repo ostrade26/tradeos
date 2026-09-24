@@ -21,6 +21,7 @@ import {
 import { formatCurrency, formatQty } from '../../lib/utils'
 import { useTradeStore } from '../../store/TradeStore'
 import { useToast } from '../../hooks/useToast'
+import { DatePicker } from '../ui/DatePicker'
 
 interface BuyBackModalProps {
   order: TradeOrder | null
@@ -165,11 +166,10 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
               </p>
             )}
 
-            <Input
+            <DatePicker
               label="Date"
-              type="date"
               value={date}
-              onChange={e => setDate(e.target.value)}
+              onChange={setDate}
             />
 
             <Input

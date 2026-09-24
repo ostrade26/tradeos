@@ -76,6 +76,7 @@ function draftsFromUrl(poRef: string, soRef: string, qty = ''): LiftAllocationDr
 function serializeLiftFormState(s: {
   date: string
   salesInvoiceNo: string
+  poInvoiceNo: string
   remarks: string
   isSelfLift: string
   liftPurpose: string
@@ -88,6 +89,7 @@ function serializeLiftFormState(s: {
   return JSON.stringify({
     date: s.date,
     salesInvoiceNo: s.salesInvoiceNo,
+    poInvoiceNo: s.poInvoiceNo,
     remarks: s.remarks,
     isSelfLift: s.isSelfLift,
     liftPurpose: s.liftPurpose,
@@ -260,6 +262,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [salesInvoiceNo, setSalesInvoiceNo] = useState('')
+  const [poInvoiceNo, setPoInvoiceNo] = useState('')
   const [remarks, setRemarks] = useState('')
   const [isSelfLift, setIsSelfLift] = useState('true')
   const [allocations, setAllocations] = useState<LiftAllocationDraft[]>(() => draftsFromUrl(urlPoRef, urlSoRef, urlQty))
@@ -275,6 +278,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     liftBaseline.current = serializeLiftFormState({
       date,
       salesInvoiceNo,
+      poInvoiceNo,
       remarks,
       isSelfLift,
       liftPurpose,
@@ -292,6 +296,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     if (!editingLift) return
     setDate(normalizeDateToIso(editingLift.date) || editingLift.date.slice(0, 10))
     setSalesInvoiceNo(editingLift.salesInvoiceNo ?? '')
+    setPoInvoiceNo(editingLift.poInvoiceNo ?? '')
     setRemarks(editingLift.remarks ?? '')
     setIsSelfLift(editingLift.isSelfLift ? 'true' : 'false')
     setLiftPurpose(isStockLift(editingLift) ? 'stock' : 'dispatch')
@@ -325,6 +330,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     liftBaseline.current = serializeLiftFormState({
       date: liftDate,
       salesInvoiceNo: editingLift.salesInvoiceNo ?? '',
+      poInvoiceNo: editingLift.poInvoiceNo ?? '',
       remarks: editingLift.remarks ?? '',
       isSelfLift: editingLift.isSelfLift ? 'true' : 'false',
       liftPurpose: isStockLift(editingLift) ? 'stock' : 'dispatch',
@@ -456,6 +462,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
   const currentLiftFormSnapshot = () => serializeLiftFormState({
     date,
     salesInvoiceNo,
+    poInvoiceNo,
     remarks,
     isSelfLift,
     liftPurpose,
@@ -565,7 +572,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
         ? { balanceAppliedQtyMt: balanceApplied }
         : {}),
       ...(isEdit && editingLift?.status === 'delivered'
-        ? { salesInvoiceNo }
+        ? { salesInvoiceNo, poInvoiceNo }
         : {}),
     }
     try {
@@ -698,14 +705,27 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                 {((isEdit && editingLift?.status === 'delivered') || isSelfLift === 'false') && (
                   <FormFieldGroup>
                     {isEdit && editingLift?.status === 'delivered' ? (
-                      <Input
-                        label="Sales Invoice No."
-                        value={salesInvoiceNo}
-                        onChange={e => setSalesInvoiceNo(e.target.value)}
-                      />
+                      <>
+                        <Input
+                          label="SO Invoice No."
+                          value={salesInvoiceNo}
+                          onChange={e => setSalesInvoiceNo(e.target.value.toUpperCase())}
+                          className="font-mono uppercase"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                        <Input
+                          label="PO Invoice No."
+                          value={poInvoiceNo}
+                          onChange={e => setPoInvoiceNo(e.target.value.toUpperCase())}
+                          className="font-mono uppercase"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </>
                     ) : null}
                     {isSelfLift === 'false' ? (
-                      <div className={isEdit && editingLift?.status === 'delivered' ? 'sm:col-span-2' : 'sm:col-span-3'}>
+                      <div className={isEdit && editingLift?.status === 'delivered' ? 'sm:col-span-1' : 'sm:col-span-3'}>
                         <Input
                           label="Remarks"
                           value={remarks}

@@ -38,6 +38,7 @@ def normalize_lift_tankers(tankers: list[dict]) -> list[dict]:
     for t in tankers:
         qty = t.get("actualQtyMt")
         inv = (t.get("salesInvoiceNo") or "").strip()
+        po_inv = (t.get("poInvoiceNo") or "").strip()
         row = {
             "tankerNo": format_tanker_no(t.get("tankerNo", "")),
             "transportName": (t.get("transportName") or "").strip(),
@@ -47,12 +48,48 @@ def normalize_lift_tankers(tankers: list[dict]) -> list[dict]:
         }
         if inv:
             row["salesInvoiceNo"] = inv
+        if po_inv:
+            row["poInvoiceNo"] = po_inv
         result.append(row)
     return result
 
 
 def resolve_lift_qty(tankers: list[dict]) -> float:
     return round_qty_mt(sum(t.get("actualQtyMt") or 0 for t in tankers))
+
+
+def _assign_invoice_field_to_tankers(
+    tankers: list[dict],
+    field_key: str,
+    lift_level_value: str | None = None,
+) -> tuple[list[dict], str | None]:
+    """Apply user-entered invoice numbers (per tanker or lift-level for a single tanker)."""
+    lift_custom = (lift_level_value or "").strip()
+
+    if len(tankers) <= 1:
+        t = dict(tankers[0]) if tankers else {}
+        custom = lift_custom or (t.get(field_key) or "").strip()
+        resolved_row = dict(t)
+        if custom:
+            resolved_row[field_key] = custom
+        else:
+            resolved_row.pop(field_key, None)
+        resolved = [resolved_row] if tankers else []
+        return resolved, custom or None
+
+    resolved: list[dict] = []
+    summary_parts: list[str] = []
+    for t in tankers:
+        custom = (t.get(field_key) or "").strip()
+        row = dict(t)
+        if custom:
+            row[field_key] = custom
+            summary_parts.append(custom)
+        else:
+            row.pop(field_key, None)
+        resolved.append(row)
+    lift_summary = ", ".join(summary_parts) if summary_parts else None
+    return resolved, lift_summary
 
 
 def assign_sales_invoices_to_tankers(
@@ -62,32 +99,18 @@ def assign_sales_invoices_to_tankers(
     lift_level_invoice: str | None = None,
 ) -> tuple[list[dict], str | None, dict]:
     """Apply user-entered invoice numbers only (per tanker or lift-level for a single tanker)."""
-    lift_custom = (lift_level_invoice or "").strip()
+    _ = (counters, delivered_at)  # kept for call-site compatibility
+    resolved, summary = _assign_invoice_field_to_tankers(
+        tankers, "salesInvoiceNo", lift_level_invoice
+    )
+    return resolved, summary, counters
 
-    if len(tankers) <= 1:
-        t = dict(tankers[0]) if tankers else {}
-        custom = lift_custom or (t.get("salesInvoiceNo") or "").strip()
-        resolved_row = dict(t)
-        if custom:
-            resolved_row["salesInvoiceNo"] = custom
-        else:
-            resolved_row.pop("salesInvoiceNo", None)
-        resolved = [resolved_row] if tankers else []
-        return resolved, custom or None, counters
 
-    resolved: list[dict] = []
-    summary_parts: list[str] = []
-    for t in tankers:
-        custom = (t.get("salesInvoiceNo") or "").strip()
-        row = dict(t)
-        if custom:
-            row["salesInvoiceNo"] = custom
-            summary_parts.append(custom)
-        else:
-            row.pop("salesInvoiceNo", None)
-        resolved.append(row)
-    lift_summary = ", ".join(summary_parts) if summary_parts else None
-    return resolved, lift_summary, counters
+def assign_po_invoices_to_tankers(
+    tankers: list[dict],
+    lift_level_invoice: str | None = None,
+) -> tuple[list[dict], str | None]:
+    return _assign_invoice_field_to_tankers(tankers, "poInvoiceNo", lift_level_invoice)
 
 
 def get_lift_allocations(lift: dict) -> list[dict]:

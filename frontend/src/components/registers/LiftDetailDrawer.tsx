@@ -257,12 +257,15 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
                   <p className="text-[14px] font-semibold tabular-nums shrink-0">{formatQty(t.actualQtyMt)}</p>
                 )}
               </div>
-              {(t.lrNo || t.driverMobile || t.salesInvoiceNo) && (
+              {(t.lrNo || t.driverMobile || t.salesInvoiceNo || t.poInvoiceNo) && (
                 <div className="flex flex-wrap gap-x-4 text-[14px] text-muted">
                   {t.lrNo && <span className="font-mono text-xs uppercase">LR {t.lrNo}</span>}
                   {t.driverMobile && <span>{t.driverMobile}</span>}
                   {t.salesInvoiceNo && (
-                    <span className="font-mono text-xs uppercase">Inv {t.salesInvoiceNo}</span>
+                    <span className="font-mono text-xs uppercase">SO {t.salesInvoiceNo}</span>
+                  )}
+                  {t.poInvoiceNo && (
+                    <span className="font-mono text-xs uppercase">PO {t.poInvoiceNo}</span>
                   )}
                 </div>
               )}
@@ -273,13 +276,22 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
       <DetailGroup title="Documents" icon={FileText}>
         {lift.salesInvoiceNo ? (
           <DetailRow
-            label={tankers.length > 1 ? 'Sales invoices' : 'Sales invoice #'}
+            label={tankers.length > 1 ? 'SO invoices' : 'SO invoice #'}
             value={lift.salesInvoiceNo}
             mono
           />
         ) : (
-          <DetailRow label="Sales invoice" value="Generated on delivery" />
+          <DetailRow label="SO invoice" value="Captured on delivery" />
         )}
+        {lift.poInvoiceNo ? (
+          <DetailRow
+            label={tankers.length > 1 ? 'PO invoices' : 'PO invoice #'}
+            value={lift.poInvoiceNo}
+            mono
+          />
+        ) : lift.status === 'delivered' ? (
+          <DetailRow label="PO invoice" value="—" />
+        ) : null}
         {lift.remarks && <DetailRow label="Remarks" value={lift.remarks} />}
         {lift.loadOnRisk && (
           <DetailRow

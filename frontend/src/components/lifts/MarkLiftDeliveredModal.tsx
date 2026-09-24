@@ -73,7 +73,7 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     setSoFieldErrors({})
     const tankerValidation = collectLiftTankerFieldErrors(tankers, 'actual', {
       qtyRequired: !hideTankerQty,
-      tankerNoRequired: false,
+      tankerNoRequired: true,
       requireRow: false,
     })
     if (tankerValidation.message) {
@@ -169,7 +169,6 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
           qtyMode="actual"
           hideQty={hideTankerQty}
           hideTotal
-          tankerNoOptional
           allowAddTanker={false}
           showSalesInvoicePerTanker
           compactDelivery

@@ -42,6 +42,7 @@ from .lift_logic import (
     remaining_carry_pair,
     lift_touches_ref,
     assign_sales_invoices_to_tankers,
+    assign_po_invoices_to_tankers,
     normalize_lift_tankers,
     resolve_lift_qty,
     scale_allocations,
@@ -1203,6 +1204,17 @@ class TradeService:
         if existing.get("status") == "delivered" and "salesInvoiceNo" in input_data:
             inv = (input_data.get("salesInvoiceNo") or "").strip()
             updated["salesInvoiceNo"] = inv or existing.get("salesInvoiceNo")
+        if existing.get("status") == "delivered" and "poInvoiceNo" in input_data:
+            po_inv = (input_data.get("poInvoiceNo") or "").strip()
+            updated["poInvoiceNo"] = po_inv or existing.get("poInvoiceNo")
+        # When tankers carry invoice fields on an edit, refresh lift-level summaries.
+        if existing.get("status") == "delivered" and tankers:
+            sales_parts = [t.get("salesInvoiceNo") for t in tankers if (t.get("salesInvoiceNo") or "").strip()]
+            po_parts = [t.get("poInvoiceNo") for t in tankers if (t.get("poInvoiceNo") or "").strip()]
+            if sales_parts and "salesInvoiceNo" not in input_data:
+                updated["salesInvoiceNo"] = ", ".join(sales_parts)
+            if po_parts and "poInvoiceNo" not in input_data:
+                updated["poInvoiceNo"] = ", ".join(po_parts)
 
         # Keep deliveredAt day in sync when the lift date is corrected after delivery.
         if existing.get("status") == "delivered" and next_date != (existing.get("date") or ""):
@@ -1304,11 +1316,16 @@ class TradeService:
         balance_qty_mt = compute_balance_qty(planned_qty_mt, lifted_qty)
         delivered_at = input_data.get("deliveredAt") or datetime.utcnow().isoformat() + "Z"
         lift_level_invoice = (input_data.get("salesInvoiceNo") or "").strip() or None
+        lift_level_po_invoice = (input_data.get("poInvoiceNo") or "").strip() or None
         tankers_resolved, sales_invoice_no, counters = assign_sales_invoices_to_tankers(
             tankers_resolved,
             data["counters"],
             delivered_at,
             lift_level_invoice=lift_level_invoice,
+        )
+        tankers_resolved, po_invoice_no = assign_po_invoices_to_tankers(
+            tankers_resolved,
+            lift_level_invoice=lift_level_po_invoice,
         )
         order_summary = format_allocations_summary(allocations, stock_lift=stock_lift)
 
@@ -1317,6 +1334,7 @@ class TradeService:
             "status": "delivered",
             "deliveredAt": delivered_at,
             "salesInvoiceNo": sales_invoice_no or None,
+            "poInvoiceNo": po_invoice_no or None,
             "liftedQty": lifted_qty,
             "plannedQtyMt": planned_qty_mt,
             "allocations": allocations,

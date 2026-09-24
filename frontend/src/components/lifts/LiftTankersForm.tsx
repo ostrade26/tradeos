@@ -204,7 +204,7 @@ export function LiftTankersForm({
               </div>
             )}
             {showSalesInvoicePerTanker && !hideQty ? (
-              <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
+              <div className={cn('grid grid-cols-1 sm:grid-cols-2', gridGap)}>
                 <Input
                   label={tankerNoOptional ? 'Tanker No. (optional)' : 'Tanker No.'}
                   value={tanker.tankerNo}
@@ -228,9 +228,18 @@ export function LiftTankersForm({
                   placeholder={qtyPlaceholder}
                 />
                 <Input
-                  label="Sales invoice no."
+                  label="SO invoice no."
                   value={tanker.salesInvoiceNo}
                   onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                  className={cn(fieldSize, 'font-mono uppercase')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+                <Input
+                  label="PO invoice no."
+                  value={tanker.poInvoiceNo}
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
                   className={cn(fieldSize, 'font-mono uppercase')}
                   autoComplete="off"
                   spellCheck={false}
@@ -239,17 +248,39 @@ export function LiftTankersForm({
               </div>
             ) : null}
             {showSalesInvoicePerTanker && hideQty && (
-              <Input
-                label="Sales invoice no."
-                value={tanker.salesInvoiceNo}
-                onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
-                className={cn(fieldSize, 'font-mono uppercase sm:max-w-xs')}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="Optional"
-              />
+              <div className={cn('grid grid-cols-1 sm:grid-cols-2', gridGap)}>
+                <Input
+                  label={tankerNoOptional ? 'Tanker No. (optional)' : 'Tanker No.'}
+                  value={tanker.tankerNo}
+                  error={fieldErrors?.[index]?.tankerNo}
+                  onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
+                  className={cn(fieldSize, 'uppercase font-mono')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="e.g. MH-12-RF-4236"
+                />
+                <div className="hidden sm:block" aria-hidden />
+                <Input
+                  label="SO invoice no."
+                  value={tanker.salesInvoiceNo}
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
+                  className={cn(fieldSize, 'font-mono uppercase')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+                <Input
+                  label="PO invoice no."
+                  value={tanker.poInvoiceNo}
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
+                  className={cn(fieldSize, 'font-mono uppercase')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Optional"
+                />
+              </div>
             )}
-            {!(showSalesInvoicePerTanker && !hideQty) && (
+            {!(showSalesInvoicePerTanker && !hideQty) && !showSalesInvoicePerTanker && (
               <div className={cn('grid grid-cols-1 sm:grid-cols-3', gridGap)}>
                 {!hideQty && (
                   <QtyInput
@@ -283,21 +314,9 @@ export function LiftTankersForm({
               <details className="group">
                 <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted hover:text-heading select-none">
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 transition group-open:rotate-90" aria-hidden />
-                  Transport &amp; tanker no.
+                  Transport details
                 </summary>
                 <div className="mt-3 space-y-3">
-                  {(hideQty || !(showSalesInvoicePerTanker && !hideQty)) && (
-                    <Input
-                      label={tankerNoOptional ? 'Tanker no. (optional)' : 'Tanker no.'}
-                      value={tanker.tankerNo}
-                      error={fieldErrors?.[index]?.tankerNo}
-                      onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-                      className={cn(fieldSize, 'uppercase font-mono sm:max-w-md')}
-                      autoComplete="off"
-                      spellCheck={false}
-                      placeholder="e.g. MH-12-RF-4236"
-                    />
-                  )}
                   {transportFields(tanker, index)}
                 </div>
               </details>

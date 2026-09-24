@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input'
 import { AmountInput } from '../components/ui/AmountInput'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
+import { DatePicker } from '../components/ui/DatePicker'
 import { formatCurrency, formatQty } from '../lib/utils'
 import { parseIndianAmount } from '../lib/indianAmount'
 import { orderLineAmount } from '../lib/orderRate'
@@ -115,7 +116,11 @@ export function CreateContractPage() {
           <h3 className="text-sm font-semibold text-heading">Terms & Delivery</h3>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Delivery Location" value={form.location} onChange={e => update('location', e.target.value)} />
-            <Input label="Delivery Date" type="date" value={form.deliveryDate} onChange={e => update('deliveryDate', e.target.value)} />
+            <DatePicker
+              label="Delivery Date"
+              value={form.deliveryDate}
+              onChange={v => update('deliveryDate', v)}
+            />
             <Input label="Brokerage (%)" value={form.brokerage} onChange={e => update('brokerage', e.target.value)} />
             <Input label="GST (%)" value={form.gst} onChange={e => update('gst', e.target.value)} />
             <div className="col-span-2">

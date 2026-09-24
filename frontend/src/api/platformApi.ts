@@ -394,6 +394,11 @@ export interface PlatformReleaseItem {
   feature_key: string
   sort_order?: number
   gated?: boolean
+  announce_timing?: 'now' | 'later' | string
+  announced_at?: string | null
+  ready_to_ship?: boolean
+  target_ship_date?: string
+  ship_notes?: string
 }
 
 export interface PlatformRelease {
@@ -466,7 +471,7 @@ export interface PlatformFeatureOffer {
 }
 
 export interface ShipQueueItem {
-  kind: 'feature_offer' | 'release'
+  kind: 'feature_offer' | 'release' | 'product_update'
   id: number
   title: string
   subtitle: string
@@ -479,12 +484,17 @@ export interface ShipQueueItem {
   href: string
   offer?: PlatformFeatureOffer
   release?: PlatformRelease
+  release_item?: PlatformReleaseItem
+  release_id?: number
+  detail?: string
+  category?: string
 }
 
 export interface ShipQueueResponse {
   items: ShipQueueItem[]
   draft_offers: number
   draft_releases: number
+  deferred_product_updates?: number
 }
 
 export interface PlatformFeatureOfferOrgUsage {
@@ -742,7 +752,14 @@ export const platformApi = {
     version: string
     title: string
     summary?: string
-    items: Array<Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'>>
+    items: Array<
+      Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'> & {
+        announce_timing?: 'now' | 'later'
+        ready_to_ship?: boolean
+        target_ship_date?: string
+        ship_notes?: string
+      }
+    >
   }) =>
     apiFetch<{ release: PlatformRelease }>('/platform/releases', {
       method: 'POST',
@@ -755,7 +772,14 @@ export const platformApi = {
       version: string
       title: string
       summary?: string
-      items: Array<Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'>>
+      items: Array<
+        Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'> & {
+          announce_timing?: 'now' | 'later'
+          ready_to_ship?: boolean
+          target_ship_date?: string
+          ship_notes?: string
+        }
+      >
     },
   ) =>
     apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}`, {
@@ -815,6 +839,39 @@ export const platformApi = {
   ) =>
     apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}/ship-planning`, {
       method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  updateReleaseItemShipPlanning: (
+    itemId: number,
+    body: { ready_to_ship: boolean; target_ship_date?: string; ship_notes?: string },
+  ) =>
+    apiFetch<{ item: PlatformReleaseItem }>(`/platform/release-items/${itemId}/ship-planning`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  announceProductUpdate: (
+    itemId: number,
+    body: {
+      audience?: NotificationAudience
+      organisation_id?: number | null
+      recipient_user_id?: number | null
+      recipient_scope?: NotificationRecipientScope
+      exclude_expired_amc?: boolean
+      notify_organisations?: boolean
+    },
+  ) =>
+    apiFetch<{
+      item: PlatformReleaseItem & {
+        sent?: number
+        skipped_expired_amc?: number
+        notified?: boolean
+        release_id?: number
+        release_version?: string
+      }
+    }>(`/platform/release-items/${itemId}/announce`, {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 

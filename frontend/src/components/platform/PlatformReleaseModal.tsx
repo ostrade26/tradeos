@@ -7,21 +7,29 @@ import { Select } from '../ui/Select'
 import {
   RELEASE_CATEGORIES,
   isGatedReleaseCategory,
+  isInformReleaseCategory,
   releaseCategorySelectOptions,
   suggestNextVersion,
   type ReleaseCategory,
 } from '../../lib/releaseVersion'
 import type { PlatformRelease, PlatformReleaseItem } from '../../api/platformApi'
 
+export type ReleaseFormItem = Pick<
+  PlatformReleaseItem,
+  'category' | 'title' | 'detail' | 'feature_key'
+> & {
+  announce_timing: 'now' | 'later'
+}
+
 export type ReleaseFormPayload = {
   version: string
   title: string
   summary: string
-  items: Array<Pick<PlatformReleaseItem, 'category' | 'title' | 'detail' | 'feature_key'>>
+  items: ReleaseFormItem[]
 }
 
-function emptyItem(): ReleaseFormPayload['items'][number] {
-  return { category: 'bug_fix', title: '', detail: '', feature_key: '' }
+function emptyItem(): ReleaseFormItem {
+  return { category: 'bug_fix', title: '', detail: '', feature_key: '', announce_timing: 'now' }
 }
 
 /** Keep change titles short — long copy belongs in Detail. */
@@ -47,6 +55,7 @@ function formFromRelease(release: PlatformRelease | null, nextVersion: string): 
           title: String(item.title || '').trim().slice(0, CHANGE_TITLE_MAX),
           detail: item.detail ?? '',
           feature_key: item.feature_key ?? '',
+          announce_timing: item.announce_timing === 'later' ? 'later' : 'now',
         }))
       : [emptyItem()],
   }
@@ -88,10 +97,17 @@ export function PlatformReleaseModal({
     form.items.some(item => item.title.trim()),
   )
 
-  const setItem = (index: number, patch: Partial<ReleaseFormPayload['items'][number]>) => {
+  const setItem = (index: number, patch: Partial<ReleaseFormItem>) => {
     setForm(current => ({
       ...current,
-      items: current.items.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+      items: current.items.map((item, i) => {
+        if (i !== index) return item
+        const next = { ...item, ...patch }
+        if (patch.category != null && isGatedReleaseCategory(String(patch.category))) {
+          next.announce_timing = 'now'
+        }
+        return next
+      }),
     }))
   }
 
@@ -201,10 +217,39 @@ export function PlatformReleaseModal({
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-muted sm:col-span-2 leading-relaxed">
-                {RELEASE_CATEGORIES.find(c => c.value === item.category)?.hint ??
-                  'Users are notified about what changed; no opt-in required.'}
-              </p>
+              <>
+                {isInformReleaseCategory(item.category) ? (
+                  <div className="sm:col-span-2 space-y-2">
+                    <Select
+                      searchable={false}
+                      label="Organisation notice"
+                      value={item.announce_timing}
+                      onChange={e =>
+                        setItem(index, {
+                          announce_timing: e.target.value === 'later' ? 'later' : 'now',
+                        })
+                      }
+                      options={[
+                        {
+                          value: 'now',
+                          label: 'Publish now',
+                          description: 'Include in the notice when you publish this release.',
+                        },
+                        {
+                          value: 'later',
+                          label: 'Ship later',
+                          description:
+                            'Announce later from Ship queue; code may already be live.',
+                        },
+                      ]}
+                    />
+                  </div>
+                ) : null}
+                <p className="text-xs text-muted sm:col-span-2 leading-relaxed">
+                  {RELEASE_CATEGORIES.find(c => c.value === item.category)?.hint ??
+                    'Users are notified about what changed; no opt-in required.'}
+                </p>
+              </>
             )}
           </div>
         ))}

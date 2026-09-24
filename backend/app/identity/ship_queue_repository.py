@@ -5,16 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 from .feature_offers_repository import list_offers_platform
-from .releases_repository import list_releases
+from .releases_repository import list_deferred_product_updates, list_releases
 
 
 def list_ship_queue(conn) -> dict[str, Any]:
-    """Aggregate draft feature offers and draft releases for the Ship queue."""
+    """Aggregate draft feature offers, draft releases, and deferred product updates."""
     draft_offers = list_offers_platform(conn, status="draft")
     releases_payload = list_releases(conn)
     draft_releases = [
         r for r in releases_payload.get("releases") or [] if str(r.get("status") or "") == "draft"
     ]
+    deferred_updates = list_deferred_product_updates(conn)
 
     items: list[dict[str, Any]] = []
     for offer in draft_offers:
@@ -56,6 +57,27 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "release": release,
             }
         )
+    for item in deferred_updates:
+        version = str(item.get("release_version") or "")
+        items.append(
+            {
+                "kind": "product_update",
+                "id": int(item["id"]),
+                "title": item.get("title") or "",
+                "subtitle": version or str(item.get("release_title") or ""),
+                "feature_key": "",
+                "ready_to_ship": bool(item.get("ready_to_ship")),
+                "target_ship_date": item.get("target_ship_date") or "",
+                "ship_notes": item.get("ship_notes") or "",
+                "created_at": item.get("release_published_at") or item.get("release_updated_at") or "",
+                "updated_at": item.get("release_updated_at") or "",
+                "href": f"/platform-admin/releases?releaseId={int(item['release_id'])}",
+                "release_item": item,
+                "release_id": int(item["release_id"]),
+                "detail": item.get("detail") or "",
+                "category": item.get("category") or "",
+            }
+        )
 
     def sort_key(row: dict[str, Any]) -> tuple:
         ready = 0 if row.get("ready_to_ship") else 1
@@ -68,4 +90,5 @@ def list_ship_queue(conn) -> dict[str, Any]:
         "items": items,
         "draft_offers": len(draft_offers),
         "draft_releases": len(draft_releases),
+        "deferred_product_updates": len(deferred_updates),
     }

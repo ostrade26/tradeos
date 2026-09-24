@@ -13,10 +13,19 @@ export type LiftTankerFormValues = {
   lrNo: string
   actualQty: string
   salesInvoiceNo: string
+  poInvoiceNo: string
 }
 
 export function emptyLiftTankerForm(): LiftTankerFormValues {
-  return { tankerNo: '', transportName: '', driverMobile: '', lrNo: '', actualQty: '', salesInvoiceNo: '' }
+  return {
+    tankerNo: '',
+    transportName: '',
+    driverMobile: '',
+    lrNo: '',
+    actualQty: '',
+    salesInvoiceNo: '',
+    poInvoiceNo: '',
+  }
 }
 
 export function emptyLiftTanker(): LiftTanker {
@@ -49,12 +58,14 @@ export function liftTankerToForm(t: LiftTanker): LiftTankerFormValues {
     lrNo: t.lrNo ?? '',
     actualQty: t.actualQtyMt != null ? String(t.actualQtyMt) : '',
     salesInvoiceNo: t.salesInvoiceNo ?? '',
+    poInvoiceNo: t.poInvoiceNo ?? '',
   }
 }
 
 export function formToLiftTanker(f: LiftTankerFormValues): LiftTanker {
   const qty = parseFloat(f.actualQty)
   const invoice = f.salesInvoiceNo.trim()
+  const poInvoice = f.poInvoiceNo.trim()
   return {
     tankerNo: formatTankerNo(f.tankerNo),
     transportName: f.transportName.trim(),
@@ -62,6 +73,7 @@ export function formToLiftTanker(f: LiftTankerFormValues): LiftTanker {
     lrNo: f.lrNo.trim().toUpperCase(),
     actualQtyMt: qty > 0 ? roundQtyMt(qty) : undefined,
     ...(invoice ? { salesInvoiceNo: invoice } : {}),
+    ...(poInvoice ? { poInvoiceNo: poInvoice } : {}),
   }
 }
 
@@ -123,6 +135,7 @@ export function normalizeLiftTankers(tankers: LiftTanker[]): LiftTanker[] {
     lrNo: (t.lrNo ?? '').trim().toUpperCase(),
     actualQtyMt: t.actualQtyMt != null ? roundQtyMt(t.actualQtyMt) : undefined,
     ...(t.salesInvoiceNo?.trim() ? { salesInvoiceNo: t.salesInvoiceNo.trim() } : {}),
+    ...(t.poInvoiceNo?.trim() ? { poInvoiceNo: t.poInvoiceNo.trim() } : {}),
   }))
 }
 
@@ -137,6 +150,24 @@ export function liftSalesInvoiceNos(lift: Pick<Lift, 'salesInvoiceNo' | 'tankers
 
 export function formatLiftSalesInvoices(lift: Pick<Lift, 'salesInvoiceNo' | 'tankers' | 'tankerNo'>): string {
   const nos = liftSalesInvoiceNos(lift)
+  if (nos.length === 0) return '—'
+  return nos.join(', ')
+}
+
+export function liftPoInvoiceNos(
+  lift: Pick<Lift, 'poInvoiceNo' | 'tankers' | 'tankerNo'>,
+): string[] {
+  const tankers = getLiftTankers(lift)
+  const fromTankers = tankers.map(t => t.poInvoiceNo?.trim()).filter(Boolean) as string[]
+  if (fromTankers.length > 0) return fromTankers
+  const liftLevel = lift.poInvoiceNo?.trim()
+  return liftLevel ? [liftLevel] : []
+}
+
+export function formatLiftPoInvoices(
+  lift: Pick<Lift, 'poInvoiceNo' | 'tankers' | 'tankerNo'>,
+): string {
+  const nos = liftPoInvoiceNos(lift)
   if (nos.length === 0) return '—'
   return nos.join(', ')
 }

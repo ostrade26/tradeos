@@ -95,12 +95,14 @@ export interface CreateLiftInput {
 
 export type UpdateLiftInput = CreateLiftInput & {
   salesInvoiceNo?: string
+  poInvoiceNo?: string
 }
 
 export interface MarkLiftDeliveredInput {
   tankers: LiftTanker[]
   deliveredAt?: string
   salesInvoiceNo?: string
+  poInvoiceNo?: string
   allocations?: { poRef: string; soRef?: string; qtyMt: number }[]
 }
 

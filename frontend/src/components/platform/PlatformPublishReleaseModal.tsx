@@ -199,7 +199,11 @@ export function PlatformPublishReleaseModal({
                 <p className="text-sm font-medium text-heading">{item.title}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {releaseCategoryLabel(item.category)}
-                  {item.gated ? ' · Publish from Features' : ''}
+                  {item.gated
+                    ? ' · Publish from Features'
+                    : item.announce_timing === 'later'
+                      ? ' · Ship later (Ship queue)'
+                      : ' · Publish now'}
                 </p>
               </li>
             ))}

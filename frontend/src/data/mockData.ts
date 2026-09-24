@@ -137,6 +137,8 @@ export interface LiftTanker {
   actualQtyMt?: number
   /** Sales invoice for this tanker (multi-tanker deliveries). */
   salesInvoiceNo?: string
+  /** Purchase / seller invoice for this tanker (captured on delivery). */
+  poInvoiceNo?: string
 }
 
 export type LiftStatus = 'pending' | 'delivered'
@@ -180,6 +182,8 @@ export interface Lift {
   tankerNo: string
   tankers: LiftTanker[]
   salesInvoiceNo?: string
+  /** Purchase / seller invoice(s) captured when marking delivered. */
+  poInvoiceNo?: string
   isSelfLift: boolean
   /** Receive stock to own inventory — no sales order required. */
   stockLift?: boolean
