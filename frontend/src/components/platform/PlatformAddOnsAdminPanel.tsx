@@ -17,6 +17,7 @@ export type PlatformAddOnsTab = 'catalog' | 'access'
 
 export type PlatformAddOnsAdminPanelHandle = {
   refresh: () => Promise<void>
+  openCreate: () => void
 }
 
 export const PlatformAddOnsAdminPanel = forwardRef<
@@ -27,6 +28,7 @@ export const PlatformAddOnsAdminPanel = forwardRef<
   const tabParam = searchParams.get('tab')
   const tab: PlatformAddOnsTab = tabParam === 'access' ? 'access' : 'catalog'
   const [openAccess, setOpenAccess] = useState(0)
+  const [pendingCreate, setPendingCreate] = useState(false)
   const catalogRef = useRef<PlatformFeatureCatalogPanelHandle>(null)
   const accessRef = useRef<PlatformFeatureAccessPanelHandle>(null)
 
@@ -78,7 +80,24 @@ export const PlatformAddOnsAdminPanel = forwardRef<
     await syncOpenAccessCount()
   }, [tab, syncOpenAccessCount])
 
-  useImperativeHandle(ref, () => ({ refresh }), [refresh])
+  const openCreate = useCallback(() => {
+    if (tab !== 'catalog') {
+      setPendingCreate(true)
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', 'catalog')
+      setSearchParams(next, { replace: true })
+      return
+    }
+    catalogRef.current?.openCreate()
+  }, [tab, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (!pendingCreate || tab !== 'catalog') return
+    catalogRef.current?.openCreate()
+    setPendingCreate(false)
+  }, [pendingCreate, tab])
+
+  useImperativeHandle(ref, () => ({ refresh, openCreate }), [refresh, openCreate])
 
   return (
     <div className="space-y-4">

@@ -4,10 +4,8 @@ import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { formatDateTime } from '../../lib/utils'
 import { platformApi } from '../../api/platformApi'
-import {
-  FeatureOfferCatalogCard,
-  featureOfferPriceLabel,
-} from '../features/FeatureOfferCatalogCard'
+import { AddOnBrowseCardPreview } from '../features/AddOnBrowseCardPreview'
+import type { OrgFeatureOffer } from '../../api/organisationApi'
 
 export type FeatureInterestRow = {
   id: number
@@ -21,6 +19,7 @@ export type FeatureInterestRow = {
   card_tone?: string
   card_image_url?: string
   card_bg_hex?: string
+  card_tag?: string
   pricing_type?: string
   price_cents?: number
   status: string
@@ -43,6 +42,11 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
 }
 
+function asPricingType(value: string | undefined): OrgFeatureOffer['pricing_type'] {
+  if (value === 'free' || value === 'paid' || value === 'contact') return value
+  return 'paid'
+}
+
 export function PlatformFeatureInterestModal({
   open,
   interest,
@@ -59,7 +63,10 @@ export function PlatformFeatureInterestModal({
   onReject: (note: string) => Promise<void>
 }) {
   const [note, setNote] = useState('')
-  const [priceLabel, setPriceLabel] = useState<string | null>(null)
+  const [resolvedPricing, setResolvedPricing] = useState<{
+    pricing_type: OrgFeatureOffer['pricing_type']
+    price_cents: number
+  } | null>(null)
 
   useEffect(() => {
     setNote('')
@@ -67,16 +74,14 @@ export function PlatformFeatureInterestModal({
 
   useEffect(() => {
     if (!open || !interest) {
-      setPriceLabel(null)
+      setResolvedPricing(null)
       return
     }
     if (interest.pricing_type) {
-      setPriceLabel(
-        featureOfferPriceLabel(
-          interest.pricing_type,
-          interest.price_cents ?? 0,
-        ),
-      )
+      setResolvedPricing({
+        pricing_type: asPricingType(interest.pricing_type),
+        price_cents: interest.price_cents ?? 0,
+      })
       return
     }
     let cancelled = false
@@ -85,12 +90,14 @@ export function PlatformFeatureInterestModal({
       .then(res => {
         if (cancelled) return
         const offer = res.offers.find(o => o.feature_key === interest.feature_key)
-        setPriceLabel(
-          offer ? featureOfferPriceLabel(offer.pricing_type, offer.price_cents) : null,
+        setResolvedPricing(
+          offer
+            ? { pricing_type: offer.pricing_type, price_cents: offer.price_cents }
+            : { pricing_type: 'paid', price_cents: 0 },
         )
       })
       .catch(() => {
-        if (!cancelled) setPriceLabel(null)
+        if (!cancelled) setResolvedPricing({ pricing_type: 'paid', price_cents: 0 })
       })
     return () => {
       cancelled = true
@@ -105,7 +112,26 @@ export function PlatformFeatureInterestModal({
   const isApproved = interest.status === 'approved'
   const isRejected = interest.status === 'rejected'
 
-  const title = isOpen ? 'Review feature request' : 'Change feature access'
+  const previewOffer: OrgFeatureOffer = {
+    id: interest.id,
+    feature_key: interest.feature_key,
+    title: interest.feature_title,
+    description: interest.feature_detail ?? '',
+    pricing_type: resolvedPricing?.pricing_type ?? asPricingType(interest.pricing_type),
+    price_cents: resolvedPricing?.price_cents ?? interest.price_cents ?? 0,
+    currency: 'INR',
+    catalog_status: 'listed',
+    card_tone: interest.card_tone,
+    card_image_url: interest.card_image_url,
+    card_bg_hex: interest.card_bg_hex,
+    card_tag: interest.card_tag,
+    entitlement_status: isApproved ? 'active' : isOpen ? 'pending' : 'available',
+    active_orgs: isApproved ? 1 : 0,
+    interest_count: isOpen ? 1 : 0,
+    request_count: 1,
+  }
+
+  const title = isOpen ? 'Review add-on request' : 'Change add-on access'
   const subtitle = isOpen
     ? `${org} · ${who} · ${formatDateTime(interest.created_at)}`
     : `${org} · ${who}`
@@ -149,19 +175,11 @@ export function PlatformFeatureInterestModal({
         </div>
         {isApproved ? (
           <p className="text-sm text-muted leading-relaxed">
-            This organisation currently has access. Revoking removes the feature from their licence and notifies them.
+            This organisation currently has access. Revoking removes the add-on from their licence and
+            notifies them.
           </p>
         ) : null}
-        <FeatureOfferCatalogCard
-          interactive={false}
-          featureKey={interest.feature_key}
-          title={interest.feature_title}
-          description={interest.feature_detail}
-          cardTone={interest.card_tone}
-          cardBgHex={interest.card_bg_hex}
-          imageUrl={interest.card_image_url}
-          priceLabel={priceLabel}
-        />
+        <AddOnBrowseCardPreview active={open} offer={previewOffer} />
         {interest.platform_note?.trim() ? (
           <div className="space-y-1">
             <p className="text-xs font-medium uppercase tracking-wide text-muted">Previous note</p>
@@ -181,7 +199,7 @@ export function PlatformFeatureInterestModal({
               isApproved
                 ? 'Revoked — access was granted by mistake.'
                 : isRejected
-                  ? 'Approved — enabling this feature for the organisation.'
+                  ? 'Approved — enabling this add-on for the organisation.'
                   : 'Approved — we will enable this on your licence.'
             }
           />

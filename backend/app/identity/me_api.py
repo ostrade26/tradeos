@@ -313,6 +313,7 @@ def express_feature_interest(
     session = _session(request)
     if not session.user.organisation_id:
         raise HTTPException(status_code=400, detail="Organisation account required")
+    from .email_lifecycle import send_feature_interest_submitted_to_platform
     from .feature_interests_repository import express_interest_from_notification
 
     if uses_postgres():
@@ -325,6 +326,8 @@ def express_feature_interest(
                 feature_keys=body.feature_keys,
             )
             conn.commit()
+            for interest in result.get("interests") or []:
+                send_feature_interest_submitted_to_platform(conn, interest)
             return result
     with _sqlite_connect() as conn:
         result = express_interest_from_notification(
@@ -335,6 +338,8 @@ def express_feature_interest(
             feature_keys=body.feature_keys,
         )
         conn.commit()
+        for interest in result.get("interests") or []:
+            send_feature_interest_submitted_to_platform(conn, interest)
         return result
 
 

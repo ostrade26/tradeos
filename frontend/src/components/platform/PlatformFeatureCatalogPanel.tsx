@@ -1,11 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { DataTable, TableSkeleton } from '../ui/DataTable'
 import { EmptyState } from '../ui/Tabs'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { Modal } from '../ui/Drawer'
 import { DetailPanelMenu } from '../ui/DetailPanelMenu'
 import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { ApiError } from '../../api/client'
@@ -35,6 +36,7 @@ function pricingLabel(offer: PlatformFeatureOffer): string {
 
 export type PlatformFeatureCatalogPanelHandle = {
   refresh: () => Promise<void>
+  openCreate: () => void
 }
 
 export const PlatformFeatureCatalogPanel = forwardRef<
@@ -56,6 +58,8 @@ export const PlatformFeatureCatalogPanel = forwardRef<
   const [deleting, setDeleting] = useState<PlatformFeatureOffer | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [usageOffer, setUsageOffer] = useState<PlatformFeatureOffer | null>(null)
+  const [publishOffer, setPublishOffer] = useState<PlatformFeatureOffer | null>(null)
+  const [publishBusy, setPublishBusy] = useState(false)
 
   const closeUsage = useCallback(() => {
     setDetailPanelOpen(false)
@@ -91,7 +95,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
       const offersRes = await platformApi.listFeatureOffers()
       setOffers(offersRes.offers)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load features catalog')
+      toast.error(err instanceof ApiError ? err.message : 'Could not load add-ons catalog')
     } finally {
       setLoading(false)
     }
@@ -101,7 +105,17 @@ export const PlatformFeatureCatalogPanel = forwardRef<
     void load()
   }, [load])
 
-  useImperativeHandle(ref, () => ({ refresh: load }), [load])
+  useImperativeHandle(
+    ref,
+    () => ({
+      refresh: load,
+      openCreate: () => {
+        setEditing(null)
+        setModalOpen(true)
+      },
+    }),
+    [load],
+  )
 
   const closeModal = () => {
     setModalOpen(false)
@@ -120,7 +134,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
       const res = editing
         ? await platformApi.updateFeatureOffer(editing.id, payload)
         : await platformApi.createFeatureOffer(payload)
-      toast.success(editing ? 'Feature updated' : 'Feature created as draft')
+      toast.success(editing ? 'Add-on updated' : 'Add-on created as draft')
       closeModal()
       await load()
       if (usageOffer && res.offer.id === usageOffer.id) {
@@ -133,15 +147,24 @@ export const PlatformFeatureCatalogPanel = forwardRef<
     }
   }
 
-  const setStatus = async (offerId: number, catalog_status: string) => {
+  const setStatus = async (offerId: number, catalog_status: string, notify_orgs = false) => {
     setBusyId(offerId)
     try {
-      await platformApi.setFeatureOfferCatalogStatus(offerId, catalog_status)
-      toast.success(
-        catalog_status === 'listed'
-          ? 'Published to Features · organisations notified'
-          : 'Unpublished from Features',
-      )
+      const res = await platformApi.setFeatureOfferCatalogStatus(offerId, catalog_status, {
+        notify_orgs,
+      })
+      if (catalog_status === 'listed') {
+        const n = Number((res.offer as { orgs_notified?: number }).orgs_notified || 0)
+        toast.success(
+          notify_orgs
+            ? n > 0
+              ? `Listed on Add-ons · ${n} notice${n === 1 ? '' : 's'} sent`
+              : 'Listed on Add-ons · no organisations to notify'
+            : 'Listed on Add-ons',
+        )
+      } else {
+        toast.success('Unpublished from Add-ons')
+      }
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not update status')
@@ -150,17 +173,28 @@ export const PlatformFeatureCatalogPanel = forwardRef<
     }
   }
 
+  const confirmPublish = async (notify_orgs: boolean) => {
+    if (!publishOffer) return
+    setPublishBusy(true)
+    try {
+      await setStatus(publishOffer.id, 'listed', notify_orgs)
+      setPublishOffer(null)
+    } finally {
+      setPublishBusy(false)
+    }
+  }
+
   const confirmDelete = async () => {
     if (!deleting) return
     if (deleting.catalog_status === 'listed') {
-      toast.error('Unpublish this feature before deleting it')
+      toast.error('Unpublish this add-on before deleting it')
       setDeleting(null)
       return
     }
     setDeleteBusy(true)
     try {
       await platformApi.deleteFeatureOffer(deleting.id)
-      toast.success('Feature deleted')
+      toast.success('Add-on deleted')
       setDeleting(null)
       await load()
     } catch (err) {
@@ -173,19 +207,6 @@ export const PlatformFeatureCatalogPanel = forwardRef<
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null)
-            setModalOpen(true)
-          }}
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          New Feature
-        </Button>
-      </div>
-
       {loading && offers.length === 0 ? (
         <TableSkeleton rows={6} cols={6} />
       ) : (
@@ -195,7 +216,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
           columns={[
             {
               key: 'title',
-              header: 'Feature',
+              header: 'Add-on',
               render: r => (
                 <div>
                   <p className="font-medium text-heading">{r.title}</p>
@@ -254,7 +275,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
                     loading={busyId === r.id}
                     onClick={e => {
                       e.stopPropagation()
-                      void setStatus(r.id, 'listed')
+                      setPublishOffer(r)
                     }}
                   >
                     Publish
@@ -301,8 +322,8 @@ export const PlatformFeatureCatalogPanel = forwardRef<
           defaultPageSize={25}
           emptyState={
             <EmptyState
-              title="No features yet"
-              description="Create a feature orgs can browse and enable from Features."
+              title="No add-ons yet"
+              description="Create an add-on orgs can browse and enable from Add-ons."
             />
           }
         />
@@ -325,11 +346,59 @@ export const PlatformFeatureCatalogPanel = forwardRef<
         onSave={saveOffer}
       />
 
+      <Modal
+        open={publishOffer != null}
+        onClose={() => !publishBusy && setPublishOffer(null)}
+        title="Publish add-on"
+        footerClassName="flex-wrap items-center justify-end gap-3"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              disabled={publishBusy}
+              onClick={() => setPublishOffer(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              loading={publishBusy && busyId === publishOffer?.id}
+              disabled={publishBusy}
+              onClick={() => void confirmPublish(false)}
+            >
+              List only
+            </Button>
+            <Button
+              variant="primary"
+              loading={publishBusy && busyId === publishOffer?.id}
+              disabled={publishBusy}
+              onClick={() => void confirmPublish(true)}
+            >
+              List and notify
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-heading">
+          Publish <span className="font-semibold">{publishOffer?.title}</span> to Add-ons.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm text-muted">
+          <li>
+            <span className="font-medium text-heading">List only</span> — appears in Add-ons; no inbox
+            notice.
+          </li>
+          <li>
+            <span className="font-medium text-heading">List and notify</span> — also sends a notice to
+            licensed organisations.
+          </li>
+        </ul>
+      </Modal>
+
       <ConfirmDialog
         open={deleting != null}
         onClose={() => !deleteBusy && setDeleting(null)}
         onConfirm={() => void confirmDelete()}
-        title="Delete feature?"
+        title="Delete add-on?"
         variant="danger"
         confirmLabel="Delete"
         slideLabel="Slide to delete"
@@ -343,7 +412,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
               (<span className="font-mono text-xs">{deleting.feature_key}</span>)
             </>
           ) : null}{' '}
-          from the catalog. Orgs will no longer see this card in Features.
+          from the catalog. Orgs will no longer see this card in Add-ons.
         </p>
         {(deleting?.active_orgs ?? 0) > 0 || (deleting?.pending_requests ?? 0) > 0 ? (
           <p className="text-sm text-muted mt-3">

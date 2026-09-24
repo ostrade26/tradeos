@@ -24,6 +24,7 @@ import { usePlatformSeatRequestInbox } from '../../hooks/usePlatformSeatRequestI
 import { useUnifiedInbox } from '../../hooks/useUnifiedInbox'
 import { orgNoticesLabels, platformActionInboxLabels } from '../../lib/inboxLabels'
 import { tradealCopyright } from '../../lib/copyright'
+import { TradealMark } from '../brand/TradealMark'
 
 /** Register routes — navigate with a clean URL (no `ref` from the previous register). */
 function registerNavTo(path: string) {
@@ -44,7 +45,7 @@ const platformNavBase = [
   { to: appPath('/reports'), icon: ClipboardList, label: 'Reports' },
   { to: appPath('/analytics'), icon: BarChart3, label: 'Analytics' },
   { to: appPath('/activity'), icon: Activity, label: 'Activity' },
-  { to: appPath('/features'), icon: platformFeaturesAccessNavIcon, label: 'Features', featuresNav: true as const },
+  { to: appPath('/addons'), icon: platformFeaturesAccessNavIcon, label: 'Add-ons', featuresNav: true as const },
   { to: appPath('/notifications'), icon: Bell, label: orgNoticesLabels.sidebarNav },
 ]
 
@@ -138,11 +139,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
     ? 'rounded-full p-1.5 text-white/70 hover:bg-white/15 hover:text-white cursor-pointer attex-focus'
     : 'rounded-full p-1.5 text-muted hover:bg-gray-100 hover:text-heading dark:hover:bg-gray-700/40 cursor-pointer attex-focus'
 
-  const brandMarkClass = themed
-    ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/20 ring-1 ring-white/25'
-    : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-white'
-
-  const brandMarkStroke = themed ? 'white' : 'currentColor'
+  const brandMarkClass = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-md'
   const dividerClass = themed ? 'border-white/15' : 'border-gray-200 dark:border-gray-700'
 
   return (
@@ -171,9 +168,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
           {showLabels ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <div className={brandMarkClass}>
-                <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
-                  <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <TradealMark className="h-8 w-8" />
               </div>
               <div className="min-w-0 flex flex-col gap-0 leading-none">
                 <span className={cn('text-lg font-semibold truncate leading-tight', themed ? 'text-white' : 'text-heading')}>
@@ -196,9 +191,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               className={cn('relative', brandMarkClass)}
               title={organisationIsTest ? 'Test account' : undefined}
             >
-              <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
-                <path d="M2 12L7 7L10 10L14 5" stroke={brandMarkStroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <TradealMark className="h-8 w-8" />
               {organisationIsTest ? (
                 <span
                   className={cn('absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full bg-warning ring-2', badgeRing)}

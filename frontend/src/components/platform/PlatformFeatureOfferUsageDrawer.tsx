@@ -2,16 +2,12 @@ import { useEffect, useState } from 'react'
 import { Building2, Clock3, PanelRight, PanelRightClose } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Badge } from '../ui/Badge'
-import { Button } from '../ui/Button'
 import {
   DetailGroup,
   DetailPanelBody,
 } from '../registers/DetailPanelSections'
-import {
-  ADDON_CATALOG_CARD_FRAME,
-  FeatureOfferCatalogCard,
-  featureOfferPriceLabel,
-} from '../features/FeatureOfferCatalogCard'
+import { AddOnBrowseCardPreview } from '../features/AddOnBrowseCardPreview'
+import type { OrgFeatureOffer } from '../../api/organisationApi'
 import { ApiError } from '../../api/client'
 import {
   platformApi,
@@ -76,8 +72,25 @@ export function PlatformFeatureOfferUsageDrawer({
     usage?.offer?.id === offer.id ? { ...usage.offer, ...offer } : offer
   const organisations = usage?.organisations ?? []
   const pending = usage?.pending_requests ?? []
-  const priceLabel = featureOfferPriceLabel(detail.pricing_type, detail.price_cents)
-  const previewCta = detail.pricing_type === 'free' ? 'Enable' : 'Request'
+  const previewOffer: OrgFeatureOffer = {
+    id: detail.id,
+    feature_key: detail.feature_key,
+    title: detail.title,
+    description: detail.description ?? '',
+    pricing_type: detail.pricing_type,
+    price_cents: detail.price_cents ?? 0,
+    currency: detail.currency ?? 'INR',
+    catalog_status: detail.catalog_status,
+    card_tone: detail.card_tone,
+    card_image_url: detail.card_image_url,
+    card_featured: Boolean(detail.card_featured),
+    card_bg_hex: detail.card_bg_hex,
+    card_tag: detail.card_tag,
+    entitlement_status: 'available',
+    active_orgs: organisations.length,
+    interest_count: pending.length,
+    request_count: organisations.length + pending.length,
+  }
 
   const dockToggle = onDockChange ? (
     <button
@@ -102,33 +115,15 @@ export function PlatformFeatureOfferUsageDrawer({
 
   const content = (
     <DetailPanelBody>
-      <div className="-mx-4 sm:-mx-5 bg-gray-50/90 dark:bg-zinc-900/40 p-6 sm:p-8">
-        <div className={ADDON_CATALOG_CARD_FRAME}>
-          <FeatureOfferCatalogCard
-            className="h-full w-full"
-            interactive={false}
-            featured={Boolean(detail.card_featured)}
-            featureKey={detail.feature_key}
-            title={detail.title}
-            description={detail.description}
-            cardTone={detail.card_tone}
-            cardBgHex={detail.card_bg_hex}
-            imageUrl={detail.card_image_url}
-            priceLabel={priceLabel}
-            footer={
-              <Button size="sm" type="button" tabIndex={-1} className="pointer-events-none">
-                {previewCta}
-              </Button>
-            }
-          />
-        </div>
+      <div className="-mx-4 sm:-mx-5 bg-gray-50/90 dark:bg-zinc-900/40 px-6 py-6 sm:px-8 sm:py-8">
+        <AddOnBrowseCardPreview active={open} offer={previewOffer} />
       </div>
 
       <DetailGroup title="Organisations using this" icon={Building2}>
         {loading && organisations.length === 0 ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : organisations.length === 0 ? (
-          <p className="text-sm text-muted">No organisations using this feature.</p>
+          <p className="text-sm text-muted">No organisations using this add-on.</p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-gray-800 -mx-1">
             {organisations.map(org => (

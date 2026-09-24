@@ -65,7 +65,7 @@ function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
   if (item.kind === 'feature_interest' && platformConsole) return 'Review request'
   if (item.notice) {
     if (isDeployReviewItem(item)) return deployReviewActionLabel(item)
-    if (item.notice.payload?.cta === 'browse') return 'Open Features'
+    if (item.notice.payload?.cta === 'browse') return 'Open Add-ons'
     if (item.notice.payload?.cta === 'review_interest') return 'Review request'
     if (isFeatureInterestNotice(item.notice)) return 'Express interest'
     if (
@@ -247,6 +247,7 @@ function ReceivedDetailPanel({
   const cta = actionLabel(item, platformConsole)
   const openSeat =
     platformConsole && item.seatRequest && isOpenSeatRequest(item.seatRequest.status) && onRejectSeat
+
   return (
     <DetailPanelBody>
       <DetailMetricsSection>

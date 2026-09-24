@@ -42,7 +42,15 @@ export interface OrgFeatureOffer {
   card_image_url?: string
   card_featured?: boolean
   card_bg_hex?: string
+  card_tag?: string
+  listed_at?: string | null
   entitlement_status: 'available' | 'pending' | 'active'
+  /** Orgs with this entitlement (marketplace ranking). */
+  active_orgs?: number
+  pending_requests?: number
+  interest_count?: number
+  /** Popularity score for Most requested. */
+  request_count?: number
 }
 
 export interface OrganisationSeatRequestContext {

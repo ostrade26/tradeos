@@ -19,10 +19,17 @@ import { formatContractRate, formatRateCell, PURCHASE_RATE_COLUMN_HEADER } from 
 import { useTradeStore } from '../store/TradeStore'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import type { Lot } from '../data/mockData'
+import { getSOsForPO } from '../data/mockData'
 import { DetailInlineStat, DetailInlineStatRow } from '../components/registers/DetailPanelSections'
+import { AllocationQtyWithTooltip } from '../components/registers/AllocationQtyWithTooltip'
+import { TruncatedTextWithTooltip } from '../components/ui/DelayedHoverTooltip'
 import { useTableDensity } from '../hooks/useTableDensity'
 
 type InventoryView = 'cards' | 'table'
+
+function poRefFromLotNumber(lotNumber: string) {
+  return lotNumber.replace(/^LOT-/, '')
+}
 
 function ViewToggle({ view, onChange }: { view: InventoryView; onChange: (view: InventoryView) => void }) {
   return (
@@ -202,6 +209,7 @@ function inventorySortValue(lot: Lot, key: string): string | number {
 
 function InventoryTable({ lots }: { lots: Lot[] }) {
   const navigate = useNavigate()
+  const store = useTradeStore()
   const [sort, setSort] = useState(() => loadRegisterSort('inventory', 'lotNumber'))
 
   const handleSortChange = useCallback((key: string) => {
@@ -215,6 +223,14 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
   const sortedLots = useMemo(
     () => sortRows(lots, sort, inventorySortValue),
     [lots, sort],
+  )
+
+  const allocationLinesForLot = useCallback(
+    (lot: Lot) =>
+      getSOsForPO(store.tradeOrders, poRefFromLotNumber(lot.lotNumber))
+        .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
+        .map(o => ({ soRef: o.ref, qtyMt: o.orderQty })),
+    [store.tradeOrders],
   )
 
   const columns = useMemo(() => [
@@ -249,7 +265,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
       sortable: true,
       sortValue: (lot: Lot) => lot.producer,
       render: (lot: Lot) => (
-        <span className="max-w-[180px] truncate block">{lot.producer}</span>
+        <TruncatedTextWithTooltip text={lot.producer} className="max-w-[180px]" />
       ),
     },
     {
@@ -259,7 +275,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
       sortable: true,
       sortValue: (lot: Lot) => lot.broker,
       render: (lot: Lot) => (
-        <span className="max-w-[180px] truncate block">{lot.broker}</span>
+        <TruncatedTextWithTooltip text={lot.broker} className="max-w-[180px]" />
       ),
     },
     {
@@ -297,9 +313,11 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
       sortable: true,
       sortValue: (lot: Lot) => lot.allocated,
       render: (lot: Lot) => (
-        <span className={cn('tabular-nums', lot.allocated > 0 && 'text-blue-600 dark:text-blue-400 font-medium')}>
-          {formatMt(lot.allocated)}
-        </span>
+        <AllocationQtyWithTooltip
+          allocated={lot.allocated}
+          lines={allocationLinesForLot(lot)}
+          className={lot.allocated > 0 ? 'text-blue-600 dark:text-blue-400 font-medium' : undefined}
+        />
       ),
     },
     {
@@ -322,7 +340,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
       sortValue: (lot: Lot) => lot.purchaseDate,
       render: (lot: Lot) => <span className="tabular-nums">{formatDate(lot.purchaseDate)}</span>,
     },
-  ], [])
+  ], [allocationLinesForLot])
 
   return (
     <DataTable<Lot>

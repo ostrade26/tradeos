@@ -39,7 +39,7 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'credentials') return 'Sign-in'
   if (kind === 'payment_reminder') return 'Payment'
   if (kind === 'product_update') return 'Product update'
-  if (kind === 'feature_launch') return 'New feature'
+  if (kind === 'feature_launch') return 'New add-on'
   if (kind === 'release_notes') return 'Product update'
   if (kind === 'maintenance') return 'Maintenance'
   if (kind === 'announcement') return 'Announcement'

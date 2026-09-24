@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" role="img" aria-label="Tradeal">
+  <title>Tradeal</title>
   <path fill="#1D5DD4" d="M13 8h46v11H41v45h-10V19H13z"/>
   <path fill="#059669" d="M13 24h46v12H13z"/>
   <path fill="#059669" d="M13 36L15 48L18 55L24 61L28 63L28 49L25 46L25 44L24 43L24 36Z"/>

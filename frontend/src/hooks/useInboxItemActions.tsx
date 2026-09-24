@@ -147,7 +147,7 @@ export function useInboxItemActions({
     }
     if (row.notice) {
       if (isFeatureBrowseNotice(row.notice)) {
-        navigate(row.notice.href || appPath('/features'))
+        navigate(row.notice.href || appPath('/addons'))
         if (row.category === 'notice' && row.unread) void markRead(row.id)
         return
       }

@@ -160,46 +160,40 @@ const TABLE_STICKY_UNREAD =
   'bg-[color-mix(in_srgb,#f0f9ff_70%,var(--color-card)_30%)] dark:bg-[color-mix(in_srgb,#082f49_25%,var(--color-card)_75%)]'
 const TABLE_CELL_UNREAD_HOVER = 'group-hover:bg-sky-50 dark:group-hover:bg-sky-950/40'
 
-/** Right + bottom only — adjacent cells share one edge (avoids thicker left/bottom from full borders + sticky). */
-const TABLE_GRID_BORDER = 'border-b border-r border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_EDGE_TOP = 'border-t border-gray-200 dark:border-gray-700/80'
-const TABLE_GRID_EDGE_LEFT = 'border-l border-gray-200 dark:border-gray-700/80'
+/** Bottom only, or bottom + right — adjacent cells share one edge. */
+const TABLE_GRID_BORDER_Y = 'border-b border-gray-200 dark:border-gray-700/80'
+const TABLE_GRID_BORDER = `${TABLE_GRID_BORDER_Y} border-r`
 
 function gridCellClasses(
   selected: boolean,
   isSticky: boolean,
   isHeader = false,
   tone?: 'unread',
+  omitRightBorder = false,
 ) {
+  const borders = omitRightBorder ? TABLE_GRID_BORDER_Y : TABLE_GRID_BORDER
   if (selected) {
     return cn(
       isSticky ? TABLE_STICKY_SELECTED : TABLE_CELL_SELECTED_BG,
-      TABLE_GRID_BORDER,
+      borders,
     )
   }
   if (tone === 'unread' && !isHeader) {
     return cn(
-      TABLE_GRID_BORDER,
+      borders,
       isSticky ? TABLE_STICKY_UNREAD : TABLE_CELL_UNREAD_BG,
       TABLE_CELL_UNREAD_HOVER,
     )
   }
   return cn(
-    TABLE_GRID_BORDER,
+    borders,
     isHeader && 'bg-gray-50 dark:bg-gray-800',
     !isHeader && isSticky && 'bg-card group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
   )
 }
 
-function gridOuterEdgeClasses(opts: { top?: boolean; left?: boolean }) {
-  return cn(
-    opts.top && TABLE_GRID_EDGE_TOP,
-    opts.left && TABLE_GRID_EDGE_LEFT,
-  )
-}
-
-const STICKY_REF_SHADOW =
-  'shadow-[4px_0_8px_-4px_rgba(0,0,0,0.08)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.45)]'
+const STICKY_DIVIDER_EDGE = 'table-sticky-divider'
+const STICKY_LEADING_EDGE = 'table-sticky-leading'
 const STICKY_ACTIONS_SHADOW = 'table-sticky-actions'
 /** ⋯ control — horizontal sizing; vertical padding comes from table density. */
 const STICKY_ACTIONS_COL =
@@ -378,9 +372,9 @@ export function DataTable<T extends { id?: string | number }>({
                     CHECKBOX_COL_CLASS,
                     `${density.headerY} hidden md:table-cell`,
                     'select-none',
-                    gridCellClasses(false, stickyFirstColumn, true),
-                    gridOuterEdgeClasses({ top: true, left: true }),
-                    stickyFirstColumn && 'sticky left-0 z-30',
+                    // Inset right edge replaces border-r so it stays visible while scrolling.
+                    gridCellClasses(false, stickyFirstColumn, true, undefined, stickyFirstColumn),
+                    stickyFirstColumn && cn('sticky left-0 z-30', STICKY_DIVIDER_EDGE),
                   )}
                   scope="col"
                   onMouseDown={e => {
@@ -404,7 +398,9 @@ export function DataTable<T extends { id?: string | number }>({
                 const isStickyFirst = stickyFirstColumn && colIndex === 0
                 const isStickyLast = stickActions && colIndex === lastColIndex
                 const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
-                const isFirstDataCol = colIndex === 0
+                const isLastCol = colIndex === lastColIndex
+                // Sticky Ref# uses inset right edge instead of border-r (survives horizontal scroll).
+                const omitRightBorder = isLastCol || isBeforeStickyActions || isStickyFirst
                 return (
                 <th
                   key={col.key}
@@ -412,22 +408,17 @@ export function DataTable<T extends { id?: string | number }>({
                   className={cn(
                     isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.headerY} text-left`,
                     `${density.text} font-medium text-muted`,
-                    gridCellClasses(false, isStickyFirst || isStickyLast, true),
-                    gridOuterEdgeClasses({ top: true, left: isFirstDataCol }),
-                    hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
+                    gridCellClasses(false, isStickyFirst || isStickyLast, true, undefined, omitRightBorder),
                     col.sortable && onSortChange && 'cursor-pointer select-none group',
                     isStickyFirst && cn(
                       'sticky z-30 whitespace-nowrap',
                       stickyRefLeft,
-                      STICKY_REF_SHADOW,
+                      STICKY_LEADING_EDGE,
                       'pr-2',
                     ),
-                    isBeforeStickyActions && 'border-r-0',
                     isStickyLast && cn(
                       'sticky right-0 z-30',
                       STICKY_ACTIONS_SHADOW,
-                      // Vertical edges come from inset shadow — avoid double weight with cell border.
-                      'border-r-0',
                     ),
                     col.className,
                   )}
@@ -474,9 +465,14 @@ export function DataTable<T extends { id?: string | number }>({
                         CHECKBOX_COL_CLASS,
                         `${density.bodyY} hidden md:table-cell`,
                         'select-none',
-                        gridCellClasses(highlighted, stickyFirstColumn, false, tone),
-                        gridOuterEdgeClasses({ left: true }),
-                        stickyFirstColumn && 'sticky left-0 z-20',
+                        gridCellClasses(
+                          highlighted,
+                          stickyFirstColumn,
+                          false,
+                          tone,
+                          stickyFirstColumn,
+                        ),
+                        stickyFirstColumn && cn('sticky left-0 z-20', STICKY_DIVIDER_EDGE),
                         !highlighted && !tone && !stickyFirstColumn && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                       )}
                       onMouseDown={e => {
@@ -509,29 +505,25 @@ export function DataTable<T extends { id?: string | number }>({
                     const isStickyLast = stickActions && colIndex === lastColIndex
                     const isBeforeStickyActions = stickActions && colIndex === lastColIndex - 1
                     const isStickyCol = isStickyFirst || isStickyLast
-                    const isFirstDataCol = colIndex === 0
+                    const isLastCol = colIndex === lastColIndex
+                    const omitRightBorder = isLastCol || isBeforeStickyActions || isStickyFirst
                     return (
                     <td
                       key={col.key}
                       className={cn(
                         isStickyLast ? `${stickyActionsColClass} ${density.actionsY}` : `${density.cellX} ${density.bodyY}`,
                         `${density.text} text-gray-700 dark:text-gray-300`,
-                        gridCellClasses(highlighted, isStickyCol, false, tone),
-                        gridOuterEdgeClasses({ left: isFirstDataCol }),
-                        hasCheckboxColumn && isFirstDataCol && 'md:border-l-0',
+                        gridCellClasses(highlighted, isStickyCol, false, tone, omitRightBorder),
                         !highlighted && !tone && !isStickyCol && 'group-hover:bg-gray-50 dark:group-hover:bg-zinc-800/50',
                         isStickyFirst && cn(
                           'sticky z-20 whitespace-nowrap',
                           stickyRefLeft,
-                          STICKY_REF_SHADOW,
+                          STICKY_LEADING_EDGE,
                           'pr-2',
                         ),
-                        isBeforeStickyActions && 'border-r-0',
                         isStickyLast && cn(
                           'sticky right-0 z-20',
                           STICKY_ACTIONS_SHADOW,
-                          // Vertical edges come from inset shadow — avoid double weight with cell border.
-                          'border-r-0',
                         ),
                         col.className,
                       )}

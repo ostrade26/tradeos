@@ -75,7 +75,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate(appPath('/analytics')) },
       { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate(appPath('/activity')) },
       ...(hasPermission('organisation.subscription.view') && !isPlatformAdmin
-        ? [{ id: 'features', label: 'Features', group: 'Navigation', action: () => navigate(appPath('/features')) }]
+        ? [{ id: 'addons', label: 'Add-ons', group: 'Navigation', action: () => navigate(appPath('/addons')) }]
         : []),
       { id: 'inbox', label: 'Inbox', group: 'Navigation', action: () => navigate(appPath('/notifications')) },
       ...(hasPermission('purchase.create')

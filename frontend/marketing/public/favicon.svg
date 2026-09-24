@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#3e60d5"/>
-  <path d="M8 20L14 14L18 18L24 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="24" cy="10" r="2" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" role="img" aria-label="Tradeal">
+  <path fill="#1D5DD4" d="M13 8h46v11H41v45h-10V19H13z"/>
+  <path fill="#059669" d="M13 24h46v12H13z"/>
+  <path fill="#059669" d="M13 36L15 48L18 55L24 61L28 63L28 49L25 46L25 44L24 43L24 36Z"/>
+  <path fill="#059669" d="M48 36L48 39L47 40L46 46L43 49L43 62L47 61L51 58L51 57L54 54L56 47L57 46L57 40L58 39L58 36Z"/>
 </svg>

@@ -34,6 +34,7 @@ import {
   toBeLifted,
   formatDeliveryPeriodLabel,
   getAllocatedSellQty,
+  getSOsForPO,
 } from '../../data/mockData'
 import { inTransitQtyOnOrder } from '../../lib/liftAllocations'
 import { useTradeStore } from '../../store/TradeStore'
@@ -48,14 +49,13 @@ import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { REGISTER_TABLE_LAYER_Z } from '../ui/Drawer'
 import { appPath } from '../../lib/appShellMode'
 import { applyRowSelection, type RowSelectMeta } from '../../lib/tableSelection'
+import {
+  AllocationQtyWithTooltip,
+  type AllocationTooltipLine,
+} from './AllocationQtyWithTooltip'
+import { TruncatedTextWithTooltip } from '../ui/DelayedHoverTooltip'
 
 export type OrderListMode = 'pending' | 'completed' | 'deleted'
-
-function parseModeFromView(view: string | null): OrderListMode {
-  if (view === 'completed' || view === 'register') return 'completed'
-  if (view === 'deleted') return 'deleted'
-  return 'pending'
-}
 
 function registerToBeLift(order: TradeOrder): number {
   return toBeLifted(order)
@@ -67,6 +67,15 @@ function availableOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): 
 
 function allocationOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): number {
   return getAllocatedSellQty(store.tradeOrders, poRef)
+}
+
+function allocationLinesOnPO(
+  store: ReturnType<typeof useTradeStore>,
+  poRef: string,
+): AllocationTooltipLine[] {
+  return getSOsForPO(store.tradeOrders, poRef)
+    .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
+    .map(o => ({ soRef: o.ref, qtyMt: o.orderQty }))
 }
 
 function inTransitOnOrder(store: ReturnType<typeof useTradeStore>, order: TradeOrder): number {
@@ -119,10 +128,15 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const urlRef = searchParams.get('ref')
   /** Drives the open panel immediately; URL syncs in parallel (avoids close lag). */
   const [detailRef, setDetailRef] = useState<string | null>(urlRef)
+  const restoredDetailRef = useRef(false)
+  const storeReady = store.ready && !store.loading
 
+  // URL is source of truth when present — never let a stale persisted ref win.
   useEffect(() => {
-    setDetailRef(searchParams.get('ref'))
-  }, [searchParams])
+    const ref = searchParams.get('ref')
+    setDetailRef(ref)
+    if (ref) saveRegisterDetailRef(pathPrefix, ref)
+  }, [searchParams, pathPrefix])
 
   const closeOrderPanel = useCallback(() => {
     setDetailRef(null)
@@ -137,15 +151,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     const params = new URLSearchParams(searchParams)
     if (order) {
       params.set('ref', order.ref)
-      const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
-      const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
-      if (inCompleted && !inPending) params.set('view', 'completed')
-      else if (inPending) params.delete('view')
+      saveRegisterDetailRef(pathPrefix, order.ref)
     } else {
       params.delete('ref')
     }
     setSearchParams(params, { replace: true })
-  }, [searchParams, setSearchParams, isPO, store])
+  }, [searchParams, setSearchParams, pathPrefix])
 
   const handleSelectOrder = useCallback((order: TradeOrder) => {
     if (detailRef === order.ref) {
@@ -170,9 +181,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
 
   const orderHref = (order: TradeOrder) => {
     const params = new URLSearchParams({ ref: order.ref })
-    const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
-    const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
-    if (inCompleted && !inPending) params.set('view', 'completed')
     return `${pathPrefix}?${params.toString()}`
   }
 
@@ -186,8 +194,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
 
   const undockedDetailOpen = !effectiveDocked && detailRef != null && selectedOrder != null
 
-  const restoredDetailRef = useRef(false)
-
   useLayoutEffect(() => {
     if (effectiveDocked && detailRef && selectedOrder) {
       setDetailPanelOpen(true, 'lg')
@@ -196,10 +202,14 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     }
   }, [effectiveDocked, detailRef, selectedOrder, setDetailPanelOpen])
 
+  // Restore last detail only when landing with no ?ref= (e.g. sidebar nav).
   useLayoutEffect(() => {
     if (restoredDetailRef.current) return
+    if (urlRef) {
+      restoredDetailRef.current = true
+      return
+    }
     restoredDetailRef.current = true
-    if (urlRef) return
     const persisted = loadRegisterDetailRef(pathPrefix)
     if (!persisted) return
     const order = findOrderByRef(store, persisted, side)
@@ -207,15 +217,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       saveRegisterDetailRef(pathPrefix, null)
       return
     }
-    setDetailRef(persisted)
+    setDetailRef(order.ref)
+    saveRegisterDetailRef(pathPrefix, order.ref)
     if (effectiveDocked) setDetailPanelOpen(true, 'lg')
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
-      params.set('ref', persisted)
-      const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.id === order.id)
-      const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.id === order.id)
-      if (inCompleted && !inPending) params.set('view', 'completed')
-      else if (inPending) params.delete('view')
+      params.set('ref', order.ref)
       return params
     }, { replace: true })
   }, [
@@ -223,27 +230,38 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     pathPrefix,
     side,
     store,
-    isPO,
     effectiveDocked,
     setDetailPanelOpen,
     setSearchParams,
   ])
 
+  // Canonicalize ?ref= to the stored order.ref once resolved (prefix / formatting drift).
   useEffect(() => {
-    if (urlRef && selectedOrder) saveRegisterDetailRef(pathPrefix, urlRef)
-  }, [urlRef, selectedOrder, pathPrefix])
+    if (!urlRef || !selectedOrder) return
+    if (selectedOrder.ref === urlRef) return
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('ref', selectedOrder.ref)
+      return params
+    }, { replace: true })
+    setDetailRef(selectedOrder.ref)
+    saveRegisterDetailRef(pathPrefix, selectedOrder.ref)
+  }, [urlRef, selectedOrder, setSearchParams, pathPrefix])
 
+  // Drop invalid ?ref= only after trade data is ready — avoids wiping a good deep link
+  // during load and then showing a stale persisted PO.
   useEffect(() => {
-    if (!urlRef) return
+    if (!urlRef || !storeReady) return
     if (findOrderByRef(store, urlRef, side)) return
     setDetailRef(null)
     setDetailPanelOpen(false)
+    saveRegisterDetailRef(pathPrefix, null)
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
       params.delete('ref')
       return params
     }, { replace: true })
-  }, [urlRef, side, store, setSearchParams, setDetailPanelOpen])
+  }, [urlRef, side, store, storeReady, setSearchParams, setDetailPanelOpen, pathPrefix])
 
   useEffect(() => {
     if (urlQ) setSearch(urlQ)
@@ -253,30 +271,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     if (!urlParty) return
     setFilters(prev => ({ ...prev, party: urlParty }))
   }, [urlParty])
-
-  useEffect(() => {
-    if (!urlRef) return
-    const inPending = (isPO ? store.getPOPending() : store.getSOPending()).some(o => o.ref === urlRef)
-    const inCompleted = (isPO ? store.getPOCompleted() : store.getSOCompleted()).some(o => o.ref === urlRef)
-    const inDeleted = (isPO ? store.getPODeleted() : store.getSODeleted()).some(o => o.ref === urlRef)
-    const target: OrderListMode | null = inDeleted
-      ? 'deleted'
-      : inCompleted && !inPending
-        ? 'completed'
-        : inPending && !inCompleted
-          ? 'pending'
-          : null
-    if (!target) return
-    setSearchParams(prev => {
-      const current = parseModeFromView(prev.get('view'))
-      if (current === target) return prev
-      const params = new URLSearchParams(prev)
-      if (target === 'completed') params.set('view', 'completed')
-      else if (target === 'deleted') params.set('view', 'deleted')
-      else params.delete('view')
-      return params
-    }, { replace: true })
-  }, [urlRef, isPO, setSearchParams, store])
 
   const baseData = useMemo(() => {
     if (mode === 'pending') {
@@ -452,7 +446,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       render: (r: TradeOrder) => {
         const poRef = r.poRef
         if (!poRef) return <span className="text-muted">Not linked</span>
-        const poHref = appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)
+        const poRegister = appPath('/purchase-orders')
+        const poHref = `${poRegister}?ref=${encodeURIComponent(poRef)}`
         return (
           <Link
             to={poHref}
@@ -460,6 +455,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             onClick={e => {
               e.preventDefault()
               e.stopPropagation()
+              // Seed PO register detail before nav so a stale persisted ref cannot flash.
+              saveRegisterDetailRef(poRegister, poRef)
               navigate(poHref)
             }}
           >
@@ -473,7 +470,9 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       header: `${partyColumn} Name`,
       sortable: true,
       sortValue: (r: TradeOrder) => r.partyName,
-      render: (r: TradeOrder) => <span className="max-w-[180px] truncate block">{r.partyName}</span>,
+      render: (r: TradeOrder) => (
+        <TruncatedTextWithTooltip text={r.partyName} className="max-w-[180px]" />
+      ),
     },
     {
       key: 'itemName',
@@ -546,9 +545,11 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           render: (r: TradeOrder) => {
             const allocated = allocationOnPO(store, r.ref)
             return (
-              <span className={cn('tabular-nums', allocated > 0 ? 'text-heading font-medium' : 'text-muted')}>
-                {formatMt(allocated)}
-              </span>
+              <AllocationQtyWithTooltip
+                allocated={allocated}
+                lines={allocationLinesOnPO(store, r.ref)}
+                className={allocated > 0 ? 'text-heading font-medium' : 'text-muted'}
+              />
             )
           },
         },
@@ -600,7 +601,16 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       render: (r: TradeOrder) => {
         const remaining = registerToBeLift(r)
         return (
-          <span className={cn('tabular-nums font-medium', remaining > 0 ? 'text-warning' : 'text-muted')}>
+          <span
+            className={cn(
+              'tabular-nums font-medium',
+              remaining <= 0
+                ? 'text-muted'
+                : remaining < 1
+                  ? 'text-warning'
+                  : 'text-heading',
+            )}
+          >
             {formatMt(remaining)}
           </span>
         )
@@ -610,7 +620,9 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       key: 'brokerName',
       header: 'Broker Name',
       className: 'hidden xl:table-cell',
-      render: (r: TradeOrder) => <span className="max-w-[180px] truncate block">{r.brokerName}</span>,
+      render: (r: TradeOrder) => (
+        <TruncatedTextWithTooltip text={r.brokerName} className="max-w-[180px]" />
+      ),
     },
     {
       key: 'actions',
@@ -886,7 +898,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         </div>
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
           <p className="text-xs uppercase tracking-wider text-muted leading-snug">To be lifted (MT)</p>
-          <p className="text-lg font-semibold tabular-nums text-warning">{formatMt(totals.toBeLift)}</p>
+          <p className="text-lg font-semibold tabular-nums text-heading">{formatMt(totals.toBeLift)}</p>
         </div>
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
           <p className="text-xs uppercase tracking-wider text-muted leading-snug">

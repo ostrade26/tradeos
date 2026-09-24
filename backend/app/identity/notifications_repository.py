@@ -557,12 +557,27 @@ def create_notifications_for_audience(
         href=href or "",
         payload=payload,
     )
+    # Email customers for payment / maintenance / product-reply only.
+    # FYI kinds (feature_launch, product_update, announcement, …) stay inbox-only.
+    from .email_lifecycle import CUSTOMER_EMAIL_NOTICE_KINDS, send_customer_notice_emails
+
+    emailed = 0
+    if kind in CUSTOMER_EMAIL_NOTICE_KINDS:
+        emailed = send_customer_notice_emails(
+            conn,
+            kind=kind,
+            title=title,
+            body=body,
+            href=href or "",
+            notifications=items,
+        )
     return {
         "sent": len(items),
         "skipped_expired_amc": skipped_amc,
         "notifications": items,
         "notification": items[0],
         "send": send_row,
+        "emailed": emailed,
     }
 
 

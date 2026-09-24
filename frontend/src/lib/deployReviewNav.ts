@@ -31,5 +31,5 @@ export function deployReviewHref(item: Pick<UnifiedInboxItem, 'href' | 'notice'>
 }
 
 export function deployReviewActionLabel(item: Pick<UnifiedInboxItem, 'href' | 'notice'>): string {
-  return deployReviewCta(item) === 'review_release' ? 'Open Releases' : 'Open Features'
+  return deployReviewCta(item) === 'review_release' ? 'Open Releases' : 'Open Features & Access'
 }

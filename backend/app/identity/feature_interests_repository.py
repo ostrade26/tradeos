@@ -60,12 +60,14 @@ def _enrich(conn, item: dict[str, Any]) -> dict[str, Any]:
         item["card_tone"] = str(offer.get("card_tone") or "")
         item["card_image_url"] = str(offer.get("card_image_url") or "")
         item["card_bg_hex"] = str(offer.get("card_bg_hex") or "")
+        item["card_tag"] = str(offer.get("card_tag") or "")
         item["pricing_type"] = str(offer.get("pricing_type") or "")
         item["price_cents"] = int(offer.get("price_cents") or 0)
     else:
         item["card_tone"] = ""
         item["card_image_url"] = ""
         item["card_bg_hex"] = ""
+        item["card_tag"] = ""
     return item
 
 
@@ -265,35 +267,45 @@ def _notify_org_decision(
     approved: bool,
     note: str,
     actor_user_id: int,
+    requester_user_id: int | None = None,
 ) -> None:
     from .org_members_repository import find_primary_admin_user
 
+    recipient_ids: list[int] = []
+    if requester_user_id:
+        recipient_ids.append(int(requester_user_id))
     admin = find_primary_admin_user(conn, organisation_id)
-    recipient_id = int(admin["user_id"]) if admin else None
-    if not recipient_id:
+    admin_id = int(admin["user_id"]) if admin else None
+    if admin_id and admin_id not in recipient_ids:
+        recipient_ids.append(admin_id)
+    if not recipient_ids:
         return
-    title = f"Feature {'approved' if approved else 'declined'} · {feature_title}"
+
+    title = f"Add-on {'approved' if approved else 'declined'} · {feature_title}"
     body = note.strip() or (
         f"Your organisation can now use {feature_title}."
         if approved
         else f"We could not enable {feature_title} for your organisation at this time."
     )
-    create_notification(
-        conn,
-        organisation_id=organisation_id,
-        recipient_user_id=recipient_id,
-        kind="feature_launch",
-        title=title,
-        body=body,
-        payload={
-            "cta": "decision",
-            "decision": "approved" if approved else "rejected",
-            "feature_key": feature_key,
-            "feature_title": feature_title,
-        },
-        href="",
-        actor_user_id=actor_user_id,
-    )
+    href = "/app/addons"
+    payload = {
+        "cta": "decision",
+        "decision": "approved" if approved else "rejected",
+        "feature_key": feature_key,
+        "feature_title": feature_title,
+    }
+    for recipient_id in recipient_ids:
+        create_notification(
+            conn,
+            organisation_id=organisation_id,
+            recipient_user_id=recipient_id,
+            kind="feature_launch",
+            title=title,
+            body=body,
+            payload=payload,
+            href=href,
+            actor_user_id=actor_user_id,
+        )
 
 
 def _clear_inbox_notices_for_interest(conn, interest_id: int) -> None:
@@ -430,6 +442,7 @@ def approve_interest(
             approved=True,
             note=note,
             actor_user_id=actor_user_id,
+            requester_user_id=item.get("requested_by_user_id"),
         )
         append_audit_log(
             organisation_id=org_id,
@@ -474,6 +487,7 @@ def approve_interest(
         approved=True,
         note=note,
         actor_user_id=actor_user_id,
+        requester_user_id=item.get("requested_by_user_id"),
     )
     append_audit_log(
         organisation_id=org_id,
@@ -524,6 +538,7 @@ def reject_interest(
             approved=False,
             note=note,
             actor_user_id=actor_user_id,
+            requester_user_id=item.get("requested_by_user_id"),
         )
         append_audit_log(
             organisation_id=org_id,

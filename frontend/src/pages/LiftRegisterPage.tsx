@@ -11,14 +11,15 @@ import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDe
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../components/ui/DeleteActions'
 import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
 import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
-import { cn, formatDate, formatDeliveryPeriodRange, formatMt, formatQty, tableRefCellClass, tableRefCellMutedClass } from '../lib/utils'
+import { cn, formatDate, formatDeliveryPeriodRange, formatMt, formatQty, tableRefCellMutedClass } from '../lib/utils'
 import { REGISTER_TABLE_LAYER_Z } from '../components/ui/Drawer'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
 import { formatLiftRef } from '../lib/tradeRefs'
 import { exportToCSV } from '../lib/export'
 import { type Lift } from '../data/mockData'
-import { formatLiftPoRefs, formatLiftSoRefs, formatLiftOrderSummary, liftHasCrossPoAllocations } from '../lib/liftAllocations'
+import { formatLiftPoRefs, formatLiftSoRefs, liftHasCrossPoAllocations } from '../lib/liftAllocations'
 import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
+import { LiftOrderRouteLinks } from '../components/registers/LiftOrderRouteLinks'
 import { formatLiftTankerSummary, getLiftTankers } from '../lib/liftTankers'
 import { getLiftBalanceQty } from '../lib/liftBalance'
 import {
@@ -442,9 +443,7 @@ export function LiftRegisterPage() {
       key: 'route',
       header: 'PO → SO',
       className: 'whitespace-nowrap min-w-[8rem]',
-      render: (r: Lift) => (
-        <span className={tableRefCellClass}>{formatLiftOrderSummary(r)}</span>
-      ),
+      render: (r: Lift) => <LiftOrderRouteLinks lift={r} />,
     },
     {
       key: 'itemName',
@@ -748,7 +747,7 @@ export function LiftRegisterPage() {
                 </div>
               </div>
               <p className="text-heading truncate">{r.itemName} · {formatMt(r.liftedQty)}</p>
-              <p className="text-muted truncate">{formatLiftOrderSummary(r)}</p>
+              <p className="truncate"><LiftOrderRouteLinks lift={r} /></p>
               <p className="text-muted truncate">{r.sellerName} → {r.buyerName}</p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { AlertCircle, Clock, Package, Truck } from 'lucide-react'
 import { cn } from '../lib/utils'
+import markUrl from '../assets/tradeal-mark-square.png'
 
 const stats = [
   { label: 'Inventory value', value: '₹2.14 Cr', detail: '186.4 MT on hand', icon: Package },
@@ -32,10 +33,8 @@ export function ProductPreview({ compact = false }: { compact?: boolean }) {
 
       <div className="flex bg-[#f2f2f7]">
         <div className="hidden w-[4.5rem] shrink-0 border-r border-gray-200 bg-white py-4 sm:block">
-          <div className="mx-auto mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-accent">
-            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
-              <path d="M2 12L7 7L10 10L14 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+          <div className="mx-auto mb-4 flex h-8 w-8 items-center justify-center rounded-md">
+            <img src={markUrl} alt="" width={32} height={32} className="h-8 w-8 object-contain" aria-hidden />
           </div>
           <div className="mx-auto space-y-2 px-3">
             {[1, 2, 3, 4].map(i => (

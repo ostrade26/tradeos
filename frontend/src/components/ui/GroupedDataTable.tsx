@@ -67,9 +67,8 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                 className={cn(
                   density.groupHeaderCell,
                   `${density.text} font-medium text-muted whitespace-nowrap`,
-                  'border-b border-r border-gray-200/80 dark:border-gray-700',
-                  'border-t border-gray-200/80 dark:border-gray-700',
-                  colIndex === 0 && 'border-l border-gray-200/80 dark:border-gray-700',
+                  'border-b border-gray-200/80 dark:border-gray-700',
+                  colIndex < columns.length - 1 && 'border-r border-gray-200/80 dark:border-gray-700',
                   'bg-gray-50/50 dark:bg-card/50',
                   col.align === 'right' ? 'text-right' : 'text-left',
                   col.className
@@ -98,8 +97,8 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                       className={cn(
                         density.groupBodyCell,
                         `${density.text} text-gray-700 dark:text-gray-300 whitespace-nowrap`,
-                        'border-b border-r border-gray-100 dark:border-gray-700/50',
-                        colIndex === 0 && 'border-l border-gray-100 dark:border-gray-700/50',
+                        'border-b border-gray-100 dark:border-gray-700/50',
+                        colIndex < columns.length - 1 && 'border-r border-gray-100 dark:border-gray-700/50',
                         col.align === 'right' && 'text-right tabular-nums',
                         col.className
                       )}
@@ -118,7 +117,8 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                         className={cn(
                           density.groupTotalCell,
                           `${density.text} font-semibold text-danger`,
-                          'border-b border-r border-l border-gray-200 dark:border-gray-600',
+                          'border-b border-gray-200 dark:border-gray-600',
+                          i < columns.length - 1 && 'border-r border-gray-200 dark:border-gray-600',
                         )}
                       >
                         {groupName} Total
@@ -134,7 +134,8 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                         className={cn(
                           density.groupTotalCell,
                           `${density.text} font-semibold text-danger tabular-nums`,
-                          'border-b border-r border-gray-200 dark:border-gray-600',
+                          'border-b border-gray-200 dark:border-gray-600',
+                          i < columns.length - 1 && 'border-r border-gray-200 dark:border-gray-600',
                           col.align === 'right' && 'text-right',
                         )}
                       >
@@ -147,7 +148,8 @@ export function GroupedDataTable<T extends { id: string; itemName: string }>({
                       key={col.key}
                       className={cn(
                         density.groupTotalCell,
-                        'border-b border-r border-gray-200 dark:border-gray-600',
+                        'border-b border-gray-200 dark:border-gray-600',
+                        i < columns.length - 1 && 'border-r border-gray-200 dark:border-gray-600',
                       )}
                     />
                   )

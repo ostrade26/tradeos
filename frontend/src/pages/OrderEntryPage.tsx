@@ -1210,7 +1210,7 @@ function OrderFormFields({
     <>
       <Card className="p-8" padding={false}>
         <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-gray-100 [&>*+*]:pt-4 dark:[&>*+*]:border-gray-800">
-          <FormFieldGroup>
+          <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
             <DatePicker
               label="Date"
               value={form.date}

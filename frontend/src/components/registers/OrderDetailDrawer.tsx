@@ -22,7 +22,7 @@ import { Badge, StatusBadge } from '../ui/Badge'
 import { VerifiedPeriod } from '../ui/GroupedDataTable'
 import { formatDate, formatCurrency, formatQty } from '../../lib/utils'
 import { formatContractRate, orderLineAmount, contractRateFromOrder } from '../../lib/orderRate'
-import { formatOrderRef } from '../../lib/tradeRefs'
+import { formatOrderRef, refCore } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
 import { useAccountTrader } from '../../lib/useAccountTrader'
 import {
@@ -245,7 +245,9 @@ export function OrderDetailDrawer({
           <DetailInlineStat
             label="Pending"
             value={formatQty(remaining)}
-            valueClassName={remaining > 0 ? 'text-warning' : undefined}
+            valueClassName={
+              remaining <= 0 ? undefined : remaining < 1 ? 'text-warning' : 'text-heading'
+            }
           />
         </DetailInlineStatRow>
       </DetailMetricsSection>
@@ -385,5 +387,11 @@ export function OrderDetailDrawer({
 }
 
 export function findOrderByRef(store: ReturnType<typeof useTradeStore>, ref: string, side: OrderSide): TradeOrder | undefined {
-  return store.tradeOrders.find(o => o.ref === ref && o.side === side)
+  const needle = ref.trim()
+  if (!needle) return undefined
+  const exact = store.tradeOrders.find(o => o.side === side && o.ref === needle)
+  if (exact) return exact
+  const core = refCore(needle)
+  if (!core) return undefined
+  return store.tradeOrders.find(o => o.side === side && refCore(o.ref) === core)
 }

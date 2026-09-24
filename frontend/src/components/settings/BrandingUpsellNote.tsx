@@ -6,7 +6,7 @@ export function BrandingUpsellNote({ className }: { className?: string }) {
   return (
     <p className={className ?? 'text-xs text-muted max-w-[11rem] text-right leading-snug'}>
       Available with{' '}
-      <Link to={appPath('/features')} className="font-medium text-accent hover:underline">
+      <Link to={appPath('/addons')} className="font-medium text-accent hover:underline">
         Custom branding
       </Link>
     </p>

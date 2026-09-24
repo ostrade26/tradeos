@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ImagePlus, Shuffle, Trash2 } from 'lucide-react'
+import { ImagePlus, Trash2 } from 'lucide-react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -7,11 +7,10 @@ import { Select } from '../ui/Select'
 import { Checkbox } from '../ui/Checkbox'
 import { BlockColorPicker } from '../ui/BlockColorPicker'
 import type { PlatformFeatureOffer } from '../../api/platformApi'
+import type { OrgFeatureOffer } from '../../api/organisationApi'
 import {
-  ADDON_CATALOG_CARD_FRAME,
-  FeatureOfferCatalogCard,
-  featureOfferPriceLabel,
-} from '../features/FeatureOfferCatalogCard'
+  AddOnBrowseCardPreview,
+} from '../features/AddOnBrowseCardPreview'
 import {
   ADDON_CARD_TONE_OPTIONS,
   resolveAddOnCardTone,
@@ -32,16 +31,12 @@ export type FeatureOfferFormPayload = {
   card_image_url: string
   card_featured: boolean
   card_bg_hex: string
+  card_tag: string
 }
 
-const CARD_TONES = ADDON_CARD_TONE_OPTIONS.map(option => option.id)
 const MAX_IMAGE_BYTES = 500 * 1024
+const MAX_CARD_TAG_CHARS = 40
 const DEFAULT_CUSTOM_CARD_HEX = '#f1f5f9'
-
-function nextCardTone(current: AddOnIllustrationKind): AddOnIllustrationKind {
-  const others = CARD_TONES.filter(tone => tone !== current)
-  return others[Math.floor(Math.random() * others.length)] ?? 'neutral'
-}
 
 function emptyForm(): FeatureOfferFormPayload {
   return {
@@ -56,6 +51,7 @@ function emptyForm(): FeatureOfferFormPayload {
     card_image_url: '',
     card_featured: false,
     card_bg_hex: '',
+    card_tag: '',
   }
 }
 
@@ -72,6 +68,7 @@ function formFromOffer(offer: PlatformFeatureOffer): FeatureOfferFormPayload {
     card_image_url: offer.card_image_url ?? '',
     card_featured: Boolean(offer.card_featured),
     card_bg_hex: resolveCardBgHex(offer.card_bg_hex),
+    card_tag: (offer.card_tag ?? '').trim(),
   }
 }
 
@@ -149,6 +146,7 @@ export function PlatformFeatureOfferModal({
         card_image_url: merged.card_image_url ?? '',
         card_featured: Boolean(merged.card_featured),
         card_bg_hex: resolveCardBgHex(merged.card_bg_hex),
+        card_tag: (merged.card_tag ?? '').trim(),
       })
       setCardTone(tone)
       setPriceRupees('')
@@ -158,16 +156,47 @@ export function PlatformFeatureOfferModal({
   const previewPriceCents =
     form.pricing_type === 'paid' ? centsFromRupees(priceRupees) : form.price_cents
 
-  const previewPriceLabel = useMemo(
-    () => featureOfferPriceLabel(form.pricing_type, previewPriceCents),
-    [form.pricing_type, previewPriceCents],
-  )
-
-  const previewTitle = form.title.trim() || 'Feature title'
-  const previewKey = form.feature_key.trim() || 'feature'
-  const previewCta = form.pricing_type === 'free' ? 'Enable' : 'Request'
+  const previewTitle = form.title.trim() || 'Add-on title'
+  const previewKey = form.feature_key.trim() || 'addon-key'
   const hasImage = Boolean(form.card_image_url.trim())
   const customBg = resolveCardBgHex(form.card_bg_hex)
+
+  const previewOffer = useMemo((): OrgFeatureOffer => {
+    return {
+      id: offer?.id ?? 0,
+      feature_key: previewKey,
+      title: previewTitle,
+      description: form.description.trim() || 'Short description shown on the detail page.',
+      pricing_type: form.pricing_type,
+      price_cents: previewPriceCents,
+      currency: form.currency || 'INR',
+      catalog_status: offer?.catalog_status ?? 'draft',
+      card_tone: cardTone,
+      card_image_url: form.card_image_url,
+      card_featured: Boolean(form.card_featured),
+      card_bg_hex: customBg,
+      card_tag: form.card_tag.trim(),
+      entitlement_status: 'available',
+      // Sample social proof so the Browse card chrome is visible while editing.
+      active_orgs: 12,
+      interest_count: 8,
+      request_count: 20,
+    }
+  }, [
+    offer?.id,
+    offer?.catalog_status,
+    previewKey,
+    previewTitle,
+    form.description,
+    form.pricing_type,
+    previewPriceCents,
+    form.currency,
+    cardTone,
+    form.card_image_url,
+    form.card_featured,
+    form.card_tag,
+    customBg,
+  ])
 
   const applyTone = (tone: AddOnIllustrationKind) => {
     setCardTone(tone)
@@ -201,6 +230,7 @@ export function PlatformFeatureOfferModal({
       card_image_url: form.card_image_url.trim(),
       card_featured: Boolean(form.card_featured),
       card_bg_hex: resolveCardBgHex(form.card_bg_hex),
+      card_tag: form.card_tag.trim().slice(0, MAX_CARD_TAG_CHARS),
     })
   }
 
@@ -208,8 +238,8 @@ export function PlatformFeatureOfferModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={offer ? 'Edit feature' : 'New Feature'}
-      subtitle="Listed features appear for organisations under Features. Preview shows the org card."
+      title={offer ? 'Edit add-on' : 'New add-on'}
+      subtitle="Listed add-ons appear for organisations under Add-ons. Preview matches the Browse card."
       size="xl"
       bodyClassName="split-pane !p-0 min-h-0 flex-1 overflow-hidden"
       footer={
@@ -223,10 +253,10 @@ export function PlatformFeatureOfferModal({
         </>
       }
     >
-      <div className="grid min-h-0 h-[min(40rem,calc(90dvh-12rem))] lg:grid-cols-[2fr_3fr]">
-        <div className="min-h-0 overflow-y-auto px-6 py-6 space-y-4 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700">
+      <div className="grid min-h-0 h-[min(40rem,calc(90dvh-12rem))] lg:grid-cols-2">
+        <div className="min-h-0 overflow-y-auto px-6 py-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col gap-4">
           <Input
-            label="Feature key"
+            label="Add-on key"
             value={form.feature_key}
             onChange={e => setForm(f => ({ ...f, feature_key: e.target.value }))}
             placeholder="chatbot"
@@ -235,36 +265,56 @@ export function PlatformFeatureOfferModal({
           <p className="text-xs text-muted -mt-2">
             {offer ? 'Key cannot change after creation.' : 'Used for entitlements (hasAppliedUpdate).'}
           </p>
-          <Input
-            label="Title"
-            value={form.title}
-            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="AI assistant"
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Title"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="AI assistant"
+            />
+            <Input
+              label="Tag name"
+              value={form.card_tag}
+              onChange={e =>
+                setForm(f => ({ ...f, card_tag: e.target.value.slice(0, MAX_CARD_TAG_CHARS) }))
+              }
+              placeholder="AI · Chatbot"
+              maxLength={MAX_CARD_TAG_CHARS}
+            />
+          </div>
           <label className="block">
             <span className="text-sm font-medium text-heading">Description</span>
             <textarea
-              className="mt-1.5 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-heading shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent dark:border-gray-600 dark:bg-gray-900"
+              className="mt-1.5 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-heading focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent dark:border-gray-600 dark:bg-gray-900"
               rows={3}
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Shown on the add-on detail page"
             />
           </label>
-          <Select
-            label="Pricing"
-            value={form.pricing_type}
-            onChange={e =>
-              setForm(f => ({
-                ...f,
-                pricing_type: e.target.value as FeatureOfferFormPayload['pricing_type'],
-              }))
-            }
-            options={[
-              { value: 'free', label: 'Free — org admin enables instantly' },
-              { value: 'paid', label: 'Paid — org requests, you approve' },
-              { value: 'contact', label: 'Contact Tradeal — org requests access' },
-            ]}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select
+              label="Pricing"
+              value={form.pricing_type}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  pricing_type: e.target.value as FeatureOfferFormPayload['pricing_type'],
+                }))
+              }
+              options={[
+                { value: 'free', label: 'Free — org admin enables instantly' },
+                { value: 'paid', label: 'Paid — org requests, you approve' },
+                { value: 'contact', label: 'Contact Tradeal — org requests access' },
+              ]}
+            />
+            <Input
+              label="Sort order"
+              type="number"
+              value={String(form.sort_order)}
+              onChange={e => setForm(f => ({ ...f, sort_order: Number(e.target.value) || 0 }))}
+            />
+          </div>
           {form.pricing_type === 'paid' ? (
             <Input
               label="Price (INR)"
@@ -274,24 +324,21 @@ export function PlatformFeatureOfferModal({
               inputMode="decimal"
             />
           ) : null}
-          <Input
-            label="Sort order"
-            type="number"
-            value={String(form.sort_order)}
-            onChange={e => setForm(f => ({ ...f, sort_order: Number(e.target.value) || 0 }))}
-          />
-          <Checkbox
-            tight
-            label="Featured large card (2×2 in marketplace)"
-            checked={form.card_featured}
-            onChange={e => setForm(f => ({ ...f, card_featured: e.target.checked }))}
-          />
-          <p className="text-xs text-muted -mt-2">
-            Only one featured card is shown. Enabling this clears featured on other offers.
-          </p>
+          <div className="mt-auto space-y-2 pt-2">
+            <Checkbox
+              tight
+              label="Featured on Browse"
+              checked={form.card_featured}
+              onChange={e => setForm(f => ({ ...f, card_featured: e.target.checked }))}
+            />
+            <p className="text-xs text-muted">
+              Shows a Featured badge on the card. Only one featured add-on at a time — enabling this
+              clears featured on others.
+            </p>
+          </div>
         </div>
 
-        <div className="min-h-0 flex flex-col items-center justify-center bg-gray-50/90 dark:bg-zinc-900/40 px-6 py-6">
+        <div className="min-h-0 flex flex-col items-center justify-center overflow-auto bg-gray-50/90 dark:bg-zinc-900/40 px-6 py-6">
           <input
             ref={fileRef}
             id={fileInputId}
@@ -300,63 +347,39 @@ export function PlatformFeatureOfferModal({
             className="sr-only"
             onChange={e => void onPickImage(e.target.files?.[0] ?? null)}
           />
-          <div className="flex w-full max-w-[36rem] flex-col items-center justify-center">
-            <div
-              className={cn(
-                'w-full',
-                form.card_featured
-                  ? 'h-[calc(360px+1.25rem)] min-h-[calc(360px+1.25rem)]'
-                  : ADDON_CATALOG_CARD_FRAME,
-              )}
-            >
-              <FeatureOfferCatalogCard
-                className="h-full w-full"
-                interactive={false}
-                elevated
-                featured={form.card_featured}
-                cardTone={cardTone}
-                cardBgHex={customBg}
-                imageUrl={form.card_image_url}
-                featureKey={previewKey}
-                title={previewTitle}
-                description={form.description}
-                priceLabel={previewPriceLabel}
-                imageOverlay={
-                  <div className="flex flex-col items-center gap-1.5">
+          <div className="flex w-full flex-col items-center justify-center">
+            <AddOnBrowseCardPreview
+              active={open}
+              offer={previewOffer}
+              imageOverlay={
+                <div className="flex flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold shadow-sm cursor-pointer attex-focus',
+                      'bg-white/95 text-heading hover:bg-white',
+                      'dark:bg-zinc-900/90 dark:text-heading dark:hover:bg-zinc-900',
+                    )}
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                    {hasImage ? 'Change image' : 'Add image'}
+                  </button>
+                  {hasImage ? (
                     <button
                       type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold shadow-sm cursor-pointer attex-focus',
-                        'bg-white/95 text-heading hover:bg-white',
-                        'dark:bg-zinc-900/90 dark:text-heading dark:hover:bg-zinc-900',
-                      )}
+                      onClick={() => setForm(f => ({ ...f, card_image_url: '' }))}
+                      className="inline-flex items-center gap-1 rounded-md bg-black/45 px-2 py-1 text-[11px] font-medium text-white hover:bg-black/60 cursor-pointer attex-focus"
                     >
-                      <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-                      {hasImage ? 'Change image' : 'Add image'}
+                      <Trash2 className="h-3 w-3" aria-hidden />
+                      Remove
                     </button>
-                    {hasImage ? (
-                      <button
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, card_image_url: '' }))}
-                        className="inline-flex items-center gap-1 rounded-md bg-black/45 px-2 py-1 text-[11px] font-medium text-white hover:bg-black/60 cursor-pointer attex-focus"
-                      >
-                        <Trash2 className="h-3 w-3" aria-hidden />
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                }
-                footer={
-                  <Button size="sm" type="button" tabIndex={-1} className="pointer-events-none">
-                    {previewCta}
-                  </Button>
-                }
-              />
-            </div>
-
-            <div className="mt-6 flex w-full flex-col items-center gap-2">
-              <div className="flex w-full flex-wrap items-center justify-center gap-2.5">
+                  ) : null}
+                </div>
+              }
+            />
+            <div className="mt-8 flex w-full flex-col items-center gap-4">
+              <div className="flex w-full flex-wrap items-center justify-center gap-2">
                 {ADDON_CARD_TONE_OPTIONS.map(option => (
                   <button
                     key={option.id}
@@ -366,7 +389,7 @@ export function PlatformFeatureOfferModal({
                     aria-pressed={!customBg && cardTone === option.id}
                     onClick={() => applyTone(option.id)}
                     className={cn(
-                      'h-8 w-8 rounded-full transition-transform cursor-pointer attex-focus',
+                      'h-5 w-5 rounded-full transition-transform cursor-pointer attex-focus',
                       option.swatch,
                       !customBg && cardTone === option.id
                         ? 'outline outline-2 outline-offset-2 outline-[#5c2a2a] scale-105'
@@ -380,18 +403,13 @@ export function PlatformFeatureOfferModal({
                   palette="surface"
                   onChange={applyCustomBg}
                   aria-label="Custom card background"
+                  className="[&>button]:h-5 [&>button]:w-5"
                 />
-                <button
-                  type="button"
-                  onClick={() => applyTone(nextCardTone(cardTone))}
-                  aria-label="Shuffle card colour"
-                  title="Shuffle colour"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-muted shadow-sm transition-colors hover:text-accent cursor-pointer attex-focus dark:bg-card dark:hover:bg-zinc-800"
-                >
-                  <Shuffle className="h-3.5 w-3.5" aria-hidden />
-                </button>
               </div>
               {imageError ? <p className="text-center text-xs text-danger">{imageError}</p> : null}
+              <p className="text-center text-xs text-muted max-w-xs">
+                Preview matches the Browse card layout organisations see under Add-ons.
+              </p>
             </div>
           </div>
         </div>

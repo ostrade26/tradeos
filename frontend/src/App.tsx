@@ -41,6 +41,7 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { SettingsHubPage, SettingsLayout, SettingsSectionPage } from './pages/SettingsPage'
 import { FeaturesPage } from './pages/FeaturesPage'
+import { AddOnDetailPage } from './pages/AddOnDetailPage'
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
 import { SalesOrdersPage } from './pages/SalesOrdersPage'
 import { LiftRegisterPage } from './pages/LiftRegisterPage'
@@ -186,14 +187,16 @@ const router = createBrowserRouter([
                   { path: 'market-news', element: <Navigate to={APP_HOME} replace /> },
                   { path: 'activity', element: <ActivityPage /> },
                   { path: 'notifications', element: <InboxPage /> },
-                  { path: 'features', element: <FeaturesPage /> },
+                  { path: 'addons', element: <FeaturesPage /> },
+                  { path: 'addons/:featureKey', element: <AddOnDetailPage /> },
+                  { path: 'features', element: <Navigate to={appPath('/addons')} replace /> },
                   { path: 'profile', element: <ProfilePage /> },
                   {
                     path: 'settings',
                     element: <SettingsLayout />,
                     children: [
                       { index: true, element: <SettingsHubPage /> },
-                      { path: 'addons', element: <Navigate to={appPath('/features')} replace /> },
+                      { path: 'addons', element: <Navigate to={appPath('/addons')} replace /> },
                       { path: ':section', element: <SettingsSectionPage /> },
                     ],
                   },

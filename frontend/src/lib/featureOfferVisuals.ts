@@ -360,6 +360,18 @@ export function addOnCategoryLabel(kind: AddOnIllustrationKind): string {
   return map[kind]
 }
 
+/** Custom card tag when set; otherwise tone-derived category label. */
+export function resolveAddOnCardTag(offer: {
+  card_tag?: string | null
+  feature_key: string
+  title: string
+  card_tone?: string | null
+}): string {
+  const custom = (offer.card_tag || '').trim()
+  if (custom) return custom
+  return addOnCategoryLabel(resolveAddOnCardTone(offer.feature_key, offer.title, offer.card_tone))
+}
+
 /** Accent swatches / shuffle colours for feature cards. */
 export const ADDON_CARD_TONE_OPTIONS: Array<{
   id: AddOnIllustrationKind

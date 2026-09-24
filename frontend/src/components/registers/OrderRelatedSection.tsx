@@ -11,6 +11,7 @@ import {
 } from '../../lib/orderRelatedLifts'
 import { formatDate, formatQty } from '../../lib/utils'
 import { formatLiftRef, formatOrderRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
+import { appPath } from '../../lib/appShellMode'
 import { StatusBadge } from '../ui/Badge'
 import { DetailGroup } from './DetailPanelSections'
 import {
@@ -178,7 +179,7 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
             <RelatedCardHeader
               title={(
                 <Link
-                  to={`/purchase-orders?ref=${encodeURIComponent(poRef)}`}
+                  to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
                   onClick={onNavigate}
                   className="font-mono text-sm font-medium text-accent hover:underline"
                 >

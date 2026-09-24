@@ -158,6 +158,7 @@ def submit_product_request(body: ProductRequestBody, request: Request) -> dict[s
     org_id = session.user.organisation_id
     if org_id is None:
         raise HTTPException(status_code=403, detail="Organisation context required")
+    from .email_lifecycle import send_product_request_submitted_to_platform
     from .product_request_repository import create_product_request
 
     if uses_postgres():
@@ -173,6 +174,7 @@ def submit_product_request(body: ProductRequestBody, request: Request) -> dict[s
                 attachments=[item.model_dump() for item in body.attachments],
             )
             conn.commit()
+            send_product_request_submitted_to_platform(conn, req)
             return {"request": req}
     with _sqlite_connect() as conn:
         req = create_product_request(
@@ -186,6 +188,7 @@ def submit_product_request(body: ProductRequestBody, request: Request) -> dict[s
             attachments=[item.model_dump() for item in body.attachments],
         )
         conn.commit()
+        send_product_request_submitted_to_platform(conn, req)
         return {"request": req}
 
 
@@ -492,6 +495,8 @@ def request_org_add_on(feature_key: str, request: Request) -> dict[str, Any]:
     org_id = session.user.organisation_id
     if org_id is None:
         raise HTTPException(status_code=403, detail="Organisation context required")
+    from .email_lifecycle import send_feature_interest_submitted_to_platform
+    from .feature_interests_repository import get_interest
     from .feature_offers_repository import request_paid_for_org
 
     if uses_postgres():
@@ -503,6 +508,9 @@ def request_org_add_on(feature_key: str, request: Request) -> dict[str, Any]:
                 feature_key=feature_key,
             )
             conn.commit()
+            interest_id = result.get("interest_id")
+            if interest_id:
+                send_feature_interest_submitted_to_platform(conn, get_interest(conn, int(interest_id)))
             return result
     with _sqlite_connect() as conn:
         result = request_paid_for_org(
@@ -512,6 +520,9 @@ def request_org_add_on(feature_key: str, request: Request) -> dict[str, Any]:
             feature_key=feature_key,
         )
         conn.commit()
+        interest_id = result.get("interest_id")
+        if interest_id:
+            send_feature_interest_submitted_to_platform(conn, get_interest(conn, int(interest_id)))
         return result
 
 

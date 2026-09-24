@@ -1,6 +1,8 @@
 import { useSearchParams } from 'react-router-dom'
-import { useCallback } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { OrderRegisterView, type OrderListMode } from '../components/registers/OrderRegisterView'
+import { appPath } from '../lib/appShellMode'
+import { loadRegisterViewMode, saveRegisterViewMode } from '../lib/registerViewMode'
 
 function parseMode(view: string | null): OrderListMode {
   if (view === 'completed' || view === 'register') return 'completed'
@@ -14,11 +16,34 @@ function viewParam(mode: OrderListMode): string | null {
   return null
 }
 
+const REGISTER_KEY = appPath('/sales-orders')
+
 export function SalesOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const hasExplicitView = searchParams.has('view')
   const mode = parseMode(searchParams.get('view'))
+  const restored = useRef(false)
+
+  useLayoutEffect(() => {
+    if (restored.current || hasExplicitView) return
+    restored.current = true
+    const saved = loadRegisterViewMode(REGISTER_KEY)
+    if (!saved || saved === 'pending') return
+    setSearchParams(prev => {
+      if (prev.has('view')) return prev
+      const params = new URLSearchParams(prev)
+      const view = viewParam(saved)
+      if (view) params.set('view', view)
+      return params
+    }, { replace: true })
+  }, [hasExplicitView, setSearchParams])
+
+  useLayoutEffect(() => {
+    saveRegisterViewMode(REGISTER_KEY, mode)
+  }, [mode])
 
   const setMode = useCallback((next: OrderListMode) => {
+    saveRegisterViewMode(REGISTER_KEY, next)
     setSearchParams(prev => {
       const current = parseMode(prev.get('view'))
       if (current === next) return prev

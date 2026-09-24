@@ -115,7 +115,7 @@ export function ReleaseNoticeModal({
       : variant === 'maintenance'
         ? 'Maintenance Scheduled'
         : variant === 'marketplace'
-          ? 'Features Marketplace'
+          ? 'Add-ons'
           : releaseHeading(notice, version)
 
   const subtitle = subtitleFor(variant, notice, version)

@@ -8,6 +8,13 @@ export function refCore(ref: string | number): string {
     .replace(/^[PSL](?=\d)/i, '')
 }
 
+/** True when two refs are the same order number ignoring PO/SO prefixes. */
+export function refsMatch(a: string | number | null | undefined, b: string | number | null | undefined): boolean {
+  const left = refCore(a ?? '')
+  const right = refCore(b ?? '')
+  return Boolean(left) && left === right
+}
+
 export function formatPoRef(ref: string | number): string {
   const core = refCore(ref)
   return core ? `PO${core}` : ''

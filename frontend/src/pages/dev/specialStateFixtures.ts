@@ -73,7 +73,7 @@ export const SAMPLE_BACKUP_NOTICE = notice({
 export const SAMPLE_MARKETPLACE_NOTICE = notice({
   id: 9004,
   kind: 'announcement',
-  title: 'Features Marketplace',
+  title: 'Add-ons',
   body: 'Browse available features, learn what they offer, and enable the ones that best fit your business needs.',
   payload: {},
 })
