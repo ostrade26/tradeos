@@ -40,7 +40,7 @@ function LiftRows({
     return (
       <p
         className={cn(
-          'px-3 py-2.5 text-[14px] text-muted',
+          'p-4 text-[13px] text-muted',
           showTopBorder && 'border-t border-gray-100 dark:border-gray-800',
         )}
       >
@@ -77,18 +77,18 @@ function LiftRows({
               <Link
                 to={`/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`}
                 onClick={onNavigate}
-                className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
               >
-                <span className="text-[14px] font-medium text-accent whitespace-nowrap">
+                <span className="text-[13px] font-medium text-accent whitespace-nowrap">
                   {formatLiftRef(lift.liftRef)}
                 </span>
-                <span className="text-[14px] text-heading tabular-nums whitespace-nowrap">
+                <span className="text-[13px] text-heading tabular-nums whitespace-nowrap">
                   {formatDate(lift.date)}
                 </span>
-                <span className="text-[14px] text-heading whitespace-nowrap">
+                <span className="text-[13px] text-heading whitespace-nowrap">
                   {tankerNo}
                 </span>
-                <span className="text-[14px] text-heading tabular-nums whitespace-nowrap text-right">
+                <span className="text-[13px] text-heading tabular-nums whitespace-nowrap text-right">
                   {rowQty != null ? formatQty(rowQty) : '—'}
                 </span>
               </Link>
@@ -115,7 +115,7 @@ function SoLiftGroupBlock({
         <Link
           to={`/sales-orders?ref=${encodeURIComponent(so.ref)}`}
           onClick={onNavigate}
-          className="text-[14px] font-medium text-accent hover:underline"
+          className="text-[13px] font-medium text-accent hover:underline"
         >
           {formatSoRef(so.ref)}
         </Link>
@@ -150,7 +150,7 @@ function StockLiftGroup({
 
   return (
     <AllocationSoCard
-      title={<span className="text-[14px] font-medium text-heading">Stock lifts</span>}
+      title={<span className="text-[13px] font-medium text-heading">Stock lifts</span>}
       subtitle={`From ${formatPoRef(poRef)} · not linked to an SO`}
       totalLabel="Total"
       totalQty={deliveredQty + pendingQty}
@@ -200,7 +200,7 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
                 <Link
                   to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
                   onClick={onNavigate}
-                  className="text-[14px] font-medium text-accent hover:underline"
+                  className="text-[13px] font-medium text-accent hover:underline"
                 >
                   {formatPoRef(poRef)}
                 </Link>

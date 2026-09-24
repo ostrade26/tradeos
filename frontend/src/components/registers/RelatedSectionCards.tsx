@@ -70,14 +70,14 @@ export function AllocationSoCard({
 }) {
   return (
     <RelatedCard>
-      <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-3 py-2.5">
+      <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-4">
         <div className="min-w-0">
-          <div className="text-[14px]">{title}</div>
+          <div className="text-[13px]">{title}</div>
           {subtitle != null && subtitle !== '' && (
-            <p className="text-[14px] text-heading mt-0.5 leading-snug">{subtitle}</p>
+            <p className="text-[13px] text-heading mt-0.5 leading-snug">{subtitle}</p>
           )}
         </div>
-        <div className="mt-2.5 border-t border-gray-200 dark:border-gray-700 pt-2.5">
+        <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
           <RelatedAllocationStats
             totalLabel={totalLabel}
             totalQty={totalQty}
@@ -199,7 +199,7 @@ function AllocationStat({
 }) {
   return (
     <div className="min-w-0 flex-1">
-      <p className="text-xs text-muted">{label}</p>
+      <p className="text-xs text-[#7D7E7E]">{label}</p>
       <p className={cn('text-base font-semibold tabular-nums mt-0.5 text-heading', valueClassName)}>
         {value}
       </p>
