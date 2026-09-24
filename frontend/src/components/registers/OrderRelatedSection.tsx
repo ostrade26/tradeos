@@ -3,6 +3,7 @@ import { Layers } from 'lucide-react'
 import type { Lift, TradeOrder } from '../../data/mockData'
 import {
   groupLiftsBySoForPo,
+  liftsForSo,
   liftsForSoOnPo,
   stockLiftsForPo,
   type SoLiftEntry,
@@ -16,7 +17,6 @@ import { DetailGroup } from './DetailPanelSections'
 import {
   AllocationSoCard,
   RelatedCard,
-  RelatedCardHeader,
   RelatedCardsStack,
 } from './RelatedSectionCards'
 
@@ -185,37 +185,35 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
   }
 
   const poRef = order.poRef
-  const soLifts = poRef ? liftsForSoOnPo(lifts, poRef, order.ref) : []
-  const hasContent = poRef || soLifts.length > 0
+  const soLifts = poRef
+    ? liftsForSoOnPo(lifts, poRef, order.ref)
+    : liftsForSo(lifts, order.ref)
 
-  if (!hasContent) return null
+  if (!poRef && soLifts.length === 0) return null
 
   return (
     <DetailGroup title="Allocations" icon={Layers}>
-      <RelatedCardsStack>
+      <RelatedCard>
         {poRef && (
-          <RelatedCard>
-            <RelatedCardHeader
-              title={(
-                <Link
-                  to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
-                  onClick={onNavigate}
-                  className="text-[13px] font-medium text-accent hover:underline"
-                >
-                  {formatPoRef(poRef)}
-                </Link>
-              )}
-              subtitle="Linked purchase order"
-            />
-          </RelatedCard>
+          <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
+            <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+              <Link
+                to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
+                onClick={onNavigate}
+                className="text-[13px] font-medium text-accent hover:underline shrink-0"
+              >
+                {formatPoRef(poRef)}
+              </Link>
+              <span className="text-[13px] text-muted">Linked purchase order</span>
+            </div>
+          </div>
         )}
-
-        {(soLifts.length > 0 || !poRef) && (
-          <RelatedCard>
-            <LiftRows entries={soLifts} onNavigate={onNavigate} showTopBorder={false} />
-          </RelatedCard>
-        )}
-      </RelatedCardsStack>
+        <LiftRows
+          entries={soLifts}
+          onNavigate={onNavigate}
+          showTopBorder={false}
+        />
+      </RelatedCard>
     </DetailGroup>
   )
 }

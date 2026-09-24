@@ -33,6 +33,11 @@ export function liftsForSoOnPo(lifts: Lift[], poRef: string, soRef: string): SoL
   return liftsMatching(lifts, (p, s) => p === poRef && s === soRef)
 }
 
+/** All lift allocations for an SO (any PO). */
+export function liftsForSo(lifts: Lift[], soRef: string): SoLiftEntry[] {
+  return liftsMatching(lifts, (_p, s) => s === soRef)
+}
+
 export function stockLiftsForPo(lifts: Lift[], poRef: string): SoLiftEntry[] {
   return liftsMatching(lifts, (p, s) => p === poRef && !s)
 }
