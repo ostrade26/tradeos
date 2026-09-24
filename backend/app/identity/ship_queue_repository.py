@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from .feature_offers_repository import list_offers_platform
-from .releases_repository import list_deferred_product_updates, list_releases
+from .releases_repository import (
+    is_pending_ship_later_item,
+    list_deferred_product_updates,
+    list_releases,
+)
 
 
 def list_ship_queue(conn) -> dict[str, Any]:
@@ -36,11 +40,18 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "offer": offer,
             }
         )
+    draft_release_count = 0
     for release in draft_releases:
         release_items = list(release.get("items") or [])
+        # Ship-later product updates are their own queue rows — don't double-list
+        # a draft that only contains those.
+        remaining_items = [i for i in release_items if not is_pending_ship_later_item(i)]
+        if release_items and not remaining_items:
+            continue
+        draft_release_count += 1
         feature_keys = [
             str(i.get("feature_key") or "").strip()
-            for i in release_items
+            for i in remaining_items
             if str(i.get("feature_key") or "").strip()
         ]
         change_lines = [
@@ -50,7 +61,7 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "category": str(i.get("category") or ""),
                 "announce_timing": str(i.get("announce_timing") or "now"),
             }
-            for i in release_items
+            for i in remaining_items
             if str(i.get("title") or "").strip()
         ]
         sha = str(release.get("deploy_commit_sha") or "").strip()
@@ -85,18 +96,19 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "kind": "product_update",
                 "id": int(item["id"]),
                 "title": item.get("title") or "",
-                "subtitle": str(item.get("release_title") or "Deferred announce"),
+                "subtitle": str(item.get("release_title") or "Ship later"),
                 "feature_key": "",
                 "ready_to_ship": bool(item.get("ready_to_ship")),
                 "target_ship_date": item.get("target_ship_date") or "",
                 "ship_notes": item.get("ship_notes") or "",
                 "created_at": item.get("release_published_at") or item.get("release_updated_at") or "",
                 "updated_at": item.get("release_updated_at") or "",
-                "href": "/platform-admin/ship-queue",
+                "href": f"/platform-admin/releases?releaseId={int(item['release_id'])}",
                 "release_item": item,
                 "release_id": int(item["release_id"]),
                 "detail": item.get("detail") or "",
                 "category": item.get("category") or "",
+                "next_version_hint": next_version,
             }
         )
 
@@ -110,7 +122,7 @@ def list_ship_queue(conn) -> dict[str, Any]:
     return {
         "items": items,
         "draft_offers": len(draft_offers),
-        "draft_releases": len(draft_releases),
+        "draft_releases": draft_release_count,
         "deferred_product_updates": len(deferred_updates),
         "next_version": next_version,
     }

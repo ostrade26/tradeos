@@ -6,6 +6,7 @@ import {
   type NotificationAudience,
   type NotificationRecipientScope,
   type PlatformOrganisation,
+  type PlatformRelease,
   type PlatformUser,
   type ShipQueueItem,
 } from '../../api/platformApi'
@@ -18,7 +19,7 @@ import { Badge } from '../ui/Badge'
 import { Modal } from '../ui/Drawer'
 import { Input } from '../ui/Input'
 import { Checkbox } from '../ui/Checkbox'
-import { Select } from '../ui/Select'
+import { PlatformPublishReleaseModal } from './PlatformPublishReleaseModal'
 
 export type PlatformShipQueuePanelHandle = {
   refresh: () => Promise<void>
@@ -41,8 +42,12 @@ function kindBadge(kind: ShipQueueItem['kind']) {
 
 export const PlatformShipQueuePanel = forwardRef<
   PlatformShipQueuePanelHandle,
-  { organisations?: PlatformOrganisation[]; users?: PlatformUser[] }
->(function PlatformShipQueuePanel({ organisations = [], users = [] }, ref) {
+  {
+    organisations?: PlatformOrganisation[]
+    users?: PlatformUser[]
+    onPublished?: () => void
+  }
+>(function PlatformShipQueuePanel({ organisations = [], users = [], onPublished }, ref) {
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<ShipQueueItem[]>([])
@@ -51,19 +56,14 @@ export const PlatformShipQueuePanel = forwardRef<
     draft_releases: 0,
     deferred_product_updates: 0,
   })
+  const [nextVersion, setNextVersion] = useState('')
   const [planning, setPlanning] = useState<PlanningDraft | null>(null)
   const [savingPlanning, setSavingPlanning] = useState(false)
   const [listTarget, setListTarget] = useState<ShipQueueItem | null>(null)
   const [listing, setListing] = useState(false)
-  const [announceTarget, setAnnounceTarget] = useState<ShipQueueItem | null>(null)
-  const [announcing, setAnnouncing] = useState(false)
+  const [publishTarget, setPublishTarget] = useState<ShipQueueItem | null>(null)
+  const [publishing, setPublishing] = useState(false)
   const [localUsers, setLocalUsers] = useState<PlatformUser[]>([])
-  const [notifyOrgs, setNotifyOrgs] = useState(true)
-  const [audience, setAudience] = useState<NotificationAudience>('active_licences')
-  const [orgId, setOrgId] = useState('')
-  const [recipientId, setRecipientId] = useState('')
-  const [scope, setScope] = useState<NotificationRecipientScope>('all_users')
-  const [excludeExpiredAmc, setExcludeExpiredAmc] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -75,6 +75,7 @@ export const PlatformShipQueuePanel = forwardRef<
         draft_releases: res.draft_releases,
         deferred_product_updates: res.deferred_product_updates ?? 0,
       })
+      setNextVersion(res.next_version || '')
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not load ship queue')
     } finally {
@@ -142,14 +143,8 @@ export const PlatformShipQueuePanel = forwardRef<
     }
   }
 
-  const openAnnounce = (row: ShipQueueItem) => {
-    setAnnounceTarget(row)
-    setNotifyOrgs(true)
-    setAudience('active_licences')
-    setOrgId('')
-    setRecipientId('')
-    setScope('all_users')
-    setExcludeExpiredAmc(true)
+  const openPublishProductUpdate = (row: ShipQueueItem) => {
+    setPublishTarget(row)
     if (users.length === 0) {
       void platformApi
         .listUsers()
@@ -160,37 +155,59 @@ export const PlatformShipQueuePanel = forwardRef<
 
   const audienceUsers = users.length > 0 ? users : localUsers
 
-  const recipients = useMemo(
-    () => audienceUsers.filter(u => u.organisation_id === Number(orgId) && u.status === 'active'),
-    [audienceUsers, orgId],
-  )
-  const needsOrg = notifyOrgs && audience !== 'active_licences'
-  const canAnnounce = Boolean(announceTarget && (!needsOrg || orgId))
+  const publishPreviewRelease = useMemo((): PlatformRelease | null => {
+    if (!publishTarget || publishTarget.kind !== 'product_update') return null
+    const versionHint = publishTarget.next_version_hint || nextVersion || '—'
+    return {
+      id: publishTarget.release_id ?? publishTarget.id,
+      version: versionHint,
+      title: publishTarget.title,
+      summary: '',
+      status: 'draft',
+      gated: false,
+      created_at: publishTarget.created_at,
+      updated_at: publishTarget.updated_at,
+      published_at: null,
+      items: [
+        {
+          id: publishTarget.id,
+          category: publishTarget.category || 'bug_fix',
+          title: publishTarget.title,
+          detail: publishTarget.detail || '',
+          feature_key: '',
+          gated: false,
+          announce_timing: 'now',
+        },
+      ],
+    }
+  }, [publishTarget, nextVersion])
 
-  const confirmAnnounce = async () => {
-    if (!announceTarget || announceTarget.kind !== 'product_update') return
-    setAnnouncing(true)
+  const confirmPublishProductUpdate = async (payload: {
+    audience: NotificationAudience
+    organisation_id: number | null
+    recipient_user_id: number | null
+    recipient_scope: NotificationRecipientScope
+    exclude_expired_amc: boolean
+    notify_organisations: boolean
+  }) => {
+    if (!publishTarget || publishTarget.kind !== 'product_update') return
+    setPublishing(true)
     try {
-      const res = await platformApi.announceProductUpdate(announceTarget.id, {
-        audience,
-        organisation_id: orgId ? Number(orgId) : null,
-        recipient_user_id: audience === 'user' && recipientId ? Number(recipientId) : null,
-        recipient_scope: audience === 'user' ? 'org_admin' : scope,
-        exclude_expired_amc: excludeExpiredAmc,
-        notify_organisations: notifyOrgs,
-      })
+      const res = await platformApi.announceProductUpdate(publishTarget.id, payload)
+      const version = res.item.release_version || res.item.published_release?.version
       const sent = res.item.sent
       toast.success(
-        notifyOrgs
-          ? `Announced${typeof sent === 'number' ? ` · ${sent} notice${sent === 1 ? '' : 's'}` : ''}`
-          : 'Marked announced (quiet)',
+        payload.notify_organisations
+          ? `Published${version ? ` ${version}` : ''}${typeof sent === 'number' ? ` · ${sent} notice${sent === 1 ? '' : 's'}` : ''}`
+          : `Published${version ? ` ${version}` : ''} quietly`,
       )
-      setAnnounceTarget(null)
+      setPublishTarget(null)
       await load()
+      onPublished?.()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not announce update')
+      toast.error(err instanceof ApiError ? err.message : 'Could not publish update')
     } finally {
-      setAnnouncing(false)
+      setPublishing(false)
     }
   }
 
@@ -202,35 +219,32 @@ export const PlatformShipQueuePanel = forwardRef<
         className: 'whitespace-nowrap w-[8.5rem]',
         render: (r: ShipQueueItem) => kindBadge(r.kind),
       },
-        {
-          key: 'title',
-          header: 'Item',
-          className: 'min-w-[14rem]',
-          render: (r: ShipQueueItem) => (
-            <div className="min-w-0 space-y-1.5">
-              <p className="font-medium text-heading truncate">{r.title}</p>
-              <p className="text-xs text-muted truncate font-mono">{r.subtitle || r.feature_key || '—'}</p>
-              {r.kind === 'release' && r.change_lines && r.change_lines.length > 0 ? (
-                <ul className="mt-1 space-y-1">
-                  {r.change_lines.slice(0, 6).map((line, i) => (
-                    <li key={`${r.id}-${i}`} className="text-xs text-muted leading-snug">
-                      <span className="text-heading">{line.title}</span>
-                      {line.announce_timing === 'later' ? (
-                        <span className="text-muted"> · Ship later</span>
-                      ) : null}
-                    </li>
-                  ))}
-                  {r.change_lines.length > 6 ? (
-                    <li className="text-xs text-muted">+{r.change_lines.length - 6} more</li>
-                  ) : null}
-                </ul>
-              ) : null}
-              {r.kind === 'product_update' && r.detail ? (
-                <p className="text-xs text-muted line-clamp-2">{r.detail}</p>
-              ) : null}
-            </div>
-          ),
-        },
+      {
+        key: 'title',
+        header: 'Item',
+        className: 'min-w-[14rem]',
+        render: (r: ShipQueueItem) => (
+          <div className="min-w-0 space-y-1.5">
+            <p className="font-medium text-heading truncate">{r.title}</p>
+            <p className="text-xs text-muted truncate font-mono">{r.subtitle || r.feature_key || '—'}</p>
+            {r.kind === 'release' && r.change_lines && r.change_lines.length > 0 ? (
+              <ul className="mt-1 space-y-1">
+                {r.change_lines.slice(0, 6).map((line, i) => (
+                  <li key={`${r.id}-${i}`} className="text-xs text-muted leading-snug">
+                    <span className="text-heading">{line.title}</span>
+                  </li>
+                ))}
+                {r.change_lines.length > 6 ? (
+                  <li className="text-xs text-muted">+{r.change_lines.length - 6} more</li>
+                ) : null}
+              </ul>
+            ) : null}
+            {r.kind === 'product_update' && r.detail ? (
+              <p className="text-xs text-muted line-clamp-2">{r.detail}</p>
+            ) : null}
+          </div>
+        ),
+      },
       {
         key: 'ready',
         header: 'Ready',
@@ -284,8 +298,8 @@ export const PlatformShipQueuePanel = forwardRef<
                 List
               </Button>
             ) : r.kind === 'product_update' ? (
-              <Button size="sm" onClick={() => openAnnounce(r)}>
-                Announce
+              <Button size="sm" onClick={() => openPublishProductUpdate(r)}>
+                Publish
               </Button>
             ) : (
               <Button size="sm" to={r.href}>
@@ -305,13 +319,13 @@ export const PlatformShipQueuePanel = forwardRef<
 
   return (
     <div className="space-y-4">
-        <p className="text-sm text-muted">
-          Built but not live yet: {counts.draft_offers} draft add-on
-          {counts.draft_offers === 1 ? '' : 's'}, {counts.draft_releases} draft release
-          {counts.draft_releases === 1 ? '' : 's'}, {counts.deferred_product_updates} product update
-          {counts.deferred_product_updates === 1 ? '' : 's'} waiting to announce. Drafts live here;
-          the Releases page shows published versions only. Version is assigned when you publish.
-        </p>
+      <p className="text-sm text-muted">
+        Built but not live yet: {counts.draft_offers} draft add-on
+        {counts.draft_offers === 1 ? '' : 's'}, {counts.draft_releases} draft release
+        {counts.draft_releases === 1 ? '' : 's'}, {counts.deferred_product_updates} product update
+        {counts.deferred_product_updates === 1 ? '' : 's'} waiting to publish. Ship-later updates
+        stay here until you publish — then they appear on Releases.
+      </p>
 
       <DataTable
         data={items}
@@ -353,14 +367,15 @@ export const PlatformShipQueuePanel = forwardRef<
               <Button variant="ghost" size="sm" onClick={() => openPlanning(r)}>
                 Plan
               </Button>
-              <Button variant="outline" size="sm" to={r.href}>
-                Open
-              </Button>
               {r.kind === 'product_update' ? (
-                <Button size="sm" onClick={() => openAnnounce(r)}>
-                  Announce
+                <Button size="sm" onClick={() => openPublishProductUpdate(r)}>
+                  Publish
                 </Button>
-              ) : null}
+              ) : (
+                <Button variant="outline" size="sm" to={r.href}>
+                  Open
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -391,7 +406,7 @@ export const PlatformShipQueuePanel = forwardRef<
                 label="Ready to ship"
               />
               <p className="text-xs text-muted pl-6">
-                Marks this item in the queue. Does not list, publish, or announce automatically.
+                Marks this item in the queue. Does not list or publish automatically.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -456,136 +471,16 @@ export const PlatformShipQueuePanel = forwardRef<
         </p>
       </Modal>
 
-      <Modal
-        open={announceTarget != null}
-        onClose={() => !announcing && setAnnounceTarget(null)}
-        title="Announce product update"
-        subtitle={announceTarget?.title}
-        size="lg"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAnnounceTarget(null)} disabled={announcing}>
-              Cancel
-            </Button>
-            <Button
-              loading={announcing}
-              disabled={!canAnnounce || announcing}
-              onClick={() => void confirmAnnounce()}
-            >
-              {notifyOrgs ? 'Announce & notify' : 'Announce quietly'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <div className="space-y-4">
-            <Select
-              searchable={false}
-              label="Organisation notice"
-              value={notifyOrgs ? 'notify' : 'quiet'}
-              onChange={e => setNotifyOrgs(e.target.value === 'notify')}
-              options={[
-                {
-                  value: 'notify',
-                  label: 'Send inbox notice',
-                  description: 'Bell and inbox — use when people should know what changed.',
-                },
-                {
-                  value: 'quiet',
-                  label: 'Mark announced quietly',
-                  description: 'Clear from Ship queue without an inbox notice.',
-                },
-              ]}
-            />
-            {notifyOrgs ? (
-              <>
-                <Select
-                  searchable={false}
-                  label="Audience"
-                  value={audience}
-                  onChange={e => setAudience(e.target.value as NotificationAudience)}
-                  options={[
-                    { value: 'user', label: 'One user' },
-                    { value: 'org', label: 'One organisation' },
-                    { value: 'active_licences', label: 'All active licences' },
-                  ]}
-                />
-                {needsOrg ? (
-                  <Select
-                    label="Organisation"
-                    value={orgId}
-                    onChange={e => {
-                      setOrgId(e.target.value)
-                      setRecipientId('')
-                    }}
-                    options={organisations.map(o => ({
-                      value: String(o.id),
-                      label: o.name,
-                      description: o.org_code ?? undefined,
-                    }))}
-                  />
-                ) : (
-                  <Select
-                    searchable={false}
-                    label="Organisation"
-                    value="all"
-                    disabled
-                    options={[{ value: 'all', label: 'All active licences' }]}
-                  />
-                )}
-                {audience === 'user' ? (
-                  <Select
-                    label="Recipient"
-                    value={recipientId}
-                    onChange={e => setRecipientId(e.target.value)}
-                    options={[
-                      { value: '', label: 'Organisation admin' },
-                      ...recipients.map(u => ({
-                        value: String(u.id),
-                        label: u.name || u.email || u.username,
-                        description: u.role_name,
-                      })),
-                    ]}
-                  />
-                ) : (
-                  <Select
-                    searchable={false}
-                    label="Who in the audience"
-                    value={scope}
-                    onChange={e => setScope(e.target.value as NotificationRecipientScope)}
-                    options={[
-                      { value: 'org_admin', label: 'Organisation admins' },
-                      { value: 'all_users', label: 'All licensed users' },
-                    ]}
-                  />
-                )}
-                <Checkbox
-                  tight
-                  label="Exclude organisations with expired AMC"
-                  checked={excludeExpiredAmc}
-                  onChange={e => setExcludeExpiredAmc(e.target.checked)}
-                />
-              </>
-            ) : (
-              <p className="text-sm text-muted leading-relaxed">
-                Removes this row from Ship queue. Organisations won’t get a bell or inbox notice.
-              </p>
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">This update</p>
-            <p className="mt-3 text-sm font-medium text-heading">{announceTarget?.title}</p>
-            {announceTarget?.detail ? (
-              <p className="mt-2 text-sm text-muted leading-relaxed whitespace-pre-wrap">
-                {announceTarget.detail}
-              </p>
-            ) : null}
-            <p className="mt-3 text-xs text-muted">
-              Announcing does not list Features — only a product-update notice.
-            </p>
-          </div>
-        </div>
-      </Modal>
+      <PlatformPublishReleaseModal
+        open={publishTarget != null}
+        onClose={() => !publishing && setPublishTarget(null)}
+        release={publishPreviewRelease}
+        organisations={organisations}
+        users={audienceUsers}
+        loading={publishing}
+        variant="product_update"
+        onSubmit={payload => void confirmPublishProductUpdate(payload)}
+      />
     </div>
   )
 })

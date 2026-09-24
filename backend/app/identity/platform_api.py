@@ -2066,7 +2066,7 @@ def patch_release_item_ship_planning(
 
 @router.post(
     "/release-items/{item_id}/announce",
-    summary="Announce a deferred product update from Ship queue",
+    summary="Publish a deferred product update from Ship queue",
 )
 def announce_release_item(item_id: int, body: AnnounceProductUpdateBody, request: Request) -> dict[str, Any]:
     session = _session(request)
@@ -2606,9 +2606,9 @@ def list_platform_releases(request: Request) -> dict[str, Any]:
 
     if uses_postgres():
         with _pg_connect() as conn:
-            return list_releases(conn)
+            return list_releases(conn, for_display=True)
     with _sqlite_connect() as conn:
-        return list_releases(conn)
+        return list_releases(conn, for_display=True)
 
 
 @router.post(

@@ -20,6 +20,7 @@ export function PlatformPublishReleaseModal({
   users,
   loading,
   onSubmit,
+  variant = 'release',
 }: {
   open: boolean
   onClose: () => void
@@ -35,6 +36,8 @@ export function PlatformPublishReleaseModal({
     exclude_expired_amc: boolean
     notify_organisations: boolean
   }) => void
+  /** Ship-later product update from Ship queue uses the same modal as Publish now. */
+  variant?: 'release' | 'product_update'
 }) {
   const [notifyOrgs, setNotifyOrgs] = useState(true)
   const [audience, setAudience] = useState<NotificationAudience>('active_licences')
@@ -60,16 +63,20 @@ export function PlatformPublishReleaseModal({
   const needsOrg = notifyOrgs && audience !== 'active_licences'
   const canSend = Boolean(release && (!needsOrg || orgId))
   const gated = Boolean(release?.gated)
+  const isProductUpdate = variant === 'product_update'
+  const versionLabel = release?.version?.trim() || 'next'
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={release ? `Publish ${release.version}` : 'Publish release'}
+      title={release ? `Publish ${versionLabel}` : 'Publish release'}
       subtitle={
-        gated
-          ? 'UI & fix notes can go out as an announcement. Marketplace features are published separately from Features & Access.'
-          : 'Version number is assigned when you publish (next after the last published release). Choose whether organisations get an inbox notice — Ship later items are skipped until Announce.'
+        isProductUpdate
+          ? 'Publishes this Ship-later update as a new Releases version. Version is assigned on publish.'
+          : gated
+            ? 'UI & fix notes can go out as an announcement. Marketplace features are published separately from Features & Access.'
+            : 'Version number is assigned when you publish (next after the last published release). Choose whether organisations get an inbox notice — Ship later items stay in Ship queue until you publish them there.'
       }
       size="lg"
       footer={
@@ -187,7 +194,9 @@ export function PlatformPublishReleaseModal({
             </>
           ) : (
             <p className="text-sm text-muted leading-relaxed">
-              The release is marked published for your records. Organisations won’t get a bell or inbox notice.
+              {isProductUpdate
+                ? 'Creates a published Releases version with no inbox notice.'
+                : 'The release is marked published for your records. Organisations won’t get a bell or inbox notice.'}
             </p>
           )}
         </div>
@@ -195,15 +204,17 @@ export function PlatformPublishReleaseModal({
           <p className="text-xs font-medium uppercase tracking-wide text-muted">This version</p>
           <ul className="mt-3 space-y-2">
             {(release?.items ?? []).map((item, index) => (
-              <li key={index}>
+              <li key={item.id ?? index}>
                 <p className="text-sm font-medium text-heading">{item.title}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {releaseCategoryLabel(item.category)}
                   {item.gated
                     ? ' · Publish from Features'
-                    : item.announce_timing === 'later'
-                      ? ' · Ship later (no notice until Announce)'
-                      : ' · Publish now'}
+                    : isProductUpdate
+                      ? ' · Publishing from Ship queue'
+                      : item.announce_timing === 'later'
+                        ? ' · Ship later (stays in Ship queue)'
+                        : ' · Publish now'}
                 </p>
               </li>
             ))}

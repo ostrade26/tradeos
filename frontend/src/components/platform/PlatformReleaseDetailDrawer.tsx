@@ -217,8 +217,8 @@ export function PlatformReleaseDetailDrawer({
                       {!item.gated && item.announce_timing === 'later' ? (
                         <p className="text-xs text-muted mt-2">
                           {item.announced_at
-                            ? `Announced ${formatDateTime(item.announced_at)}`
-                            : 'Ship later — no org notice until Announce from Ship queue'}
+                            ? `Published ${formatDateTime(item.announced_at)}`
+                            : 'Ship later — publish from Ship queue'}
                         </p>
                       ) : null}
                       {item.feature_key?.trim() ? (

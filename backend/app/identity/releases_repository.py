@@ -267,17 +267,21 @@ def _items_for_release(conn, release_id: int) -> list[dict[str, Any]]:
     return [_item_row(r) for r in rows]
 
 
-def _get_release(conn, release_id: int) -> dict[str, Any]:
+def _get_release(conn, release_id: int, *, for_display: bool = False) -> dict[str, Any]:
     if uses_postgres():
         row = conn.execute("SELECT * FROM platform_releases WHERE id = %s", (release_id,)).fetchone()
     else:
         row = conn.execute("SELECT * FROM platform_releases WHERE id = ?", (release_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Release not found")
-    return _release_row(row, _items_for_release(conn, release_id))
+    data = dict(row_dict(row))
+    items = _items_for_release(conn, int(data["id"]))
+    if for_display and str(data.get("status") or "") == "published":
+        items = visible_release_items(items, for_releases_page=True)
+    return _release_row(data, items)
 
 
-def list_releases(conn) -> dict[str, Any]:
+def list_releases(conn, *, for_display: bool = False) -> dict[str, Any]:
     if uses_postgres():
         rows = conn.execute("SELECT * FROM platform_releases ORDER BY id DESC").fetchall()
     else:
@@ -286,6 +290,12 @@ def list_releases(conn) -> dict[str, Any]:
     for row in rows:
         data = dict(row_dict(row))
         items = _items_for_release(conn, int(data["id"]))
+        status = str(data.get("status") or "")
+        if for_display and status == "published":
+            items = visible_release_items(items, for_releases_page=True)
+            # Empty published shells (only Ship-later still waiting) stay off Releases.
+            if not items:
+                continue
         releases.append(_release_row(data, items))
     latest = latest_published_version(conn)
     return {
@@ -812,23 +822,23 @@ def _mark_items_announced(conn, item_ids: list[int], announced_at: str) -> None:
 
 
 def list_deferred_product_updates(conn) -> list[dict[str, Any]]:
-    """Inform items marked Ship later on a published release, not yet announced."""
+    """Inform items marked Ship later, not yet published/announced — any parent draft or published."""
     ph = "%s" if uses_postgres() else "?"
     inform = sorted(INFORM_CATEGORIES)
     cat_ph = ", ".join(ph for _ in inform)
     rows = conn.execute(
         f"""
         SELECT i.*, r.version AS release_version, r.title AS release_title,
+               r.status AS release_status,
                r.published_at AS release_published_at, r.updated_at AS release_updated_at
         FROM platform_release_items i
         JOIN platform_releases r ON r.id = i.release_id
-        WHERE r.status = {ph}
-          AND i.announce_timing = {ph}
+        WHERE i.announce_timing = {ph}
           AND (i.announced_at IS NULL OR TRIM(i.announced_at) = '')
           AND i.category IN ({cat_ph})
         ORDER BY i.ready_to_ship DESC, i.target_ship_date ASC, i.id ASC
         """,
-        ("published", "later", *inform),
+        ("later", *inform),
     ).fetchall()
     out: list[dict[str, Any]] = []
     for row in rows:
@@ -837,10 +847,26 @@ def list_deferred_product_updates(conn) -> list[dict[str, Any]]:
         item["release_id"] = int(data["release_id"])
         item["release_version"] = str(data.get("release_version") or "")
         item["release_title"] = str(data.get("release_title") or "")
+        item["release_status"] = str(data.get("release_status") or "")
         item["release_published_at"] = data.get("release_published_at")
         item["release_updated_at"] = str(data.get("release_updated_at") or "")
         out.append(item)
     return out
+
+
+def is_pending_ship_later_item(item: dict[str, Any]) -> bool:
+    if is_gated_release_category(str(item.get("category") or "")):
+        return False
+    if str(item.get("announce_timing") or "now") != "later":
+        return False
+    return not item.get("announced_at")
+
+
+def visible_release_items(items: list[dict[str, Any]], *, for_releases_page: bool) -> list[dict[str, Any]]:
+    """Ship-later items stay out of Releases until announced/published from Ship queue."""
+    if not for_releases_page:
+        return items
+    return [i for i in items if not is_pending_ship_later_item(i)]
 
 
 def update_release_item_ship_planning(
@@ -871,9 +897,7 @@ def update_release_item_ship_planning(
     if str(item.get("announce_timing") or "") != "later":
         raise HTTPException(status_code=400, detail="Ship planning applies to deferred product updates only")
     if item.get("announced_at"):
-        raise HTTPException(status_code=400, detail="Already announced")
-    if str(data.get("release_status") or "") != "published":
-        raise HTTPException(status_code=400, detail="Parent release must be published")
+        raise HTTPException(status_code=400, detail="Already published")
     ready = 1 if ready_to_ship else 0
     target = (target_ship_date or "").strip()
     if target and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", target):
@@ -890,7 +914,6 @@ def update_release_item_ship_planning(
         """,
         (ready, target, notes, item_id),
     )
-    # Touch parent release so ship queue sort stays fresh.
     conn.execute(
         f"UPDATE platform_releases SET updated_at = {ph} WHERE id = {ph}",
         (now, int(data["release_id"])),
@@ -926,7 +949,7 @@ def announce_product_update(
     actor_user_id: int,
     notify_organisations: bool = True,
 ) -> dict[str, Any]:
-    """Announce a deferred product update from Ship queue (not a Features list)."""
+    """Publish a Ship-later product update: new Releases row + optional org notice."""
     from .notifications_repository import create_notifications_for_audience
 
     ph = "%s" if uses_postgres() else "?"
@@ -945,16 +968,95 @@ def announce_product_update(
     data = dict(row_dict(row))
     item = _item_row(row)
     if not is_inform_release_category(str(item.get("category") or "")):
-        raise HTTPException(status_code=400, detail="Only product updates can be announced this way")
+        raise HTTPException(status_code=400, detail="Only product updates can be published this way")
     if str(item.get("announce_timing") or "") != "later":
-        raise HTTPException(status_code=400, detail="Item was not deferred for later announcement")
+        raise HTTPException(status_code=400, detail="Item was not deferred for later publish")
     if item.get("announced_at"):
-        raise HTTPException(status_code=400, detail="Already announced")
-    if str(data.get("release_status") or "") != "published":
-        raise HTTPException(status_code=400, detail="Parent release must be published first")
+        raise HTTPException(status_code=400, detail="Already published")
 
-    version = str(data.get("release_version") or "")
-    base_title = f"Tradeal {version}" if version else "Tradeal"
+    category = str(item.get("category") or "bug_fix")
+    publish_version = suggest_next_version(latest_published_version(conn), [category])
+    _assert_unique_version(conn, publish_version)
+    now = _now_iso()
+    release_title = str(item.get("title") or "").strip() or f"Tradeal {publish_version}"
+    summary = _summary_from_items(
+        [{"category": category, "title": item.get("title") or ""}],
+        env="production",
+        sha="",
+    )
+    ship_note = f"Published from Ship queue (deferred from release {data.get('release_id')})."
+
+    if uses_postgres():
+        created = conn.execute(
+            """
+            INSERT INTO platform_releases
+            (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
+             created_at, updated_at, published_at, published_by_user_id, created_by_user_id, ship_notes)
+            VALUES (%s, %s, %s, 'published', 'manual', '', '', %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                publish_version,
+                release_title,
+                summary,
+                now,
+                now,
+                now,
+                actor_user_id,
+                actor_user_id,
+                ship_note,
+            ),
+        ).fetchone()
+        new_release_id = int(dict(row_dict(created))["id"])
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO platform_releases
+            (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
+             created_at, updated_at, published_at, published_by_user_id, created_by_user_id, ship_notes)
+            VALUES (?, ?, ?, 'published', 'manual', '', '', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                publish_version,
+                release_title,
+                summary,
+                now,
+                now,
+                now,
+                actor_user_id,
+                actor_user_id,
+                ship_note,
+            ),
+        )
+        new_release_id = int(cur.lastrowid)
+
+    cleaned = _normalize_items(
+        [
+            {
+                "category": category,
+                "title": item.get("title") or "",
+                "detail": item.get("detail") or "",
+                "feature_key": "",
+                "announce_timing": "now",
+            }
+        ]
+    )
+    _replace_items(conn, new_release_id, cleaned)
+    new_items = _items_for_release(conn, new_release_id)
+    _mark_items_announced(conn, [int(i["id"]) for i in new_items if i.get("id") is not None], now)
+
+    # Lift out of the source release so it never reappears on Releases after publish.
+    source_release_id = int(data["release_id"])
+    conn.execute(f"DELETE FROM platform_release_items WHERE id = {ph}", (item_id,))
+    remaining = _items_for_release(conn, source_release_id)
+    if not remaining and str(data.get("release_status") or "") == "draft":
+        conn.execute(f"DELETE FROM platform_releases WHERE id = {ph}", (source_release_id,))
+    else:
+        conn.execute(
+            f"UPDATE platform_releases SET updated_at = {ph} WHERE id = {ph}",
+            (now, source_release_id),
+        )
+
     sent_total = 0
     skipped_amc = 0
     should_notify = bool(notify_organisations)
@@ -967,15 +1069,14 @@ def announce_product_update(
             recipient_scope=recipient_scope if audience != "user" else "org_admin",
             exclude_expired_amc=exclude_expired_amc,
             kind="release_notes",
-            title=f"{base_title} · Updates",
+            title=f"Tradeal {publish_version} · Updates",
             body="Review what is included in this update.",
             payload={
                 "cta": "acknowledge",
                 "items": item["title"],
-                "changelog": _changelog_payload([item]),
-                "release_id": str(data["release_id"]),
-                "release_item_id": str(item_id),
-                "version": version,
+                "changelog": _changelog_payload(new_items or [item]),
+                "release_id": str(new_release_id),
+                "version": publish_version,
             },
             href="",
             actor_user_id=actor_user_id,
@@ -983,16 +1084,10 @@ def announce_product_update(
         sent_total = int(result.get("sent") or 0)
         skipped_amc = int(result.get("skipped_expired_amc") or 0)
 
-    now = _now_iso()
-    _mark_items_announced(conn, [item_id], now)
-    conn.execute(
-        f"UPDATE platform_releases SET updated_at = {ph} WHERE id = {ph}",
-        (now, int(data["release_id"])),
-    )
     append_audit_log(
         organisation_id=organisation_id,
         actor_user_id=actor_user_id,
-        action="release_item.announced",
+        action="release_item.published_from_queue",
         entity_type="platform_release_item",
         entity_id=str(item_id),
         new_value={
@@ -1000,20 +1095,23 @@ def announce_product_update(
             "audience": audience if should_notify else None,
             "sent": sent_total,
             "notify_organisations": should_notify,
-            "release_id": int(data["release_id"]),
-            "version": version,
+            "source_release_id": source_release_id,
+            "published_release_id": new_release_id,
+            "version": publish_version,
         },
     )
-    refreshed = conn.execute(
-        f"SELECT * FROM platform_release_items WHERE id = {ph}",
-        (item_id,),
-    ).fetchone()
-    out = _item_row(refreshed)
+    published = _get_release(conn, new_release_id, for_display=True)
+    published["sent"] = sent_total
+    published["skipped_expired_amc"] = skipped_amc
+    published["notified"] = should_notify
+    out = dict(item)
     out["sent"] = sent_total
     out["skipped_expired_amc"] = skipped_amc
     out["notified"] = should_notify
-    out["release_id"] = int(data["release_id"])
-    out["release_version"] = version
+    out["release_id"] = new_release_id
+    out["release_version"] = publish_version
+    out["published_release"] = published
+    out["announced_at"] = now
     return out
 
 
@@ -1041,7 +1139,7 @@ def publish_release(
         raise HTTPException(status_code=400, detail="Release has no publishable items")
 
     # Only Publish-now inform items go in the org notice; Ship-later wait in Ship queue
-    # (no org notification until Announce).
+    # (no org notification until published from Ship queue).
     notice_items = [
         i
         for i in inform_items
@@ -1052,6 +1150,11 @@ def publish_release(
         for i in inform_items
         if str(i.get("announce_timing") or "now") == "later"
     ]
+    if not notice_items and not feature_items and deferred_items:
+        raise HTTPException(
+            status_code=400,
+            detail="Ship later updates publish from Ship queue — nothing left to publish now",
+        )
 
     # Customer-facing version is assigned at publish time (order of publish), not when the
     # draft was created — so unpublished drafts never "use up" 1.0.47 forever.

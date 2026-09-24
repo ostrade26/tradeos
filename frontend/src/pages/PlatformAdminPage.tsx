@@ -1736,6 +1736,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           ref={shipQueuePanelRef}
           organisations={organisations}
           users={orgUsers}
+          onPublished={() => {
+            void loadReleases()
+          }}
         />
       ) : null}
 

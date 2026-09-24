@@ -877,6 +877,7 @@ export const platformApi = {
         notified?: boolean
         release_id?: number
         release_version?: string
+        published_release?: PlatformRelease
       }
     }>(`/platform/release-items/${itemId}/announce`, {
       method: 'POST',

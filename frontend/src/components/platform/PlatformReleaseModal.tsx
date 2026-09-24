@@ -243,7 +243,7 @@ export function PlatformReleaseModal({
                           value: 'later',
                           label: 'Ship later',
                           description:
-                            'No organisation notice on publish. Announce later from Ship queue; code may already be live.',
+                            'Stays in Ship queue only — not on Releases until you publish it from there.',
                         },
                       ]}
                     />
