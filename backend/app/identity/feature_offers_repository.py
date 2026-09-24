@@ -17,8 +17,14 @@ CATALOG_STATUSES = frozenset({"draft", "listed", "retired"})
 CARD_TONES = frozenset({"neutral", "ai", "analytics", "connect", "ops", "spark"})
 # ~500KB binary as base64 data URL
 MAX_CARD_IMAGE_CHARS = 700_000
+MAX_CARD_TAG_CHARS = 40
+MAX_SHIP_NOTES_CHARS = 2000
 _HEX3_RE = re.compile(r"^#[0-9a-fA-F]{3}$")
 _HEX6_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_SHIP_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DRAFT_OFFER_SHIP_NOTE = (
+    "Draft — not listed for organisations yet. Review in Ship queue before listing."
+)
 
 
 def _now() -> str:
@@ -28,6 +34,20 @@ def _now() -> str:
 def _normalize_card_tone(raw: str | None) -> str:
     tone = (raw or "").strip().lower()
     return tone if tone in CARD_TONES else ""
+
+
+def _normalize_card_tag(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    # Collapse internal whitespace; keep short for the card pill.
+    value = re.sub(r"\s+", " ", value)
+    if len(value) > MAX_CARD_TAG_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tag name must be {MAX_CARD_TAG_CHARS} characters or fewer",
+        )
+    return value
 
 
 def _normalize_card_bg_hex(raw: str | None) -> str:
@@ -59,6 +79,75 @@ def _normalize_card_image_url(raw: str | None) -> str:
     raise HTTPException(status_code=400, detail="Card image must be an http(s) URL or image data URL")
 
 
+def _normalize_target_ship_date(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if not _SHIP_DATE_RE.fullmatch(value):
+        raise HTTPException(status_code=400, detail="Target ship date must be YYYY-MM-DD")
+    return value
+
+
+def _normalize_ship_notes(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if len(value) > MAX_SHIP_NOTES_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ship notes must be {MAX_SHIP_NOTES_CHARS} characters or fewer",
+        )
+    return value
+
+
+def update_offer_ship_planning(
+    conn,
+    offer_id: int,
+    *,
+    ready_to_ship: bool,
+    target_ship_date: str,
+    ship_notes: str,
+    actor_user_id: int,
+) -> dict[str, Any]:
+    offer = get_offer(conn, offer_id)
+    if str(offer.get("catalog_status") or "") != "draft":
+        raise HTTPException(status_code=400, detail="Ship planning applies to draft offers only")
+    ready = 1 if ready_to_ship else 0
+    target = _normalize_target_ship_date(target_ship_date)
+    notes = _normalize_ship_notes(ship_notes)
+    now = _now()
+    if uses_postgres():
+        conn.execute(
+            """
+            UPDATE platform_feature_offers
+            SET ready_to_ship = %s, target_ship_date = %s, ship_notes = %s, updated_at = %s
+            WHERE id = %s
+            """,
+            (ready, target, notes, now, offer_id),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE platform_feature_offers
+            SET ready_to_ship = ?, target_ship_date = ?, ship_notes = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (ready, target, notes, now, offer_id),
+        )
+    updated = get_offer(conn, offer_id)
+    append_audit_log(
+        organisation_id=None,
+        actor_user_id=actor_user_id,
+        action="feature_offer.ship_planning_updated",
+        entity_type="platform_feature_offer",
+        entity_id=str(offer_id),
+        new_value={
+            "ready_to_ship": bool(ready),
+            "target_ship_date": target,
+            "ship_notes": notes,
+        },
+    )
+    return updated
+
+
 def _default_card_tone(feature_key: str, title: str = "") -> str:
     """Match frontend addOnIllustrationForOffer / KEY_RULES so empty tones stay consistent."""
     probe = f"{feature_key} {title}".lower()
@@ -88,10 +177,17 @@ def _offer_row(row: Any) -> dict[str, Any]:
     data["card_tone"] = tone
     data["card_image_url"] = str(data.get("card_image_url") or "").strip()
     data["card_featured"] = bool(int(data.get("card_featured") or 0))
+    data["ready_to_ship"] = bool(int(data.get("ready_to_ship") or 0))
+    data["target_ship_date"] = str(data.get("target_ship_date") or "").strip()
+    data["ship_notes"] = str(data.get("ship_notes") or "").strip()
     try:
         data["card_bg_hex"] = _normalize_card_bg_hex(str(data.get("card_bg_hex") or ""))
     except HTTPException:
         data["card_bg_hex"] = ""
+    try:
+        data["card_tag"] = _normalize_card_tag(str(data.get("card_tag") or ""))
+    except HTTPException:
+        data["card_tag"] = str(data.get("card_tag") or "").strip()[:MAX_CARD_TAG_CHARS]
     return data
 
 
@@ -250,6 +346,7 @@ def upsert_offer(
     card_image_url: str = "",
     card_featured: bool = False,
     card_bg_hex: str = "",
+    card_tag: str = "",
 ) -> dict[str, Any]:
     key = normalize_feature_key(feature_key, title)
     title = title.strip()
@@ -261,6 +358,7 @@ def upsert_offer(
     tone = _normalize_card_tone(card_tone) or _default_card_tone(key, title)
     image_url = _normalize_card_image_url(card_image_url)
     bg_hex = _normalize_card_bg_hex(card_bg_hex)
+    tag = _normalize_card_tag(card_tag)
     featured = 1 if card_featured else 0
     now = _now()
     if offer_id:
@@ -286,7 +384,8 @@ def upsert_offer(
                 UPDATE platform_feature_offers
                 SET feature_key = %s, title = %s, description = %s, pricing_type = %s,
                     price_cents = %s, currency = %s, sort_order = %s, card_tone = %s,
-                    card_image_url = %s, card_featured = %s, card_bg_hex = %s, updated_at = %s
+                    card_image_url = %s, card_featured = %s, card_bg_hex = %s, card_tag = %s,
+                    updated_at = %s
                 WHERE id = %s
                 """,
                 (
@@ -301,6 +400,7 @@ def upsert_offer(
                     image_url,
                     featured,
                     bg_hex,
+                    tag,
                     now,
                     offer_id,
                 ),
@@ -311,7 +411,8 @@ def upsert_offer(
                 UPDATE platform_feature_offers
                 SET feature_key = ?, title = ?, description = ?, pricing_type = ?,
                     price_cents = ?, currency = ?, sort_order = ?, card_tone = ?,
-                    card_image_url = ?, card_featured = ?, card_bg_hex = ?, updated_at = ?
+                    card_image_url = ?, card_featured = ?, card_bg_hex = ?, card_tag = ?,
+                    updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -326,6 +427,7 @@ def upsert_offer(
                     image_url,
                     featured,
                     bg_hex,
+                    tag,
                     now,
                     offer_id,
                 ),
@@ -345,8 +447,8 @@ def upsert_offer(
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
                  catalog_status, sort_order, card_tone, card_image_url, card_featured,
-                 card_bg_hex, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s, %s, %s, %s)
+                 card_bg_hex, card_tag, ship_notes, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -361,6 +463,8 @@ def upsert_offer(
                     image_url,
                     featured,
                     bg_hex,
+                    tag,
+                    DRAFT_OFFER_SHIP_NOTE,
                     now,
                     now,
                 ),
@@ -372,8 +476,8 @@ def upsert_offer(
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
                  catalog_status, sort_order, card_tone, card_image_url, card_featured,
-                 card_bg_hex, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)
+                 card_bg_hex, card_tag, ship_notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     key,
@@ -387,6 +491,8 @@ def upsert_offer(
                     image_url,
                     featured,
                     bg_hex,
+                    tag,
+                    DRAFT_OFFER_SHIP_NOTE,
                     now,
                     now,
                 ),
@@ -403,6 +509,7 @@ def upsert_offer(
             "pricing_type": pricing,
             "card_tone": tone,
             "card_bg_hex": bg_hex,
+            "card_tag": tag,
             "card_featured": bool(featured),
         },
     )
@@ -438,6 +545,7 @@ def set_catalog_status(
     *,
     catalog_status: str,
     actor_user_id: int,
+    notify_orgs: bool = False,
 ) -> dict[str, Any]:
     status = (catalog_status or "").strip().lower()
     if status not in CATALOG_STATUSES:
@@ -478,25 +586,25 @@ def set_catalog_status(
         action=f"feature_offer.{status}",
         entity_type="platform_feature_offer",
         entity_id=str(offer_id),
-        new_value={"catalog_status": status},
+        new_value={"catalog_status": status, "notify_orgs": bool(notify_orgs) if status == "listed" else False},
     )
     updated = get_offer(conn, offer_id)
     notified = 0
-    if status == "listed" and previous != "listed":
+    if status == "listed" and previous != "listed" and notify_orgs:
         notified = _notify_orgs_feature_published(conn, offer=updated, actor_user_id=actor_user_id)
     updated["orgs_notified"] = notified
     return updated
 
 
 def _notify_orgs_feature_published(conn, *, offer: dict[str, Any], actor_user_id: int) -> int:
-    """Broadcast to licensed orgs when a feature is published to the Features page."""
+    """Broadcast to licensed orgs when an add-on is listed with notify_orgs=True."""
     from .notifications_repository import create_notifications_for_audience
 
-    title = str(offer.get("title") or "New feature").strip()
+    title = str(offer.get("title") or "New add-on").strip()
     description = str(offer.get("description") or "").strip()
     key = str(offer.get("feature_key") or "")
     pricing = str(offer.get("pricing_type") or "free")
-    body = description or f"{title} is now available on Features. Open Features to enable or request access."
+    body = description or f"{title} is now available under Add-ons. Open Add-ons to enable or request access."
     try:
         result = create_notifications_for_audience(
             conn,
@@ -506,7 +614,7 @@ def _notify_orgs_feature_published(conn, *, offer: dict[str, Any], actor_user_id
             recipient_scope="all_users",
             exclude_expired_amc=True,
             kind="feature_launch",
-            title=f"New on Features · {title}",
+            title=f"New add-on · {title}",
             body=body,
             payload={
                 "cta": "browse",
@@ -515,7 +623,7 @@ def _notify_orgs_feature_published(conn, *, offer: dict[str, Any], actor_user_id
                 "pricing_type": pricing,
                 "source": "feature_catalog",
             },
-            href="/app/features",
+            href="/app/addons",
             actor_user_id=actor_user_id,
             source="feature_catalog",
         )
@@ -585,16 +693,17 @@ def ensure_draft_offers_from_deploy_items(
             continue
 
         default_tone = _default_card_tone(key, title)
+        ship_note = f"From deploy {sha or '—'}. Review in Ship queue before listing."
         if uses_postgres():
             row = conn.execute(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, card_tone, created_at, updated_at)
-                VALUES (%s, %s, %s, 'paid', 0, 'INR', 'draft', 100, %s, %s, %s)
+                 catalog_status, sort_order, card_tone, ship_notes, created_at, updated_at)
+                VALUES (%s, %s, %s, 'paid', 0, 'INR', 'draft', 100, %s, %s, %s, %s)
                 RETURNING *
                 """,
-                (key, title, detail, default_tone, now, now),
+                (key, title, detail, default_tone, ship_note, now, now),
             ).fetchone()
             offer = _offer_row(row)
         else:
@@ -602,10 +711,10 @@ def ensure_draft_offers_from_deploy_items(
                 """
                 INSERT INTO platform_feature_offers
                 (feature_key, title, description, pricing_type, price_cents, currency,
-                 catalog_status, sort_order, card_tone, created_at, updated_at)
-                VALUES (?, ?, ?, 'paid', 0, 'INR', 'draft', 100, ?, ?, ?)
+                 catalog_status, sort_order, card_tone, ship_notes, created_at, updated_at)
+                VALUES (?, ?, ?, 'paid', 0, 'INR', 'draft', 100, ?, ?, ?, ?)
                 """,
-                (key, title, detail, default_tone, now, now),
+                (key, title, detail, default_tone, ship_note, now, now),
             )
             offer = get_offer(conn, int(cur.lastrowid))
         append_audit_log(
@@ -660,6 +769,20 @@ def _org_pending_feature(conn, organisation_id: int, feature_key: str) -> bool:
     return row is not None
 
 
+def _total_interest_count(conn, feature_key: str) -> int:
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM feature_launch_interests WHERE feature_key = %s",
+            (feature_key,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM feature_launch_interests WHERE feature_key = ?",
+            (feature_key,),
+        ).fetchone()
+    return int(dict(row_dict(row))["n"])
+
+
 def list_marketplace_for_org(conn, organisation_id: int) -> list[dict[str, Any]]:
     offers = list_offers_platform(conn, status="listed")
     out: list[dict[str, Any]] = []
@@ -671,8 +794,14 @@ def list_marketplace_for_org(conn, organisation_id: int) -> list[dict[str, Any]]
             entitle = "pending"
         else:
             entitle = "available"
+        counts = _counts_for_offer(conn, key)
         item = dict(offer)
         item["entitlement_status"] = entitle
+        item["active_orgs"] = counts["active_orgs"]
+        item["pending_requests"] = counts["pending_requests"]
+        item["interest_count"] = _total_interest_count(conn, key)
+        # Popularity for “Most requested”: interests + orgs already using it.
+        item["request_count"] = int(item["interest_count"]) + int(counts["active_orgs"])
         out.append(item)
     return out
 

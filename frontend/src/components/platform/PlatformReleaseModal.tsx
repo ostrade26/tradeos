@@ -24,6 +24,9 @@ function emptyItem(): ReleaseFormPayload['items'][number] {
   return { category: 'bug_fix', title: '', detail: '', feature_key: '' }
 }
 
+/** Keep change titles short — long copy belongs in Detail. */
+const CHANGE_TITLE_MAX = 80
+
 function formFromRelease(release: PlatformRelease | null, nextVersion: string): ReleaseFormPayload {
   if (!release) {
     return {
@@ -36,11 +39,12 @@ function formFromRelease(release: PlatformRelease | null, nextVersion: string): 
   return {
     version: release.version,
     title: release.title,
-    summary: release.summary ?? '',
+    // Summary is no longer edited — details live on each change item.
+    summary: '',
     items: release.items.length
       ? release.items.map(item => ({
           category: item.category,
-          title: item.title,
+          title: String(item.title || '').trim().slice(0, CHANGE_TITLE_MAX),
           detail: item.detail ?? '',
           feature_key: item.feature_key ?? '',
         }))
@@ -131,33 +135,12 @@ export function PlatformReleaseModal({
           label="Title"
           value={form.title}
           onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-          placeholder="Lift matching and register polish"
+          placeholder="Short release name"
         />
-        <label className="flex flex-col gap-2.5 sm:col-span-2">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Summary</span>
-          <textarea
-            value={form.summary}
-            onChange={e => setForm(f => ({ ...f, summary: e.target.value }))}
-            rows={5}
-            className="min-h-[7rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2.5 text-sm leading-relaxed text-heading"
-            placeholder="Short note for the recipient notice."
-          />
-        </label>
       </div>
 
       <div className="mt-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">What's in this version</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))}
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Add change
-          </Button>
-        </div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">What's in this version</p>
         {form.items.map((item, index) => (
           <div
             key={index}
@@ -175,9 +158,11 @@ export function PlatformReleaseModal({
             <div className="flex items-end gap-2">
               <div className="flex-1 min-w-0">
                 <Input
-                  label="Change title"
+                  label="Title"
                   value={item.title}
-                  onChange={e => setItem(index, { title: e.target.value })}
+                  maxLength={CHANGE_TITLE_MAX}
+                  placeholder="Short headline"
+                  onChange={e => setItem(index, { title: e.target.value.slice(0, CHANGE_TITLE_MAX) })}
                 />
               </div>
               {form.items.length > 1 ? (
@@ -199,6 +184,7 @@ export function PlatformReleaseModal({
                 value={item.detail}
                 onChange={e => setItem(index, { detail: e.target.value })}
                 rows={5}
+                placeholder="What changed — shown to organisations under the title."
                 className="min-h-[7rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2.5 text-sm leading-relaxed text-heading"
               />
             </label>
@@ -222,6 +208,17 @@ export function PlatformReleaseModal({
             )}
           </div>
         ))}
+        <div className="pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Add change
+          </Button>
+        </div>
       </div>
     </Modal>
   )

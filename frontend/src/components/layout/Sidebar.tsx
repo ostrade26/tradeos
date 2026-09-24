@@ -4,6 +4,7 @@ import {
   BookUser, BarChart3, Activity, ChevronLeft, FileText,
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
   Building2, Users, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Bell,
+  CalendarClock,
 } from 'lucide-react'
 import {
   platformFeaturesAccessNavIcon,
@@ -67,6 +68,7 @@ const platformAdminNavGroups = [
   {
     label: 'Product',
     items: [
+      { to: '/platform-admin/ship-queue', icon: CalendarClock, label: 'Ship queue' },
       { to: '/platform-admin/releases', icon: platformReleaseIcon, label: 'Releases' },
       { to: '/platform-admin/add-ons', icon: platformFeaturesAccessNavIcon, label: 'Features & Access' },
       { to: '/platform-admin/notifications', icon: Bell, label: platformActionInboxLabels.sidebarNav },

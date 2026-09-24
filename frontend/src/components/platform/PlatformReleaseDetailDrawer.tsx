@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import {
   ClipboardList,
-  FileText,
   GitCommitHorizontal,
   Layers,
   PanelRight,
@@ -172,14 +171,6 @@ export function PlatformReleaseDetailDrawer({
           </div>
         </DetailGroup>
       )}
-
-      {release.summary?.trim() ? (
-        <DetailGroup title="Summary" icon={FileText} surface="muted">
-          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">
-            {release.summary.trim()}
-          </p>
-        </DetailGroup>
-      ) : null}
 
       <DetailGroup
         title={groups.length === 1 ? releaseCategoryLabel(groups[0]![0]) : 'Changes'}

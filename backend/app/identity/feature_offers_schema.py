@@ -18,8 +18,11 @@ def init_feature_offers_schema() -> None:
             _ensure_card_image_column(conn)
             _ensure_card_featured_column(conn)
             _ensure_card_bg_hex_column(conn)
+            _ensure_card_tag_column(conn)
+            _ensure_ship_planning_columns(conn)
             _seed_tradeal_ai_offer(conn)
             _seed_custom_branding_offer(conn)
+            _backfill_draft_ship_notes(conn)
             conn.commit()
         return
     with _sqlite_connect() as conn:
@@ -28,8 +31,11 @@ def init_feature_offers_schema() -> None:
         _ensure_card_image_column(conn)
         _ensure_card_featured_column(conn)
         _ensure_card_bg_hex_column(conn)
+        _ensure_card_tag_column(conn)
+        _ensure_ship_planning_columns(conn)
         _seed_tradeal_ai_offer(conn)
         _seed_custom_branding_offer(conn)
+        _backfill_draft_ship_notes(conn)
         conn.commit()
 
 
@@ -89,6 +95,65 @@ def _ensure_card_bg_hex_column(conn) -> None:
         )
 
 
+def _ensure_card_tag_column(conn) -> None:
+    if uses_postgres():
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS card_tag TEXT NOT NULL DEFAULT ''"
+        )
+        return
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(platform_feature_offers)").fetchall()}
+    if "card_tag" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN card_tag TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _ensure_ship_planning_columns(conn) -> None:
+    if uses_postgres():
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS ready_to_ship INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS target_ship_date TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN IF NOT EXISTS ship_notes TEXT NOT NULL DEFAULT ''"
+        )
+        return
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(platform_feature_offers)").fetchall()}
+    if "ready_to_ship" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN ready_to_ship INTEGER NOT NULL DEFAULT 0"
+        )
+    if "target_ship_date" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN target_ship_date TEXT NOT NULL DEFAULT ''"
+        )
+    if "ship_notes" not in cols:
+        conn.execute(
+            "ALTER TABLE platform_feature_offers ADD COLUMN ship_notes TEXT NOT NULL DEFAULT ''"
+        )
+
+
+DRAFT_OFFER_SHIP_NOTE = (
+    "Draft — not listed for organisations yet. Review in Ship queue before listing."
+)
+
+
+def _backfill_draft_ship_notes(conn) -> None:
+    """Seed honest Ship queue copy on existing drafts that have no owner note yet."""
+    ph = "%s" if uses_postgres() else "?"
+    conn.execute(
+        f"""
+        UPDATE platform_feature_offers
+        SET ship_notes = {ph}
+        WHERE catalog_status = 'draft'
+          AND (ship_notes IS NULL OR TRIM(ship_notes) = '')
+        """,
+        (DRAFT_OFFER_SHIP_NOTE,),
+    )
+
+
 def _create_tables(conn) -> None:
     pk = "SERIAL PRIMARY KEY" if uses_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
     conn.execute(
@@ -107,6 +172,10 @@ def _create_tables(conn) -> None:
             card_image_url TEXT NOT NULL DEFAULT '',
             card_featured INTEGER NOT NULL DEFAULT 0,
             card_bg_hex TEXT NOT NULL DEFAULT '',
+            card_tag TEXT NOT NULL DEFAULT '',
+            ready_to_ship INTEGER NOT NULL DEFAULT 0,
+            target_ship_date TEXT NOT NULL DEFAULT '',
+            ship_notes TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             listed_at TEXT,

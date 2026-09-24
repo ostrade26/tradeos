@@ -99,6 +99,9 @@ def _release_row(row: Any, items: list[dict[str, Any]] | None = None) -> dict[st
     data.setdefault("source", "manual")
     data.setdefault("deploy_commit_sha", "")
     data.setdefault("deploy_environment", "")
+    data["ready_to_ship"] = bool(int(data.get("ready_to_ship") or 0))
+    data["target_ship_date"] = str(data.get("target_ship_date") or "").strip()
+    data["ship_notes"] = str(data.get("ship_notes") or "").strip()
     return data
 
 
@@ -476,16 +479,19 @@ def create_deploy_draft_release(
     if not summary_text:
         summary_text = _summary_from_items(cleaned, env=env, sha=sha)
     now = _now_iso()
+    deploy_ship_note = (
+        f"From deploy {sha[:7]} ({env}). Review in Ship queue before publishing to organisations."
+    )
     if uses_postgres():
         row = conn.execute(
             """
             INSERT INTO platform_releases
             (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
-             created_at, updated_at, created_by_user_id)
-            VALUES (%s, %s, %s, 'draft', 'deploy', %s, %s, %s, %s, %s)
+             created_at, updated_at, created_by_user_id, ship_notes)
+            VALUES (%s, %s, %s, 'draft', 'deploy', %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (version, release_title, summary_text, sha, env, now, now, actor_user_id),
+            (version, release_title, summary_text, sha, env, now, now, actor_user_id, deploy_ship_note),
         ).fetchone()
         release_id = int(dict(row_dict(row))["id"])
     else:
@@ -493,10 +499,10 @@ def create_deploy_draft_release(
             """
             INSERT INTO platform_releases
             (version, title, summary, status, source, deploy_commit_sha, deploy_environment,
-             created_at, updated_at, created_by_user_id)
-            VALUES (?, ?, ?, 'draft', 'deploy', ?, ?, ?, ?, ?)
+             created_at, updated_at, created_by_user_id, ship_notes)
+            VALUES (?, ?, ?, 'draft', 'deploy', ?, ?, ?, ?, ?, ?)
             """,
-            (version, release_title, summary_text, sha, env, now, now, actor_user_id),
+            (version, release_title, summary_text, sha, env, now, now, actor_user_id, deploy_ship_note),
         )
         release_id = int(cur.lastrowid)
     _replace_items(conn, release_id, cleaned)
@@ -559,21 +565,37 @@ def create_release(
         row = conn.execute(
             """
             INSERT INTO platform_releases
-            (version, title, summary, status, created_at, updated_at, created_by_user_id)
-            VALUES (%s, %s, %s, 'draft', %s, %s, %s)
+            (version, title, summary, status, created_at, updated_at, created_by_user_id, ship_notes)
+            VALUES (%s, %s, %s, 'draft', %s, %s, %s, %s)
             RETURNING *
             """,
-            (version, title, summary.strip(), now, now, actor_user_id),
+            (
+                version,
+                title,
+                summary.strip(),
+                now,
+                now,
+                actor_user_id,
+                "Draft release — not published to organisations yet. Review in Ship queue before publishing.",
+            ),
         ).fetchone()
         release_id = int(dict(row_dict(row))["id"])
     else:
         cur = conn.execute(
             """
             INSERT INTO platform_releases
-            (version, title, summary, status, created_at, updated_at, created_by_user_id)
-            VALUES (?, ?, ?, 'draft', ?, ?, ?)
+            (version, title, summary, status, created_at, updated_at, created_by_user_id, ship_notes)
+            VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
             """,
-            (version, title, summary.strip(), now, now, actor_user_id),
+            (
+                version,
+                title,
+                summary.strip(),
+                now,
+                now,
+                actor_user_id,
+                "Draft release — not published to organisations yet. Review in Ship queue before publishing.",
+            ),
         )
         release_id = int(cur.lastrowid)
     _replace_items(conn, release_id, cleaned)
@@ -638,6 +660,59 @@ def update_release(
     return _get_release(conn, release_id)
 
 
+def update_release_ship_planning(
+    conn,
+    release_id: int,
+    *,
+    ready_to_ship: bool,
+    target_ship_date: str,
+    ship_notes: str,
+    actor_user_id: int,
+) -> dict[str, Any]:
+    current = _get_release(conn, release_id)
+    if current.get("status") != "draft":
+        raise HTTPException(status_code=400, detail="Ship planning applies to draft releases only")
+    ready = 1 if ready_to_ship else 0
+    target = (target_ship_date or "").strip()
+    if target and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", target):
+        raise HTTPException(status_code=400, detail="Target ship date must be YYYY-MM-DD")
+    notes = (ship_notes or "").strip()
+    if len(notes) > 2000:
+        raise HTTPException(status_code=400, detail="Ship notes must be 2000 characters or fewer")
+    now = _now_iso()
+    if uses_postgres():
+        conn.execute(
+            """
+            UPDATE platform_releases
+            SET ready_to_ship = %s, target_ship_date = %s, ship_notes = %s, updated_at = %s
+            WHERE id = %s
+            """,
+            (ready, target, notes, now, release_id),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE platform_releases
+            SET ready_to_ship = ?, target_ship_date = ?, ship_notes = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (ready, target, notes, now, release_id),
+        )
+    append_audit_log(
+        organisation_id=None,
+        actor_user_id=actor_user_id,
+        action="release.ship_planning_updated",
+        entity_type="platform_release",
+        entity_id=str(release_id),
+        new_value={
+            "ready_to_ship": bool(ready),
+            "target_ship_date": target,
+            "ship_notes": notes,
+        },
+    )
+    return _get_release(conn, release_id)
+
+
 def _changelog_payload(items: list[dict[str, Any]]) -> str:
     return json.dumps(
         [
@@ -675,9 +750,9 @@ def publish_release(
     if not inform_items and not feature_items:
         raise HTTPException(status_code=400, detail="Release has no publishable items")
 
-    lines = [f"{_category_label(i['category'])}: {i['title']}" for i in items]
     base_title = f"Tradeal {release['version']}"
-    default_body = _org_notice_body(release.get("summary"), lines)
+    # Prefer changelog (title + detail) in the client modal — keep notice body short.
+    default_body = "Review what is included in this update."
     sent_total = 0
     skipped_amc = 0
     should_notify = bool(notify_organisations)
@@ -687,9 +762,6 @@ def publish_release(
     notice_items = inform_items if inform_items else (items if should_notify else [])
     if should_notify and notice_items:
         inform_body = default_body
-        inform_lines = [f"{_category_label(i['category'])}: {i['title']}" for i in notice_items]
-        if len(notice_items) < len(items) or not inform_items:
-            inform_body = "\n".join(inform_lines) if inform_lines else default_body
         inform_result = create_notifications_for_audience(
             conn,
             audience=audience,

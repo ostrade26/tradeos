@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { Building2, CreditCard, RefreshCw, Wallet, Bell } from 'lucide-react'
+import { Building2, CreditCard, Plus, RefreshCw, Wallet, Bell } from 'lucide-react'
 import { platformReleaseIcon as ReleaseNavIcon } from '../lib/platformProductIcons'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
@@ -77,6 +77,10 @@ import {
   PlatformAddOnsAdminPanel,
   type PlatformAddOnsAdminPanelHandle,
 } from '../components/platform/PlatformAddOnsAdminPanel'
+import {
+  PlatformShipQueuePanel,
+  type PlatformShipQueuePanelHandle,
+} from '../components/platform/PlatformShipQueuePanel'
 import { useAuth } from '../hooks/useAuth'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
@@ -88,6 +92,7 @@ const PLATFORM_SECTIONS = [
   'licenses',
   'amcs',
   'payments',
+  'ship-queue',
   'add-ons',
   'audit',
   'releases',
@@ -131,6 +136,11 @@ const SECTION_META: Record<
     title: 'Payments',
     subtitle: '',
     breadcrumb: 'Payments',
+  },
+  'ship-queue': {
+    title: 'Ship queue',
+    subtitle: '',
+    breadcrumb: 'Ship queue',
   },
   'add-ons': {
     title: 'Features & Access',
@@ -253,6 +263,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const [addOnsOpenAccess, setAddOnsOpenAccess] = useState(0)
   const [addOnsRefreshing, setAddOnsRefreshing] = useState(false)
   const addOnsPanelRef = useRef<PlatformAddOnsAdminPanelHandle>(null)
+  const shipQueuePanelRef = useRef<PlatformShipQueuePanelHandle>(null)
+  const [shipQueueRefreshing, setShipQueueRefreshing] = useState(false)
   const [seatRequestLoading, setSeatRequestLoading] = useState(false)
   const [seatRequestSort, setSeatRequestSort] = useState(() => loadRegisterSort('platform-seat-requests', 'created_at'))
   const [busySeatRequestId, setBusySeatRequestId] = useState<number | null>(null)
@@ -1342,19 +1354,38 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
       </Button>
-    ) : section === 'add-ons' ? (
+    ) : section === 'ship-queue' ? (
       <Button
         variant="outline"
         size="sm"
-        loading={addOnsRefreshing}
+        loading={shipQueueRefreshing}
         onClick={() => {
-          setAddOnsRefreshing(true)
-          void addOnsPanelRef.current?.refresh().finally(() => setAddOnsRefreshing(false))
+          setShipQueueRefreshing(true)
+          void shipQueuePanelRef.current?.refresh().finally(() => setShipQueueRefreshing(false))
         }}
       >
         <RefreshCw className="h-4 w-4" aria-hidden />
         Refresh
       </Button>
+    ) : section === 'add-ons' ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          loading={addOnsRefreshing}
+          onClick={() => {
+            setAddOnsRefreshing(true)
+            void addOnsPanelRef.current?.refresh().finally(() => setAddOnsRefreshing(false))
+          }}
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden />
+          Refresh
+        </Button>
+        <Button size="sm" onClick={() => addOnsPanelRef.current?.openCreate()}>
+          <Plus className="h-4 w-4" aria-hidden />
+          New add-on
+        </Button>
+      </div>
     ) : section === 'releases' ? (
       <Button
         size="sm"
@@ -1396,6 +1427,8 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                     ? `${amcs.length} period${amcs.length === 1 ? '' : 's'}`
                     : section === 'payments'
                       ? `${payments.length} payment${payments.length === 1 ? '' : 's'}`
+                        : section === 'ship-queue'
+                          ? 'Draft add-ons & releases waiting to push'
                         : section === 'add-ons'
                           ? addOnsOpenAccess > 0
                             ? `${addOnsOpenAccess} open access request${addOnsOpenAccess === 1 ? '' : 's'}`
@@ -1685,6 +1718,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             }
           />
         ))}
+
+      {section === 'ship-queue' ? (
+        <PlatformShipQueuePanel ref={shipQueuePanelRef} />
+      ) : null}
 
       {section === 'add-ons' ? (
         <PlatformAddOnsAdminPanel ref={addOnsPanelRef} onOpenAccessCountChange={setAddOnsOpenAccess} />

@@ -1735,10 +1735,13 @@ class FeatureOfferBody(BaseModel):
     card_image_url: str = ""
     card_featured: bool = False
     card_bg_hex: str = ""
+    card_tag: str = ""
 
 
 class FeatureOfferStatusBody(BaseModel):
     catalog_status: str
+    # When listing: False = list quietly; True = also inbox-notify licensed orgs.
+    notify_orgs: bool = False
 
 
 @router.get("/feature-offers", summary="Add-ons catalog")
@@ -1778,6 +1781,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
                 card_image_url=body.card_image_url,
                 card_featured=body.card_featured,
                 card_bg_hex=body.card_bg_hex,
+                card_tag=body.card_tag,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1797,6 +1801,7 @@ def create_platform_feature_offer(body: FeatureOfferBody, request: Request) -> d
             card_image_url=body.card_image_url,
             card_featured=body.card_featured,
             card_bg_hex=body.card_bg_hex,
+            card_tag=body.card_tag,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1826,6 +1831,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
                 card_image_url=body.card_image_url,
                 card_featured=body.card_featured,
                 card_bg_hex=body.card_bg_hex,
+                card_tag=body.card_tag,
                 actor_user_id=session.user.id,
             )
             conn.commit()
@@ -1845,6 +1851,7 @@ def update_platform_feature_offer(offer_id: int, body: FeatureOfferBody, request
             card_image_url=body.card_image_url,
             card_featured=body.card_featured,
             card_bg_hex=body.card_bg_hex,
+            card_tag=body.card_tag,
             actor_user_id=session.user.id,
         )
         conn.commit()
@@ -1901,6 +1908,7 @@ def set_platform_feature_offer_status(
                 offer_id,
                 catalog_status=body.catalog_status,
                 actor_user_id=session.user.id,
+                notify_orgs=body.notify_orgs,
             )
             conn.commit()
             return {"offer": offer}
@@ -1910,9 +1918,102 @@ def set_platform_feature_offer_status(
             offer_id,
             catalog_status=body.catalog_status,
             actor_user_id=session.user.id,
+            notify_orgs=body.notify_orgs,
         )
         conn.commit()
         return {"offer": offer}
+
+
+class ShipPlanningBody(BaseModel):
+    ready_to_ship: bool = False
+    target_ship_date: str = ""
+    ship_notes: str = ""
+
+
+@router.get("/ship-queue", summary="Draft offers and releases waiting to ship")
+def get_ship_queue(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .ship_queue_repository import list_ship_queue
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return list_ship_queue(conn)
+    with _sqlite_connect() as conn:
+        return list_ship_queue(conn)
+
+
+@router.patch("/feature-offers/{offer_id}/ship-planning", summary="Update draft offer ship planning")
+def patch_feature_offer_ship_planning(
+    offer_id: int,
+    body: ShipPlanningBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .feature_offers_repository import update_offer_ship_planning
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            offer = update_offer_ship_planning(
+                conn,
+                offer_id,
+                ready_to_ship=body.ready_to_ship,
+                target_ship_date=body.target_ship_date,
+                ship_notes=body.ship_notes,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"offer": offer}
+    with _sqlite_connect() as conn:
+        offer = update_offer_ship_planning(
+            conn,
+            offer_id,
+            ready_to_ship=body.ready_to_ship,
+            target_ship_date=body.target_ship_date,
+            ship_notes=body.ship_notes,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"offer": offer}
+
+
+@router.patch("/releases/{release_id}/ship-planning", summary="Update draft release ship planning")
+def patch_release_ship_planning(
+    release_id: int,
+    body: ShipPlanningBody,
+    request: Request,
+) -> dict[str, Any]:
+    session = _session(request)
+    auth.require_platform(session)
+    auth.require_permission(session, "organisations.edit")
+    from .releases_repository import update_release_ship_planning
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            release = update_release_ship_planning(
+                conn,
+                release_id,
+                ready_to_ship=body.ready_to_ship,
+                target_ship_date=body.target_ship_date,
+                ship_notes=body.ship_notes,
+                actor_user_id=session.user.id,
+            )
+            conn.commit()
+            return {"release": release}
+    with _sqlite_connect() as conn:
+        release = update_release_ship_planning(
+            conn,
+            release_id,
+            ready_to_ship=body.ready_to_ship,
+            target_ship_date=body.target_ship_date,
+            ship_notes=body.ship_notes,
+            actor_user_id=session.user.id,
+        )
+        conn.commit()
+        return {"release": release}
 
 
 @router.get("/audit-logs", summary="Platform audit log")

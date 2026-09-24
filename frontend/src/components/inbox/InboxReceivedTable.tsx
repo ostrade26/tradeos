@@ -247,12 +247,6 @@ function ReceivedDetailPanel({
   const cta = actionLabel(item, platformConsole)
   const openSeat =
     platformConsole && item.seatRequest && isOpenSeatRequest(item.seatRequest.status) && onRejectSeat
-  const showSummary =
-    !isReplyThread &&
-    Boolean(item.subtitle?.trim()) &&
-    item.subtitle.trim() !== replyBody &&
-    !item.notice?.body?.trim()
-
   return (
     <DetailPanelBody>
       <DetailMetricsSection>
@@ -262,11 +256,10 @@ function ReceivedDetailPanel({
         </DetailInlineStatRow>
       </DetailMetricsSection>
 
-      {(item.from || showSummary) ? (
+      {item.from ? (
         <DetailGroup title="Details" icon={Inbox}>
           <div className="space-y-2.5">
-            {item.from ? <DetailRow label="From" value={item.from} /> : null}
-            {showSummary ? <DetailRow label="Summary" value={item.subtitle} /> : null}
+            <DetailRow label="From" value={item.from} />
           </div>
         </DetailGroup>
       ) : null}

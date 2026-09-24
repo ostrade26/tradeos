@@ -118,13 +118,13 @@ def build_items(commits: list[tuple[str, str, str]], *, include_chores: bool) ->
         if key in seen:
             continue
         seen.add(key)
-        title = subject[:200]
-        detail = (body or subject).strip()[:2000]
+        title = subject[:80]
+        detail = (body or "").strip()[:2000]
         category = infer_category(subject)
         item: dict[str, Any] = {
             "category": category,
             "title": title,
-            "detail": detail or title,
+            "detail": detail,
         }
         feature_key = extract_feature_key(subject)
         if feature_key:

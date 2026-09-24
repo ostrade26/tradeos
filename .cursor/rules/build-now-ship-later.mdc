@@ -1,0 +1,32 @@
+---
+description: Build behind feature_key; keep drafts until you intentionally list/publish
+alwaysApply: true
+---
+
+# Build now, ship later
+
+Shipping **code** and exposing **capability** are separate decisions. Merge gated work early; list/publish when the product owner chooses.
+
+## Rule
+
+Anything we might **hold back** from users gets:
+
+1. A stable `feature_key` (see `frontend/src/lib/featureKeys.ts`)
+2. UI/API entry points gated with `hasAppliedUpdate` (same pattern as Tradeal AI / custom branding)
+3. A **draft** Features & Access offer and/or a **draft** Release item with that key
+
+Track readiness on the draft: **Ready to ship**, **Target ship date**, **Ship notes**. Visibility lives in Platform Admin → **Ship queue**.
+
+## Do
+
+- New optional/sellable work → create offer as `draft` (default); list only when ready.
+- Core surfaces you might withhold → gate + draft offer/release until publish/apply.
+- Pure bugfixes and polish that must ship with the deploy → no gate required.
+- Prefer one composition of entitlement (`feature_key` + draft/list) over a second flag system.
+
+## Do not
+
+- Merge holdable work **ungated** (“we’ll turn it off later”).
+- Long-lived feature branches for “ship later” — merge gated instead.
+- Automate schedule → list/publish until the Ship queue is trusted; listing/publishing stays manual.
+- Put every tiny UI tweak behind a key — only work you might withhold or announce.

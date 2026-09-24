@@ -410,6 +410,9 @@ export interface PlatformRelease {
   source?: 'manual' | 'deploy' | string
   deploy_commit_sha?: string
   deploy_environment?: string
+  ready_to_ship?: boolean
+  target_ship_date?: string
+  ship_notes?: string
   sent?: number
   skipped_expired_amc?: number
 }
@@ -425,7 +428,9 @@ export interface FeatureInterest {
   feature_title: string
   feature_detail?: string
   card_tone?: string
+  card_image_url?: string
   card_bg_hex?: string
+  card_tag?: string
   pricing_type?: string
   price_cents?: number
   status: string
@@ -448,12 +453,38 @@ export interface PlatformFeatureOffer {
   card_image_url?: string
   card_featured?: boolean
   card_bg_hex?: string
+  card_tag?: string
+  ready_to_ship?: boolean
+  target_ship_date?: string
+  ship_notes?: string
   created_at: string
   updated_at: string
   listed_at?: string | null
   listed_by_user_id?: number | null
   active_orgs?: number
   pending_requests?: number
+}
+
+export interface ShipQueueItem {
+  kind: 'feature_offer' | 'release'
+  id: number
+  title: string
+  subtitle: string
+  feature_key: string
+  ready_to_ship: boolean
+  target_ship_date: string
+  ship_notes: string
+  created_at: string
+  updated_at: string
+  href: string
+  offer?: PlatformFeatureOffer
+  release?: PlatformRelease
+}
+
+export interface ShipQueueResponse {
+  items: ShipQueueItem[]
+  draft_offers: number
+  draft_releases: number
 }
 
 export interface PlatformFeatureOfferOrgUsage {
@@ -767,6 +798,26 @@ export const platformApi = {
 
   listFeatureOffers: () => apiFetch<{ offers: PlatformFeatureOffer[] }>('/platform/feature-offers'),
 
+  getShipQueue: () => apiFetch<ShipQueueResponse>('/platform/ship-queue'),
+
+  updateFeatureOfferShipPlanning: (
+    offerId: number,
+    body: { ready_to_ship: boolean; target_ship_date?: string; ship_notes?: string },
+  ) =>
+    apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}/ship-planning`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  updateReleaseShipPlanning: (
+    releaseId: number,
+    body: { ready_to_ship: boolean; target_ship_date?: string; ship_notes?: string },
+  ) =>
+    apiFetch<{ release: PlatformRelease }>(`/platform/releases/${releaseId}/ship-planning`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
   getFeatureOfferUsage: (offerId: number) =>
     apiFetch<PlatformFeatureOfferUsage>(`/platform/feature-offers/${offerId}/usage`),
 
@@ -782,6 +833,7 @@ export const platformApi = {
     card_image_url?: string
     card_featured?: boolean
     card_bg_hex?: string
+    card_tag?: string
   }) =>
     apiFetch<{ offer: PlatformFeatureOffer }>('/platform/feature-offers', {
       method: 'POST',
@@ -802,6 +854,7 @@ export const platformApi = {
       card_image_url?: string
       card_featured?: boolean
       card_bg_hex?: string
+      card_tag?: string
     },
   ) =>
     apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}`, {
@@ -809,10 +862,17 @@ export const platformApi = {
       body: JSON.stringify(body),
     }),
 
-  setFeatureOfferCatalogStatus: (offerId: number, catalog_status: string) =>
+  setFeatureOfferCatalogStatus: (
+    offerId: number,
+    catalog_status: string,
+    opts?: { notify_orgs?: boolean },
+  ) =>
     apiFetch<{ offer: PlatformFeatureOffer }>(`/platform/feature-offers/${offerId}/catalog-status`, {
       method: 'POST',
-      body: JSON.stringify({ catalog_status }),
+      body: JSON.stringify({
+        catalog_status,
+        notify_orgs: opts?.notify_orgs ?? false,
+      }),
     }),
 
   deleteFeatureOffer: (offerId: number) =>

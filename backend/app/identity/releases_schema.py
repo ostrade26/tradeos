@@ -73,6 +73,9 @@ def _create_tables(conn) -> None:
     _add_column(conn, "platform_releases", "source", "TEXT NOT NULL DEFAULT 'manual'")
     _add_column(conn, "platform_releases", "deploy_commit_sha", "TEXT")
     _add_column(conn, "platform_releases", "deploy_environment", "TEXT")
+    _add_column(conn, "platform_releases", "ready_to_ship", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(conn, "platform_releases", "target_ship_date", "TEXT NOT NULL DEFAULT ''")
+    _add_column(conn, "platform_releases", "ship_notes", "TEXT NOT NULL DEFAULT ''")
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_releases_deploy_sha
@@ -80,7 +83,26 @@ def _create_tables(conn) -> None:
         WHERE deploy_commit_sha IS NOT NULL AND deploy_commit_sha <> ''
         """
     )
+    _backfill_draft_release_ship_notes(conn)
     _relax_notifications_nullable_org(conn)
+
+
+DRAFT_RELEASE_SHIP_NOTE = (
+    "Draft release — not published to organisations yet. Review in Ship queue before publishing."
+)
+
+
+def _backfill_draft_release_ship_notes(conn) -> None:
+    ph = "%s" if uses_postgres() else "?"
+    conn.execute(
+        f"""
+        UPDATE platform_releases
+        SET ship_notes = {ph}
+        WHERE status = 'draft'
+          AND (ship_notes IS NULL OR TRIM(ship_notes) = '')
+        """,
+        (DRAFT_RELEASE_SHIP_NOTE,),
+    )
 
 
 def _relax_notifications_nullable_org(conn) -> None:
