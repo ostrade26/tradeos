@@ -456,15 +456,15 @@ def _notify_admins_of_deploy_draft(
             + "Review pricing and Publish from Features & Access when ready."
         )
         if inform_items:
-            body += "\nUI & fix notes are drafted under Releases — publish there to notify organisations."
+            body += "\nUI & fix notes are in Ship queue — publish from there to notify organisations."
         cta = "review_features"
     else:
-        href = f"/platform-admin/releases?releaseId={release_id}"
+        href = f"/platform-admin/ship-queue"
         title = f"Release draft from deploy · {short}"
         body = (
-            f"Production deploy {short} created draft {version}.\n\n"
+            f"Production deploy {short} created a release draft.\n\n"
             + ("\n".join(body_lines) + "\n\n" if body_lines else "")
-            + "Review and Publish from Releases to notify organisations."
+            + "Review in Ship queue. Version is assigned when you publish; organisations are notified only for Publish-now items."
         )
         cta = "review_release"
 
@@ -1040,7 +1040,8 @@ def publish_release(
     if not inform_items and not feature_items:
         raise HTTPException(status_code=400, detail="Release has no publishable items")
 
-    # Only Publish-now inform items go in the org notice; Ship-later wait in Ship queue.
+    # Only Publish-now inform items go in the org notice; Ship-later wait in Ship queue
+    # (no org notification until Announce).
     notice_items = [
         i
         for i in inform_items
@@ -1052,7 +1053,13 @@ def publish_release(
         if str(i.get("announce_timing") or "now") == "later"
     ]
 
-    base_title = f"Tradeal {release['version']}"
+    # Customer-facing version is assigned at publish time (order of publish), not when the
+    # draft was created — so unpublished drafts never "use up" 1.0.47 forever.
+    categories = [str(i.get("category") or "") for i in items]
+    publish_version = suggest_next_version(latest_published_version(conn), categories)
+    _assert_unique_version(conn, publish_version, exclude_id=release_id)
+
+    base_title = f"Tradeal {publish_version}"
     # Prefer changelog (title + detail) in the client modal — keep notice body short.
     default_body = "Review what is included in this update."
     sent_total = 0
@@ -1076,7 +1083,7 @@ def publish_release(
                 "items": "\n".join(i["title"] for i in notice_items),
                 "changelog": _changelog_payload(notice_items),
                 "release_id": str(release_id),
-                "version": release["version"],
+                "version": publish_version,
             },
             href="",
             actor_user_id=actor_user_id,
@@ -1100,21 +1107,21 @@ def publish_release(
         conn.execute(
             """
             UPDATE platform_releases
-            SET status = 'published', published_at = COALESCE(published_at, %s),
+            SET version = %s, status = 'published', published_at = COALESCE(published_at, %s),
                 published_by_user_id = COALESCE(published_by_user_id, %s), updated_at = %s
             WHERE id = %s
             """,
-            (now, actor_user_id, now, release_id),
+            (publish_version, now, actor_user_id, now, release_id),
         )
     else:
         conn.execute(
             """
             UPDATE platform_releases
-            SET status = 'published', published_at = COALESCE(published_at, ?),
+            SET version = ?, status = 'published', published_at = COALESCE(published_at, ?),
                 published_by_user_id = COALESCE(published_by_user_id, ?), updated_at = ?
             WHERE id = ?
             """,
-            (now, actor_user_id, now, release_id),
+            (publish_version, now, actor_user_id, now, release_id),
         )
     append_audit_log(
         organisation_id=organisation_id,
@@ -1123,7 +1130,8 @@ def publish_release(
         entity_type="platform_release",
         entity_id=str(release_id),
         new_value={
-            "version": release["version"],
+            "version": publish_version,
+            "previous_version": release.get("version"),
             "audience": audience if result["notified"] else None,
             "sent": result.get("sent"),
             "notify_organisations": should_notify,

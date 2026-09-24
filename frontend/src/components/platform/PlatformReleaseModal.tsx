@@ -142,7 +142,11 @@ export function PlatformReleaseModal({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
         <Input
           label="Version"
-          value={form.version}
+          value={
+            release?.status === 'published'
+              ? form.version
+              : 'Assigned on publish'
+          }
           readOnly
           disabled
           placeholder={suggested || '1.0.0'}
@@ -239,7 +243,7 @@ export function PlatformReleaseModal({
                           value: 'later',
                           label: 'Ship later',
                           description:
-                            'Announce later from Ship queue; code may already be live.',
+                            'No organisation notice on publish. Announce later from Ship queue; code may already be live.',
                         },
                       ]}
                     />

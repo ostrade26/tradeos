@@ -139,7 +139,17 @@ export function PlatformReleaseDetailDrawer({
     <DetailPanelBody>
       <DetailGroup title="Overview" icon={ClipboardList}>
         <div className="space-y-2.5">
-          <DetailRow label="Version" value={release.version} mono />
+          <DetailRow
+            label="Version"
+            value={isDraft ? 'Assigned on publish' : release.version}
+            mono={!isDraft}
+          />
+          {isDraft ? (
+            <DetailRow
+              label="Working title"
+              value={release.title || release.version}
+            />
+          ) : null}
           <DetailRow
             label="Delivery"
             value={release.gated ? 'Features → catalog' : 'Notify only'}
@@ -208,7 +218,7 @@ export function PlatformReleaseDetailDrawer({
                         <p className="text-xs text-muted mt-2">
                           {item.announced_at
                             ? `Announced ${formatDateTime(item.announced_at)}`
-                            : 'Ship later — announce from Ship queue'}
+                            : 'Ship later — no org notice until Announce from Ship queue'}
                         </p>
                       ) : null}
                       {item.feature_key?.trim() ? (

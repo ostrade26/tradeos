@@ -16,6 +16,7 @@ def list_ship_queue(conn) -> dict[str, Any]:
         r for r in releases_payload.get("releases") or [] if str(r.get("status") or "") == "draft"
     ]
     deferred_updates = list_deferred_product_updates(conn)
+    next_version = releases_payload.get("next_version") or ""
 
     items: list[dict[str, Any]] = []
     for offer in draft_offers:
@@ -36,17 +37,36 @@ def list_ship_queue(conn) -> dict[str, Any]:
             }
         )
     for release in draft_releases:
+        release_items = list(release.get("items") or [])
         feature_keys = [
             str(i.get("feature_key") or "").strip()
-            for i in (release.get("items") or [])
+            for i in release_items
             if str(i.get("feature_key") or "").strip()
         ]
+        change_lines = [
+            {
+                "title": str(i.get("title") or "").strip(),
+                "detail": str(i.get("detail") or "").strip(),
+                "category": str(i.get("category") or ""),
+                "announce_timing": str(i.get("announce_timing") or "now"),
+            }
+            for i in release_items
+            if str(i.get("title") or "").strip()
+        ]
+        sha = str(release.get("deploy_commit_sha") or "").strip()
+        n = len(change_lines)
+        subtitle_bits = [
+            f"{n} change{'s' if n != 1 else ''}",
+            "version on publish",
+        ]
+        if sha:
+            subtitle_bits.insert(0, sha[:7])
         items.append(
             {
                 "kind": "release",
                 "id": int(release["id"]),
-                "title": release.get("title") or release.get("version") or "",
-                "subtitle": release.get("version") or "",
+                "title": release.get("title") or "Release draft",
+                "subtitle": " · ".join(subtitle_bits),
                 "feature_key": ", ".join(feature_keys),
                 "ready_to_ship": bool(release.get("ready_to_ship")),
                 "target_ship_date": release.get("target_ship_date") or "",
@@ -55,23 +75,24 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "updated_at": release.get("updated_at") or "",
                 "href": f"/platform-admin/releases?releaseId={int(release['id'])}",
                 "release": release,
+                "change_lines": change_lines,
+                "next_version_hint": next_version,
             }
         )
     for item in deferred_updates:
-        version = str(item.get("release_version") or "")
         items.append(
             {
                 "kind": "product_update",
                 "id": int(item["id"]),
                 "title": item.get("title") or "",
-                "subtitle": version or str(item.get("release_title") or ""),
+                "subtitle": str(item.get("release_title") or "Deferred announce"),
                 "feature_key": "",
                 "ready_to_ship": bool(item.get("ready_to_ship")),
                 "target_ship_date": item.get("target_ship_date") or "",
                 "ship_notes": item.get("ship_notes") or "",
                 "created_at": item.get("release_published_at") or item.get("release_updated_at") or "",
                 "updated_at": item.get("release_updated_at") or "",
-                "href": f"/platform-admin/releases?releaseId={int(item['release_id'])}",
+                "href": "/platform-admin/ship-queue",
                 "release_item": item,
                 "release_id": int(item["release_id"]),
                 "detail": item.get("detail") or "",
@@ -91,4 +112,5 @@ def list_ship_queue(conn) -> dict[str, Any]:
         "draft_offers": len(draft_offers),
         "draft_releases": len(draft_releases),
         "deferred_product_updates": len(deferred_updates),
+        "next_version": next_version,
     }

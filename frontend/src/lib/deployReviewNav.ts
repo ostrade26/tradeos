@@ -12,7 +12,8 @@ export function deployReviewCta(
   if (cta === 'review_release') return 'review_release'
   if (cta === 'review_features') return 'review_features'
   const href = String(item.notice?.href || item.href || '')
-  return href.includes('/releases') ? 'review_release' : 'review_features'
+  if (href.includes('/ship-queue') || href.includes('/releases')) return 'review_release'
+  return href.includes('/add-ons') ? 'review_features' : 'review_features'
 }
 
 /** Destination for a deploy-review notice — never the inbox. */
@@ -25,11 +26,11 @@ export function deployReviewHref(item: Pick<UnifiedInboxItem, 'href' | 'notice'>
     const releaseId = String(item.notice?.payload?.release_id || '').trim()
     return releaseId
       ? `/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`
-      : '/platform-admin/releases'
+      : '/platform-admin/ship-queue'
   }
   return '/platform-admin/add-ons'
 }
 
 export function deployReviewActionLabel(item: Pick<UnifiedInboxItem, 'href' | 'notice'>): string {
-  return deployReviewCta(item) === 'review_release' ? 'Open Releases' : 'Open Features & Access'
+  return deployReviewCta(item) === 'review_release' ? 'Open Ship queue' : 'Open Features & Access'
 }

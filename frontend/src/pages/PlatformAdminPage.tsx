@@ -1031,8 +1031,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   }
 
   const latestReleaseId = useMemo(() => {
-    if (releases.length === 0) return null
-    return releases.reduce((best, row) => (row.id > best.id ? row : best), releases[0]).id
+    const published = releases.filter(r => r.status === 'published')
+    if (published.length === 0) return null
+    return published.reduce((best, row) => (row.id > best.id ? row : best), published[0]).id
   }, [releases])
 
   const relColumns = useMemo(
@@ -1044,12 +1045,14 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   )
   const sortedReleases = useMemo(
     () => {
+      // Releases page = published only. Drafts are managed in Ship queue.
+      const published = releases.filter(r => r.status === 'published')
       // Default / "latest" view: highest id first (newest release on top).
       if (releaseSort.key === 'id') {
         const dir = releaseSort.direction === 'asc' ? 1 : -1
-        return [...releases].sort((a, b) => (a.id - b.id) * dir)
+        return [...published].sort((a, b) => (a.id - b.id) * dir)
       }
-      return sortPlatformRows(releases, releaseSort, relColumns)
+      return sortPlatformRows(published, releaseSort, relColumns)
     },
     [releases, releaseSort, relColumns],
   )
@@ -1434,7 +1437,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
                             ? `${addOnsOpenAccess} open access request${addOnsOpenAccess === 1 ? '' : 's'}`
                             : 'Catalog & organisation requests'
                           : section === 'releases'
-                          ? `${releases.length} version${releases.length === 1 ? '' : 's'}`
+                          ? `${releases.filter(r => r.status === 'published').length} published version${releases.filter(r => r.status === 'published').length === 1 ? '' : 's'}`
                           : section === 'audit'
                             ? `${filteredAuditRows.length} event${filteredAuditRows.length === 1 ? '' : 's'}`
                             : undefined
@@ -1802,11 +1805,11 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             defaultPageSize={25}
             emptyState={
               <EmptyState
-                title="No releases"
-                description="Create a version, then publish it to licences."
+                title="No published releases"
+                description="Drafts appear in Ship queue. Publish from there to list a version here."
                 action={
-                  <Button size="sm" onClick={() => openReleaseEditor(null)}>
-                    New release
+                  <Button size="sm" to="/platform-admin/ship-queue">
+                    Open Ship queue
                   </Button>
                 }
               />

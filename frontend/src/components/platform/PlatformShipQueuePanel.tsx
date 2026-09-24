@@ -202,17 +202,35 @@ export const PlatformShipQueuePanel = forwardRef<
         className: 'whitespace-nowrap w-[8.5rem]',
         render: (r: ShipQueueItem) => kindBadge(r.kind),
       },
-      {
-        key: 'title',
-        header: 'Item',
-        className: 'min-w-[12rem]',
-        render: (r: ShipQueueItem) => (
-          <div className="min-w-0">
-            <p className="font-medium text-heading truncate">{r.title}</p>
-            <p className="text-xs text-muted truncate font-mono">{r.subtitle || r.feature_key || '—'}</p>
-          </div>
-        ),
-      },
+        {
+          key: 'title',
+          header: 'Item',
+          className: 'min-w-[14rem]',
+          render: (r: ShipQueueItem) => (
+            <div className="min-w-0 space-y-1.5">
+              <p className="font-medium text-heading truncate">{r.title}</p>
+              <p className="text-xs text-muted truncate font-mono">{r.subtitle || r.feature_key || '—'}</p>
+              {r.kind === 'release' && r.change_lines && r.change_lines.length > 0 ? (
+                <ul className="mt-1 space-y-1">
+                  {r.change_lines.slice(0, 6).map((line, i) => (
+                    <li key={`${r.id}-${i}`} className="text-xs text-muted leading-snug">
+                      <span className="text-heading">{line.title}</span>
+                      {line.announce_timing === 'later' ? (
+                        <span className="text-muted"> · Ship later</span>
+                      ) : null}
+                    </li>
+                  ))}
+                  {r.change_lines.length > 6 ? (
+                    <li className="text-xs text-muted">+{r.change_lines.length - 6} more</li>
+                  ) : null}
+                </ul>
+              ) : null}
+              {r.kind === 'product_update' && r.detail ? (
+                <p className="text-xs text-muted line-clamp-2">{r.detail}</p>
+              ) : null}
+            </div>
+          ),
+        },
       {
         key: 'ready',
         header: 'Ready',
@@ -287,13 +305,13 @@ export const PlatformShipQueuePanel = forwardRef<
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">
-        Built but not user-facing yet: {counts.draft_offers} draft add-on
-        {counts.draft_offers === 1 ? '' : 's'}, {counts.draft_releases} draft release
-        {counts.draft_releases === 1 ? '' : 's'}, {counts.deferred_product_updates} product update
-        {counts.deferred_product_updates === 1 ? '' : 's'} waiting to announce. Listing, publishing,
-        and announcing stay manual — Features stay in Features & Access.
-      </p>
+        <p className="text-sm text-muted">
+          Built but not live yet: {counts.draft_offers} draft add-on
+          {counts.draft_offers === 1 ? '' : 's'}, {counts.draft_releases} draft release
+          {counts.draft_releases === 1 ? '' : 's'}, {counts.deferred_product_updates} product update
+          {counts.deferred_product_updates === 1 ? '' : 's'} waiting to announce. Drafts live here;
+          the Releases page shows published versions only. Version is assigned when you publish.
+        </p>
 
       <DataTable
         data={items}

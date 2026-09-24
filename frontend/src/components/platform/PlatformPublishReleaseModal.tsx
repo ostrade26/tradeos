@@ -69,7 +69,7 @@ export function PlatformPublishReleaseModal({
       subtitle={
         gated
           ? 'UI & fix notes can go out as an announcement. Marketplace features are published separately from Features & Access.'
-          : 'Mark this version as published. Choose whether organisations get an inbox notice.'
+          : 'Version number is assigned when you publish (next after the last published release). Choose whether organisations get an inbox notice — Ship later items are skipped until Announce.'
       }
       size="lg"
       footer={
@@ -202,7 +202,7 @@ export function PlatformPublishReleaseModal({
                   {item.gated
                     ? ' · Publish from Features'
                     : item.announce_timing === 'later'
-                      ? ' · Ship later (Ship queue)'
+                      ? ' · Ship later (no notice until Announce)'
                       : ' · Publish now'}
                 </p>
               </li>

@@ -488,6 +488,13 @@ export interface ShipQueueItem {
   release_id?: number
   detail?: string
   category?: string
+  change_lines?: Array<{
+    title: string
+    detail?: string
+    category?: string
+    announce_timing?: string
+  }>
+  next_version_hint?: string
 }
 
 export interface ShipQueueResponse {
@@ -495,6 +502,7 @@ export interface ShipQueueResponse {
   draft_offers: number
   draft_releases: number
   deferred_product_updates?: number
+  next_version?: string
 }
 
 export interface PlatformFeatureOfferOrgUsage {
