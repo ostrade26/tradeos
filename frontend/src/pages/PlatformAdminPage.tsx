@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { Building2, CreditCard, Plus, RefreshCw, Wallet, Bell } from 'lucide-react'
+import { Building2, CreditCard, RefreshCw, Wallet, Bell } from 'lucide-react'
 import { platformReleaseIcon as ReleaseNavIcon } from '../lib/platformProductIcons'
 import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
@@ -1368,24 +1368,18 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         Refresh
       </Button>
     ) : section === 'add-ons' ? (
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          loading={addOnsRefreshing}
-          onClick={() => {
-            setAddOnsRefreshing(true)
-            void addOnsPanelRef.current?.refresh().finally(() => setAddOnsRefreshing(false))
-          }}
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden />
-          Refresh
-        </Button>
-        <Button size="sm" onClick={() => addOnsPanelRef.current?.openCreate()}>
-          <Plus className="h-4 w-4" aria-hidden />
-          New add-on
-        </Button>
-      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        loading={addOnsRefreshing}
+        onClick={() => {
+          setAddOnsRefreshing(true)
+          void addOnsPanelRef.current?.refresh().finally(() => setAddOnsRefreshing(false))
+        }}
+      >
+        <RefreshCw className="h-4 w-4" aria-hidden />
+        Refresh
+      </Button>
     ) : section === 'releases' ? (
       <Button
         size="sm"
