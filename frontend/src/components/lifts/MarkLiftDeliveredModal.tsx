@@ -54,7 +54,7 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     setTankerFieldErrors({})
     setSoFieldErrors({})
     setSaving(false)
-  }, [open, lift])
+  }, [open, lift?.id])
 
   if (!lift) return null
 

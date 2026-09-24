@@ -423,12 +423,30 @@ export function getAllocatedSellQty(orders: TradeOrder[], poRef: string): number
   )
 }
 
-/** Qty on a PO still available to allocate to new SOs */
-export function getRemainingSellQty(orders: TradeOrder[], poRef: string): number {
+/** Qty reserved by own-stock lifts against a PO (pending + delivered). */
+export function getStockLiftQtyOnPo(lifts: Lift[], poRef: string): number {
+  return roundQtyMt(
+    lifts
+      .filter(l => !l.deletedAt)
+      .flatMap(l => {
+        const allocations = l.allocations?.length
+          ? l.allocations
+          : [{ poRef: l.poRef, soRef: l.soRef, qtyMt: l.liftedQty }]
+        return allocations
+      })
+      .filter(a => a.poRef === poRef && !a.soRef)
+      .reduce((sum, a) => sum + a.qtyMt, 0),
+  )
+}
+
+/** Qty on a PO still available to allocate to new SOs (excludes linked SOs and own-stock lifts). */
+export function getRemainingSellQty(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): number {
   const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
   if (!po) return 0
   const cap = orderQtyCap(po)
-  return roundQtyMt(cap - getAllocatedSellQty(orders, poRef))
+  return roundQtyMt(
+    Math.max(0, cap - getAllocatedSellQty(orders, poRef) - getStockLiftQtyOnPo(lifts, poRef)),
+  )
 }
 
 export function getSOsForPO(orders: TradeOrder[], poRef: string): TradeOrder[] {

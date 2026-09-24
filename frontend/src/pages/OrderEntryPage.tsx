@@ -523,7 +523,9 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       deliveryPeriodEnd: form.deliveryType === 'ready' ? form.date : (form.deliveryPeriodEnd || form.date),
       rate: rateFields.rate,
       taxRate: parseFloat(form.taxRate) || 0,
-      orderQty: parseFloat(form.quantity),
+      orderQty: isEdit && editingOrder
+        ? editingOrder.orderQty
+        : parseFloat(form.quantity),
       brokerName: form.brokerName,
       brokeragePct: form.brokerageType === 'percent' ? (parseFloat(form.brokeragePct) || 0) : 0,
       brokeragePerTon: form.brokerageType === 'perTon'
@@ -1121,7 +1123,7 @@ function OrderFormFields({
   partyOptions,
   spots,
   brokers,
-  isEdit: _isEdit = false,
+  isEdit = false,
   fieldErrors = {},
   onFieldEdit,
   maxQty,
@@ -1298,14 +1300,22 @@ function OrderFormFields({
           </FormFieldGroup>
 
           <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
-            <QtyInput
-              label="Quantity (MT)"
-              value={form.quantity}
-              error={fieldErrors.quantity}
-              maxQty={maxQty}
-              maxQtyMessage={maxQtyMessage}
-              onChange={e => { onFieldEdit?.('quantity'); form.set('quantity', e.target.value) }}
-            />
+            <div>
+              <QtyInput
+                label="Quantity (MT)"
+                value={form.quantity}
+                error={fieldErrors.quantity}
+                maxQty={isEdit ? undefined : maxQty}
+                maxQtyMessage={isEdit ? undefined : maxQtyMessage}
+                disabled={isEdit}
+                onChange={e => { onFieldEdit?.('quantity'); form.set('quantity', e.target.value) }}
+              />
+              {isEdit && (
+                <p className="text-xs text-muted mt-1">
+                  Quantity is set at create and cannot be changed.
+                </p>
+              )}
+            </div>
             <AmountInput
               label={rateInputLabel(shortLabel, form.rateBasis)}
               value={form.rate}

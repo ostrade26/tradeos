@@ -8,16 +8,21 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string
   icon?: boolean
   trailing?: ReactNode
+  /**
+   * When true (default), lock the field read-only until focus to deter password-manager autofill.
+   * Set false for qty / numeric fields where the lock often blocks typing in modals.
+   */
+  protectAutofill?: boolean
 }
 
 const TEXTISH = new Set(['text', 'search', 'email', 'tel', 'url', 'password', undefined])
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, icon, trailing, id: idProp, autoComplete, readOnly, onFocus, onInput, type, ...props }, ref) => {
+  ({ className, label, error, icon, trailing, id: idProp, autoComplete, readOnly, onFocus, onInput, type, protectAutofill = true, ...props }, ref) => {
     const autoId = useId()
     const id = idProp ?? autoId
     const isTextish = TEXTISH.has(type)
-    const [blockAutofill, setBlockAutofill] = useState(isTextish)
+    const [blockAutofill, setBlockAutofill] = useState(protectAutofill && isTextish)
 
     const unlockForKeyboard = (el: HTMLInputElement) => {
       if (blockAutofill && !readOnly) {

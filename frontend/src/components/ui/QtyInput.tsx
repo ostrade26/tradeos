@@ -41,6 +41,7 @@ export const QtyInput = forwardRef<HTMLInputElement, QtyInputProps>(
         trailing={trailing}
         error={displayError}
         disabled={disabled}
+        protectAutofill={false}
         onChange={onChange}
         className={cn('tabular-nums', className)}
         {...props}

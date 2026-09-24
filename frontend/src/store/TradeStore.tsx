@@ -843,18 +843,18 @@ export function TradeProvider({ children }: { children: ReactNode }) {
       )
       const withAvail = open.filter(o => {
         if (includeRef && o.ref === includeRef) return true
-        return getRemainingSellQty(data.tradeOrders, o.ref) > 0
+        return getRemainingSellQty(data.tradeOrders, o.ref, data.lifts) > 0
       })
       if (!itemName) return withAvail
       const sameItem = withAvail.filter(o => o.itemName.trim().toLowerCase() === itemName)
       return sameItem.length > 0 ? sameItem : withAvail
     },
-    [data.tradeOrders],
+    [data.tradeOrders, data.lifts],
   )
 
   const getRemainingSellQtyForPO = useCallback(
-    (poRef: string) => getRemainingSellQty(data.tradeOrders, poRef),
-    [data.tradeOrders],
+    (poRef: string) => getRemainingSellQty(data.tradeOrders, poRef, data.lifts),
+    [data.tradeOrders, data.lifts],
   )
 
   const getSOsForPORef = useCallback(

@@ -579,17 +579,8 @@ class TradeService:
             {**input_data, "ref": existing["ref"]},
             check_ref=False,
         )
-        if input_data["orderQty"] < existing.get("liftedQty", 0):
-            raise ValueError(f"Quantity cannot be less than lifted qty ({format_qty(existing['liftedQty'])})")
-        if existing.get("side") == "purchase":
-            from .buy_back import total_buy_back_qty
-
-            min_qty = existing.get("liftedQty", 0) + total_buy_back_qty(existing)
-            if input_data["orderQty"] < min_qty:
-                raise ValueError(
-                    f"PO quantity cannot be less than lifted plus buy back "
-                    f"({format_qty(min_qty)})",
-                )
+        if round_qty_mt(input_data["orderQty"]) != round_qty_mt(existing.get("orderQty", 0)):
+            raise ValueError("Order quantity cannot be changed after create")
 
         resolved_po_ref = existing.get("poRef") or (input_data.get("poRef") or "").strip() or None
         if input_data["side"] == "sale" and resolved_po_ref:
@@ -601,9 +592,11 @@ class TradeService:
         updated["ref"] = existing["ref"]
         updated["poRef"] = resolved_po_ref
         updated["id"] = existing["id"]
+        # Contract qty is immutable after create — always keep the stored value.
+        updated["orderQty"] = existing["orderQty"]
 
         lots = list(data.get("lots") or [])
-        qty_delta = updated["orderQty"] - existing["orderQty"]
+        qty_delta = 0
 
         if updated["side"] == "purchase":
             lot_no = lot_number_for_po(updated["ref"])
@@ -822,8 +815,6 @@ class TradeService:
         activities: list[dict] = []
 
         if method == "short_closed":
-            if to_be_lifted > 0:
-                updated["orderQty"] = lifted
             if balance_owed > 0 and po_ref and so_ref:
                 po = next(
                     (o for o in data["tradeOrders"] if o.get("ref") == po_ref and o.get("side") == "purchase"),
@@ -898,7 +889,6 @@ class TradeService:
                             "notes": notes,
                         }
                     )
-                updated["orderQty"] = lifted
 
             updated.update(
                 {

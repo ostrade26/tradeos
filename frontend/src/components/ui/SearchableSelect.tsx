@@ -128,12 +128,17 @@ export function SearchableSelect({
     const gap = 4
     const viewportPad = 8
     const measured = panelRef.current?.offsetHeight
+    /** Hard cap so long directories never fill the viewport and hide the Add CTA footer. */
+    const PANEL_CAP = 240
     // Compact page-size lists are short; fall back so first paint can flip correctly.
-    const estimatedHeight = measured && measured > 0 ? measured : Math.min(288, 40 + options.length * 36)
+    const estimatedHeight = measured && measured > 0
+      ? Math.min(measured, PANEL_CAP)
+      : Math.min(PANEL_CAP, 40 + options.length * 36)
     const spaceBelow = window.innerHeight - rect.bottom - viewportPad
     const spaceAbove = rect.top - viewportPad
     const openUp = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
-    const maxHeight = Math.max(120, openUp ? spaceAbove - gap : spaceBelow - gap)
+    const available = openUp ? spaceAbove - gap : spaceBelow - gap
+    const maxHeight = Math.min(PANEL_CAP, Math.max(120, available))
     const top = openUp
       ? Math.max(viewportPad, rect.top - gap - Math.min(estimatedHeight, maxHeight))
       : rect.bottom + gap
@@ -356,13 +361,13 @@ export function SearchableSelect({
             top: panelStyle.top,
             left: panelStyle.left,
             width: panelStyle.width,
+            maxHeight: panelStyle.maxHeight,
             zIndex: SELECT_PORTAL_Z_INDEX,
           }}
-          className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg overflow-hidden"
+          className="flex flex-col rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg overflow-hidden"
         >
           <div
-            className="overflow-y-auto py-1"
-            style={{ maxHeight: panelStyle.maxHeight }}
+            className="min-h-0 flex-1 overflow-y-auto py-1"
             onMouseLeave={() => setHighlight(-1)}
           >
             {filtered.length === 0 ? (
@@ -414,7 +419,7 @@ export function SearchableSelect({
                 onRequestCreate(searchable && query.trim() ? query.trim() : '')
                 setOpen(false)
               }}
-              className="w-full border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 text-left text-sm text-accent hover:bg-accent/5 cursor-pointer flex items-center gap-2"
+              className="w-full shrink-0 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 text-left text-sm text-accent hover:bg-accent/5 cursor-pointer flex items-center gap-2"
             >
               <Plus className="h-4 w-4 shrink-0" />
               {createLabel}
@@ -422,7 +427,7 @@ export function SearchableSelect({
           )}
           {allowCreate && onCreate && !onRequestCreate && (
             creating ? (
-              <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2">
+              <div className="shrink-0 border-t border-gray-200 dark:border-gray-700 p-3 space-y-2">
                 <label htmlFor={createInputId} className="text-xs font-medium text-gray-500">{createLabel}</label>
                 <input
                   id={createInputId}
@@ -490,7 +495,7 @@ export function SearchableSelect({
               <button
                 type="button"
                 onClick={startCreating}
-                className="w-full border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 text-left text-sm text-accent hover:bg-accent/5 cursor-pointer flex items-center gap-2"
+                className="w-full shrink-0 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 text-left text-sm text-accent hover:bg-accent/5 cursor-pointer flex items-center gap-2"
               >
                 <Plus className="h-4 w-4 shrink-0" />
                 {createLabel}

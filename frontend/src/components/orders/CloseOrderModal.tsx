@@ -23,15 +23,15 @@ interface CloseOrderModalProps {
 const METHOD_LABELS: Record<CloseOrderMethod, { title: string; description: string }> = {
   carried_forward: {
     title: 'Adjust in next delivery',
-    description: 'Remaining qty stays on the seller and is applied on the next lift.',
+    description: 'Unlifted balance stays with the seller and is applied on the next lift. Ordered quantity stays as booked.',
   },
   cash: {
     title: 'In cash',
-    description: 'Seller settled the remaining qty in cash. Nothing is carried to the next lift.',
+    description: 'Settle the unlifted balance in cash. Ordered quantity stays as booked.',
   },
   short_closed: {
     title: 'No further delivery',
-    description: 'Write off remaining quantity — no more lifts and no cash settlement.',
+    description: 'Write off the unlifted balance — no more lifts and no cash settlement. Ordered quantity stays as booked.',
   },
 }
 
@@ -333,8 +333,8 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
             )}
             {method === 'short_closed' && single && single.context.toBeLifted > 0 && (
               <p className="text-xs text-muted">
-                Effective {formatDate(new Date().toISOString())} · order qty will reduce to{' '}
-                {formatQty(single.order.liftedQty)} MT
+                Effective {formatDate(new Date().toISOString())} · {formatQty(single.context.toBeLifted)} MT
+                unlifted balance will be written off. Ordered quantity stays as booked.
               </p>
             )}
             {isBulk && (

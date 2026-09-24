@@ -265,6 +265,7 @@ def build_lot_from_po(po: dict) -> dict:
 
 def sync_lot_quantities(data: dict) -> dict:
     orders = data.get("tradeOrders") or []
+    lifts = data.get("lifts") or []
     lots = []
     for lot in data.get("lots") or []:
         po_ref = lot["lotNumber"].replace("LOT-", "", 1)
@@ -274,6 +275,14 @@ def sync_lot_quantities(data: dict) -> dict:
             continue
         linked_sos = get_sos_for_po(orders, po_ref)
         allocated = sum(o.get("orderQty", 0) for o in linked_sos)
+        stock_lift_qty = 0.0
+        for lift in lifts:
+            if lift.get("deletedAt"):
+                continue
+            for a in get_lift_allocations(lift):
+                if a.get("poRef") == po_ref and not a.get("soRef"):
+                    stock_lift_qty += a.get("qtyMt", 0) or 0
+        stock_lift_qty = round_qty_mt(stock_lift_qty)
         effective = effective_po_qty(po)
         avg_so_rate = sum(o.get("rate", 0) for o in linked_sos) / len(linked_sos) if linked_sos else 0
         margin = lot.get("margin", 0)
@@ -287,7 +296,7 @@ def sync_lot_quantities(data: dict) -> dict:
                 "quantityPurchased": round_qty_mt(po["orderQty"]),
                 "remaining": round_qty_mt(max(0, effective - po.get("liftedQty", 0))),
                 "allocated": round_qty_mt(allocated),
-                "available": round_qty_mt(effective - allocated),
+                "available": round_qty_mt(max(0, effective - allocated - stock_lift_qty)),
                 "producer": po["partyName"],
                 "broker": po["brokerName"],
                 "purchaseDate": po["date"],
