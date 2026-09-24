@@ -77,8 +77,7 @@ jobs:
             echo ""
             notified="$(python3 -c "import json; print(json.load(open('/tmp/tradeal-deploy-register.json')).get('notified', 0))")"
             created="$(python3 -c "import json; print(json.load(open('/tmp/tradeal-deploy-register.json')).get('created', False))")"
-            updated="$(python3 -c "import json; print(json.load(open('/tmp/tradeal-deploy-register.json')).get('updated', False))")"
-            echo "created=${created} updated=${updated} notified=${notified}"
+            echo "created=${created} notified=${notified}"
             if [[ "${notified}" == "0" ]]; then
               echo "::warning::No new admin notifications were sent (already notified for this commit, or no platform admin users)."
             fi

@@ -253,30 +253,6 @@ def latest_version(conn) -> str:
     return max_version(versions)
 
 
-def get_open_deploy_draft(conn) -> dict[str, Any] | None:
-    """Latest unpublished release created from a production deploy (if any)."""
-    if uses_postgres():
-        row = conn.execute(
-            """
-            SELECT * FROM platform_releases
-            WHERE status = 'draft' AND source = 'deploy'
-            ORDER BY id DESC LIMIT 1
-            """
-        ).fetchone()
-    else:
-        row = conn.execute(
-            """
-            SELECT * FROM platform_releases
-            WHERE status = 'draft' AND source = 'deploy'
-            ORDER BY id DESC LIMIT 1
-            """
-        ).fetchone()
-    if not row:
-        return None
-    data = dict(row_dict(row))
-    return _release_row(data, _items_for_release(conn, int(data["id"])))
-
-
 def _items_for_release(conn, release_id: int) -> list[dict[str, Any]]:
     if uses_postgres():
         rows = conn.execute(
@@ -455,36 +431,27 @@ def _notify_admins_of_deploy_draft(
     items: list[dict[str, Any]],
     draft_feature_keys: list[str],
     actor_user_id: int,
-    force: bool = False,
-    updated: bool = False,
-    new_item_titles: list[str] | None = None,
 ) -> int:
     """Ping Tradeal admins about a deploy draft (Features and/or Releases)."""
     from .notifications_repository import notify_platform_admins as send_platform_admin_notices
 
     release_id = int(release["id"])
-    if not force and _deploy_admin_notice_exists(conn, release_id):
+    if _deploy_admin_notice_exists(conn, release_id):
         return 0
 
     sha = str(release.get("deploy_commit_sha") or "")[:40]
     version = str(release.get("version") or "")
     gated_items = [i for i in items if is_gated_release_category(str(i.get("category") or ""))]
     inform_items = [i for i in items if is_inform_release_category(str(i.get("category") or ""))]
-    highlight = new_item_titles if new_item_titles is not None else [
-        str(i.get("title") or "") for i in items if str(i.get("title") or "").strip()
-    ]
-    body_lines = [f"• {t}" for t in highlight if str(t).strip()]
+    titles = [str(i.get("title") or "") for i in items if str(i.get("title") or "").strip()]
+    body_lines = [f"• {t}" for t in titles]
     short = sha[:7] if sha else version or "deploy"
 
     if gated_items:
         href = "/platform-admin/add-ons"
-        title = (
-            f"Feature draft updated from deploy · {short}"
-            if updated
-            else f"New feature(s) from deploy · {short}"
-        )
+        title = f"New feature(s) from deploy · {short}"
         body = (
-            f"Production deploy {short} {'updated' if updated else 'included'} marketplace feature(s).\n\n"
+            f"Production deploy {short} included marketplace feature(s).\n\n"
             + ("\n".join(body_lines) + "\n\n" if body_lines else "")
             + "Review pricing and Publish from Features & Access when ready."
         )
@@ -493,13 +460,9 @@ def _notify_admins_of_deploy_draft(
         cta = "review_features"
     else:
         href = f"/platform-admin/releases?releaseId={release_id}"
-        title = (
-            f"Release draft updated from deploy · {short}"
-            if updated
-            else f"Release draft from deploy · {short}"
-        )
+        title = f"Release draft from deploy · {short}"
         body = (
-            f"Production deploy {short} {'updated draft' if updated else 'created draft'} {version}.\n\n"
+            f"Production deploy {short} created draft {version}.\n\n"
             + ("\n".join(body_lines) + "\n\n" if body_lines else "")
             + "Review and Publish from Releases to notify organisations."
         )
@@ -517,60 +480,12 @@ def _notify_admins_of_deploy_draft(
             "version": version,
             "draft_feature_keys": "\n".join(draft_feature_keys),
             "feature_titles": "\n".join(str(i.get("title") or "") for i in gated_items),
-            "updated": "1" if updated else "0",
         },
         href=href,
         actor_user_id=actor_user_id,
         source="deploy",
     )
     return int(result.get("sent") or 0)
-
-
-def _merge_deploy_items(
-    existing: list[dict[str, Any]],
-    incoming: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Keep existing draft lines; append new titles. Returns (merged raw items, new titles)."""
-    seen = {
-        str(i.get("title") or "").strip().lower()
-        for i in existing
-        if str(i.get("title") or "").strip()
-    }
-    merged: list[dict[str, Any]] = []
-    for item in existing:
-        merged.append(
-            {
-                "category": item.get("category") or "bug_fix",
-                "title": item.get("title") or "",
-                "detail": item.get("detail") or "",
-                "feature_key": item.get("feature_key") or "",
-                "announce_timing": item.get("announce_timing") or "now",
-                "ready_to_ship": bool(item.get("ready_to_ship")),
-                "target_ship_date": item.get("target_ship_date") or "",
-                "ship_notes": item.get("ship_notes") or "",
-            }
-        )
-    new_titles: list[str] = []
-    for item in incoming:
-        title = str(item.get("title") or "").strip()
-        key = title.lower()
-        if not title or key in seen:
-            continue
-        seen.add(key)
-        new_titles.append(title)
-        merged.append(
-            {
-                "category": item.get("category") or "bug_fix",
-                "title": title,
-                "detail": item.get("detail") or "",
-                "feature_key": item.get("feature_key") or "",
-                "announce_timing": item.get("announce_timing") or "now",
-                "ready_to_ship": bool(item.get("ready_to_ship")),
-                "target_ship_date": item.get("target_ship_date") or "",
-                "ship_notes": item.get("ship_notes") or "",
-            }
-        )
-    return merged, new_titles
 
 
 def create_deploy_draft_release(
@@ -604,7 +519,6 @@ def create_deploy_draft_release(
         return {
             "release": existing,
             "created": False,
-            "updated": False,
             "notified": notified,
             "draft_features": [
                 str(i.get("feature_key") or "")
@@ -624,79 +538,8 @@ def create_deploy_draft_release(
                 "detail": f"Deployed to {env}. Edit this draft before publishing to organisations.",
             }
         ]
-
-    open_draft = get_open_deploy_draft(conn)
-    if open_draft:
-        incoming = _normalize_items(raw_items)
-        existing_items = list(open_draft.get("items") or [])
-        merged_raw, new_titles = _merge_deploy_items(existing_items, incoming)
-        cleaned = _normalize_items(merged_raw)
-        release_id = int(open_draft["id"])
-        summary_text = (summary or "").strip() or _summary_from_items(cleaned, env=env, sha=sha)
-        release_title = (title or "").strip() or str(open_draft.get("title") or "") or f"Production deploy · {sha[:7]}"
-        now = _now_iso()
-        deploy_ship_note = (
-            f"From deploy {sha[:7]} ({env}). Review in Ship queue before publishing to organisations."
-        )
-        ph = "%s" if uses_postgres() else "?"
-        conn.execute(
-            f"""
-            UPDATE platform_releases
-            SET title = {ph}, summary = {ph}, deploy_commit_sha = {ph},
-                deploy_environment = {ph}, updated_at = {ph}, ship_notes = {ph}
-            WHERE id = {ph}
-            """,
-            (release_title, summary_text, sha, env, now, deploy_ship_note, release_id),
-        )
-        _replace_items(conn, release_id, cleaned)
-        append_audit_log(
-            organisation_id=None,
-            actor_user_id=actor_user_id,
-            action="release.deploy_draft_updated",
-            entity_type="platform_release",
-            entity_id=str(release_id),
-            new_value={
-                "version": open_draft.get("version"),
-                "commit_sha": sha,
-                "environment": env,
-                "new_items": new_titles,
-            },
-        )
-
-        from .feature_offers_repository import ensure_draft_offers_from_deploy_items
-
-        gated_items = [i for i in cleaned if is_gated_release_category(str(i.get("category") or ""))]
-        draft_offers = ensure_draft_offers_from_deploy_items(
-            conn,
-            items=gated_items,
-            deploy_sha=sha,
-            actor_user_id=actor_user_id,
-        )
-        draft_keys = [str(o.get("feature_key") or "") for o in draft_offers if o.get("feature_key")]
-        release = _get_release(conn, release_id)
-        notified = 0
-        if notify_platform_admins:
-            notified = _notify_admins_of_deploy_draft(
-                conn,
-                release=release,
-                items=cleaned,
-                draft_feature_keys=draft_keys,
-                actor_user_id=actor_user_id,
-                force=True,
-                updated=True,
-                new_item_titles=new_titles or [str(i.get("title") or "") for i in cleaned],
-            )
-        return {
-            "release": release,
-            "created": False,
-            "updated": True,
-            "notified": notified,
-            "draft_features": draft_keys,
-            "new_items": new_titles,
-        }
-
     cleaned = _normalize_items(raw_items)
-    # Include draft versions so a second deploy never collides with an unpublished draft.
+    # Bump past drafts and published so each deploy gets its own version (no merge, no collision).
     latest = latest_version(conn) or latest_published_version(conn)
     version = suggest_next_version(latest, [i["category"] for i in cleaned])
     _assert_unique_version(conn, version)
@@ -766,7 +609,6 @@ def create_deploy_draft_release(
     return {
         "release": release,
         "created": True,
-        "updated": False,
         "notified": notified,
         "draft_features": draft_keys,
     }
