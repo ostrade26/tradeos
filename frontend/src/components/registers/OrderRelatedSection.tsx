@@ -40,7 +40,7 @@ function LiftRows({
     return (
       <p
         className={cn(
-          'p-4 text-[13px] text-muted',
+          'p-3 text-[13px] text-muted',
           showTopBorder && 'border-t border-gray-100 dark:border-gray-800',
         )}
       >
@@ -77,7 +77,7 @@ function LiftRows({
               <Link
                 to={`/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`}
                 onClick={onNavigate}
-                className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
               >
                 <span className="text-[13px] font-medium text-accent whitespace-nowrap">
                   {formatLiftRef(lift.liftRef)}
