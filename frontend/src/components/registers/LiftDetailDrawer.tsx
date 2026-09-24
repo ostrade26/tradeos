@@ -9,6 +9,7 @@ import {
   PanelRightClose,
   CheckCircle2,
   Pencil,
+  Truck,
 } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { Button } from '../ui/Button'
@@ -31,6 +32,7 @@ import { crossPoAllocationMessage } from '../../lib/sellerLiftPool'
 import { CrossPoNotice } from '../lifts/CrossPoNotice'
 import { getLiftPlannedQty, getLiftBalanceQty } from '../../lib/liftBalance'
 import { shareLiftOnWhatsApp } from '../../lib/whatsappShare'
+import { isStockLift } from '../../lib/stockLift'
 import { useTradeStore } from '../../store/TradeStore'
 import {
   DetailGroup,
@@ -73,6 +75,8 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
 
   const partyName = lift.stockLift ? lift.sellerName : (lift.buyerName || lift.sellerName)
   const orderSummary = formatLiftOrderSummary(lift)
+  const primaryPoRef = allocations[0]?.poRef ?? lift.poRef
+  const showDispatchFromStock = isStockLift(lift) && Boolean(primaryPoRef)
 
   const dockToggle = onDockChange && (
     <button
@@ -93,6 +97,12 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
       icon: Pencil,
       href: `/lifts/${lift.liftRef}/edit`,
     },
+    ...(showDispatchFromStock ? [{
+      type: 'link' as const,
+      label: 'Dispatch from stock',
+      icon: Truck,
+      href: `/lifts/new?poRef=${encodeURIComponent(primaryPoRef)}`,
+    }] : []),
     {
       type: 'link' as const,
       label: 'PO flow',

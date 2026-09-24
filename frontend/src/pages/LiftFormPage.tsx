@@ -35,7 +35,7 @@ import {
   type LiftTankerFieldErrorMap,
   collectLiftTankerFieldErrors,
 } from '../lib/liftTankers'
-import { allocationTotal, formatLiftOrderSummary, getLiftAllocations, remainingOnOrder } from '../lib/liftAllocations'
+import { allocationTotal, formatLiftOrderSummary, getLiftAllocations, remainingOnOrder, remainingOnPoForDispatch } from '../lib/liftAllocations'
 import { formatLiftRef, formatPoRef } from '../lib/tradeRefs'
 import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
 import { uniqueSorted } from '../lib/orderFilters'
@@ -378,7 +378,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
         : (pool.find(p => p.ref === so.poRef) ?? pool[0])?.ref ?? row.poRef
       const po = store.tradeOrders.find(o => o.ref === poRef && o.side === 'purchase')
       const soLeft = remainingOnOrder(so, store.lifts)
-      const poLeft = po ? remainingOnOrder(po, store.lifts) : soLeft
+      const poLeft = po ? remainingOnPoForDispatch(po, store.lifts) : soLeft
       const qty = Math.max(0, Math.min(soLeft, poLeft))
       return { ...row, poRef, qty: qty > 0 ? String(qty) : '' }
     }))

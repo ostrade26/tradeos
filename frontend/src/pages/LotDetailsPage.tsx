@@ -51,10 +51,10 @@ export function LotDetailsPage() {
     if (!lot) return []
 
     const poLifts = lifts
-      .filter(l => liftTouchesRef(l, poRef))
-      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter(l => !l.deletedAt && liftTouchesRef(l, poRef))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.liftRef - b.liftRef)
 
-    let balance = lot.quantityPurchased
+    let onHand = 0
     const rows: {
       id: string
       type: string
@@ -66,25 +66,40 @@ export function LotDetailsPage() {
       id: 'purchase',
       type: 'Purchase (PO)',
       quantity: lot.quantityPurchased,
-      balance,
+      balance: 0,
       date: lot.purchaseDate,
       ref: poRef,
     }]
 
     for (const lift of poLifts) {
-      const qty = getLiftAllocations(lift)
-        .filter(a => a.poRef === poRef)
-        .reduce((s, a) => s + a.qtyMt, 0)
+      const allocs = getLiftAllocations(lift).filter(a => a.poRef === poRef)
+      const qty = allocs.reduce((s, a) => s + a.qtyMt, 0)
       if (qty <= 0) continue
-      balance = Math.max(0, balance - qty)
-      rows.push({
-        id: lift.id,
-        type: 'Lift / Dispatch',
-        quantity: -qty,
-        balance,
-        date: lift.date,
-        ref: formatLiftRef(lift.liftRef),
-      })
+
+      // Own-stock lifts bring goods into the godown; SO lifts dispatch them out.
+      const isStockIn = lift.stockLift === true || (allocs.length > 0 && allocs.every(a => !a.soRef))
+
+      if (isStockIn) {
+        onHand += qty
+        rows.push({
+          id: lift.id,
+          type: 'Stock in (own stock)',
+          quantity: qty,
+          balance: onHand,
+          date: lift.date,
+          ref: formatLiftRef(lift.liftRef),
+        })
+      } else {
+        onHand = Math.max(0, onHand - qty)
+        rows.push({
+          id: lift.id,
+          type: 'Dispatch',
+          quantity: -qty,
+          balance: onHand,
+          date: lift.date,
+          ref: formatLiftRef(lift.liftRef),
+        })
+      }
     }
 
     return rows.reverse()
@@ -125,16 +140,27 @@ export function LotDetailsPage() {
           { label: lot.lotNumber },
         ]} />}
         actions={
-          <Button to={`/inventory/${lot.id}/sell`} size="sm">
-            Sell from this lot
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {lot.remaining > 0 && (
+              <Button
+                to={`/lifts/new?poRef=${encodeURIComponent(poRef)}`}
+                size="sm"
+                variant="outline"
+              >
+                Dispatch from stock
+              </Button>
+            )}
+            <Button to={`/inventory/${lot.id}/sell`} size="sm">
+              Sell from this lot
+            </Button>
+          </div>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Purchase Price" value={formatContractRate(lot.purchasePrice)} />
-        <StatCard label="Remaining" value={formatQty(lot.remaining, lot.unit)} change={`of ${formatQty(lot.quantityPurchased, lot.unit)}`} changeType="neutral" />
-        <StatCard label="Allocated" value={formatQty(lot.allocated, lot.unit)} change={`${formatQty(lot.available, lot.unit)} available`} changeType={lot.available < 0 ? 'down' : 'neutral'} />
+        <StatCard label="On hand" value={formatQty(lot.remaining, lot.unit)} change={`of ${formatQty(lot.quantityPurchased, lot.unit)} purchased`} changeType="neutral" />
+        <StatCard label="Allocated" value={formatQty(lot.allocated, lot.unit)} change={`${formatQty(lot.available, lot.unit)} available to sell`} changeType={lot.available < 0 ? 'down' : 'neutral'} />
         <StatCard label="Lot Value" value={formatCurrency(lotValue)} icon={<TrendingUp className="h-4 w-4" />} />
       </div>
 
@@ -240,7 +266,7 @@ export function LotDetailsPage() {
                   { label: 'PO Quantity', value: formatQty(lot.quantityPurchased, lot.unit) },
                   { label: 'Allocated', value: formatQty(lot.allocated, lot.unit) },
                   {
-                    label: 'Available',
+                    label: 'Avail. to sell',
                     value: formatQty(lot.available, lot.unit),
                     valueClassName: availableQtyClass(lot.available),
                   },

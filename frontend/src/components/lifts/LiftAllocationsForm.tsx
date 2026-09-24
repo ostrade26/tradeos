@@ -6,7 +6,7 @@ import { cn, formatQty } from '../../lib/utils'
 import { sanitizeQtyInput } from '../../lib/liftTankers'
 import { orderDropdownOption } from '../../lib/orderSelectOptions'
 import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
-import { remainingOnOrder } from '../../lib/liftAllocations'
+import { remainingOnOrder, remainingOnPoForDispatch } from '../../lib/liftAllocations'
 import { poolPOsForSo, isCrossPoAllocation } from '../../lib/sellerLiftPool'
 import { Badge } from '../ui/Badge'
 import type { Lift, TradeOrder } from '../../data/mockData'
@@ -60,7 +60,7 @@ function AvailableQtyCaption({ available, requested }: { available: number; requ
       'text-xs tabular-nums mt-1',
       enough ? 'text-success' : 'text-danger',
     )}>
-      {formatQty(available)} MT available
+      {formatQty(available)} available
     </p>
   )
 }
@@ -97,7 +97,7 @@ export function LiftAllocationsForm({
       : (pool.find(p => p.ref === so?.poRef) ?? pool[0])?.ref ?? ''
     const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
     const soLeft = so ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, soRef, 'soRef', row.id) : 0
-    const poLeft = po ? remainingOnOrder(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
+    const poLeft = po ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
     const qty = Math.max(0, Math.min(soLeft, poLeft || soLeft))
     updateRow(row.id, {
       soRef,
@@ -110,7 +110,7 @@ export function LiftAllocationsForm({
     const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
     const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
     const soLeft = so ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id) : 0
-    const poLeft = po ? remainingOnOrder(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
+    const poLeft = po ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
     const qty = Math.max(0, Math.min(soLeft, poLeft || soLeft))
     updateRow(row.id, {
       poRef,
@@ -127,11 +127,11 @@ export function LiftAllocationsForm({
     }
     const pool = poolPOsForSo(next, orders)
       .filter(p => p.status !== 'completed')
-      .filter(p => remainingOnOrder(p, lifts, excludeLiftId) > 0)
+      .filter(p => remainingOnPoForDispatch(p, lifts, excludeLiftId) > 0)
     const po = pool.find(p => p.ref === next.poRef) ?? pool[0]
     const soLeft = remainingOnOrder(next, lifts, excludeLiftId)
     const poLeft = po
-      ? remainingOnOrder(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, po.ref, 'poRef', '')
+      ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, po.ref, 'poRef', '')
       : soLeft
     onChange([...rows, newAllocationDraft({
       soRef: next.ref,
@@ -187,7 +187,7 @@ export function LiftAllocationsForm({
             ? (() => {
               const po = orders.find(o => o.ref === row.poRef && o.side === 'purchase')
               return po
-                ? remainingOnOrder(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.poRef, 'poRef', row.id)
+                ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.poRef, 'poRef', row.id)
                 : 0
             })()
             : soLeft
@@ -253,7 +253,7 @@ export function LiftAllocationsForm({
                         const booked = so?.poRef === p.ref
                         return orderDropdownOption(
                           p,
-                          Math.max(0, remainingOnOrder(p, lifts, excludeLiftId) - qtyOnOtherRows(rows, p.ref, 'poRef', row.id)),
+                          Math.max(0, remainingOnPoForDispatch(p, lifts, excludeLiftId) - qtyOnOtherRows(rows, p.ref, 'poRef', row.id)),
                           booked || !so?.poRef ? [] : ['same seller'],
                         )
                       })

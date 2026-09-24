@@ -98,10 +98,34 @@ export function allocationTotal(allocations: LiftAllocation[]): number {
 /** Qty already committed to a PO or SO by other lifts. */
 export function qtyCommittedOnRef(lifts: Lift[], ref: string, excludeLiftId?: string): number {
   return roundQtyMt(lifts
-    .filter(l => l.id !== excludeLiftId)
+    .filter(l => l.id !== excludeLiftId && !l.deletedAt)
     .reduce((sum, l) => {
       const part = getLiftAllocations(l)
         .filter(a => a.poRef === ref || (a.soRef && a.soRef === ref))
+        .reduce((s, a) => s + a.qtyMt, 0)
+      return sum + part
+    }, 0))
+}
+
+/** SO-linked lift qty against a PO (excludes own-stock lifts). */
+export function qtySoDispatchOnPo(lifts: Lift[], poRef: string, excludeLiftId?: string): number {
+  return roundQtyMt(lifts
+    .filter(l => l.id !== excludeLiftId && !l.deletedAt)
+    .reduce((sum, l) => {
+      const part = getLiftAllocations(l)
+        .filter(a => a.poRef === poRef && Boolean(a.soRef))
+        .reduce((s, a) => s + a.qtyMt, 0)
+      return sum + part
+    }, 0))
+}
+
+/** Own-stock / stock-in qty on this PO (allocations with no soRef). */
+export function qtyStockOnPo(lifts: Lift[], poRef: string, excludeLiftId?: string): number {
+  return roundQtyMt(lifts
+    .filter(l => l.id !== excludeLiftId && !l.deletedAt)
+    .reduce((sum, l) => {
+      const part = getLiftAllocations(l)
+        .filter(a => a.poRef === poRef && !a.soRef)
         .reduce((s, a) => s + a.qtyMt, 0)
       return sum + part
     }, 0))
@@ -112,7 +136,31 @@ export function remainingOnOrder(
   lifts: Lift[],
   excludeLiftId?: string,
 ): number {
+  if (order.side === 'purchase') {
+    // Qty still at seller: contract − max(stock-in, SO-dispatch) so stock+dispatch
+    // from the same tonnes does not double-consume capacity.
+    const boughtBack = (order.buyBacks ?? []).reduce((s, b) => s + b.qtyMt, 0)
+    const cap = Math.max(0, order.orderQty - boughtBack)
+    const stock = qtyStockOnPo(lifts, order.ref, excludeLiftId)
+    const soDispatch = qtySoDispatchOnPo(lifts, order.ref, excludeLiftId)
+    return roundQtyMt(Math.max(0, cap - Math.max(stock, soDispatch)))
+  }
   return roundQtyMt(Math.max(0, order.orderQty - qtyCommittedOnRef(lifts, order.ref, excludeLiftId)))
+}
+
+/**
+ * PO qty still available for SO dispatch lifts.
+ * Own-stock lifts already brought goods in — they do not block dispatching that stock to an SO.
+ */
+export function remainingOnPoForDispatch(
+  po: TradeOrder,
+  lifts: Lift[],
+  excludeLiftId?: string,
+): number {
+  if (po.side !== 'purchase') return remainingOnOrder(po, lifts, excludeLiftId)
+  const boughtBack = (po.buyBacks ?? []).reduce((s, b) => s + b.qtyMt, 0)
+  const cap = Math.max(0, po.orderQty - boughtBack)
+  return roundQtyMt(Math.max(0, cap - qtySoDispatchOnPo(lifts, po.ref, excludeLiftId)))
 }
 
 export function scaleAllocations(allocations: LiftAllocation[], nextTotal: number): LiftAllocation[] {
@@ -226,7 +274,7 @@ export function validateLiftAllocations(
   for (const [poRef, qty] of usedOnPo) {
     const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
     if (!po) continue
-    const remaining = remainingOnOrder(po, lifts, excludeLiftId)
+    const remaining = remainingOnPoForDispatch(po, lifts, excludeLiftId)
     if (qty > remaining) {
       return `${poRef} only has ${formatQty(remaining)} left to lift`
     }

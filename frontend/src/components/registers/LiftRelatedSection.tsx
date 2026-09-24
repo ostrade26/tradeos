@@ -131,15 +131,24 @@ function StockAllocationCard({
   return (
     <RelatedCard>
       <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
-        <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+        <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+            <Link
+              to={appPath(`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`)}
+              onClick={onNavigate}
+              className="text-[13px] font-medium text-accent hover:underline shrink-0"
+            >
+              {formatPoRef(allocation.poRef)}
+            </Link>
+            <span className="text-[13px] text-muted">Stock lift · not linked to an SO</span>
+          </div>
           <Link
-            to={appPath(`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`)}
+            to={appPath(`/lifts/new?poRef=${encodeURIComponent(allocation.poRef)}`)}
             onClick={onNavigate}
             className="text-[13px] font-medium text-accent hover:underline shrink-0"
           >
-            {formatPoRef(allocation.poRef)}
+            Dispatch from stock
           </Link>
-          <span className="text-[13px] text-muted">Stock lift · not linked to an SO</span>
         </div>
       </div>
       <ThisLiftRows lift={lift} qtyMt={allocation.qtyMt} onNavigate={onNavigate} />

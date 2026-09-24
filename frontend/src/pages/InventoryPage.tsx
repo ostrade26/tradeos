@@ -91,7 +91,7 @@ function InventoryItemStat({
       )}>
         <div className="grid grid-cols-2 gap-3">
           <div className="min-w-0">
-            <p className="text-xs text-caption">Available</p>
+            <p className="text-xs text-caption">Avail. to sell</p>
             <p className={cn('font-semibold tabular-nums mt-0.5', density.text, availableQtyClass(available))}>
               {formatQty(available, unit)}
             </p>
@@ -149,9 +149,9 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
 
                 <div className="mt-4">
                   <DetailInlineStatRow>
-                    <DetailInlineStat label="Remaining" value={formatQty(lot.remaining, lot.unit)} />
+                    <DetailInlineStat label="On hand" value={formatQty(lot.remaining, lot.unit)} />
                     <DetailInlineStat
-                      label="Available"
+                      label="Avail. to sell"
                       value={formatQty(lot.available, lot.unit)}
                       valueClassName={availableQtyClass(lot.available)}
                     />
@@ -300,7 +300,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
     },
     {
       key: 'remaining',
-      header: 'Remaining',
+      header: 'On hand',
       className: 'text-right whitespace-nowrap min-w-[6rem]',
       sortable: true,
       sortValue: (lot: Lot) => lot.remaining,
@@ -322,7 +322,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
     },
     {
       key: 'available',
-      header: 'Available',
+      header: 'Avail. to sell',
       className: 'text-right whitespace-nowrap min-w-[6.5rem]',
       sortable: true,
       sortValue: (lot: Lot) => lot.available,
@@ -378,7 +378,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
             <p className="font-medium text-heading truncate">{lot.commodity}</p>
             <div className="flex items-center justify-between text-sm">
               <span className={cn('tabular-nums font-medium', availableQtyClass(lot.available))}>
-                {formatMt(lot.available)} available
+                {formatMt(lot.available)} avail. to sell
               </span>
               <span className="text-muted tabular-nums">{formatMt(lot.remaining)} on hand</span>
             </div>

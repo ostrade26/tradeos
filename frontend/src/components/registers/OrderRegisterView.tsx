@@ -555,7 +555,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         },
         {
           key: 'available',
-          header: 'Avail. to Sell',
+          header: 'Open to book',
           className: 'text-right',
           sortable: true,
           sortValue: (r: TradeOrder) => availableOnPO(store, r.ref),
@@ -753,7 +753,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         ? [
             { key: 'buyBackQty' as const, header: 'Buy back' },
             { key: 'allocation' as const, header: 'Allocation' },
-            { key: 'available' as const, header: 'Avail. to Sell' },
+            { key: 'available' as const, header: 'Open to book' },
           ]
         : []),
       { key: 'liftedQty', header: 'Delivered' },
@@ -1078,7 +1078,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                   )}
                   {available != null && (
                     <p className={cn('text-sm tabular-nums', availableQtyClass(available))}>
-                      Avail. to sell: {formatMt(available)}
+                      Open to book: {formatMt(available)}
                     </p>
                   )}
                 </div>

@@ -51,16 +51,21 @@ def get_sos_for_po(orders: list[dict], po_ref: str) -> list[dict]:
     ]
 
 
-def get_remaining_sell_qty(orders: list[dict], po_ref: str) -> float:
+def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | None = None) -> float:
+    """Open PO qty still allocatable to new SOs. Own-stock lifts stay sellable against the PO."""
+    del lifts  # kept for call-site compatibility; stock does not reduce sellable qty
     po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
     if not po:
         return 0
     sold = sum(
         o.get("orderQty", 0)
         for o in orders
-        if o.get("side") == "sale" and o.get("poRef") == po_ref and o.get("status") != "cancelled"
+        if o.get("side") == "sale"
+        and o.get("poRef") == po_ref
+        and o.get("status") != "cancelled"
+        and not o.get("deleteScheduledAt")
     )
-    return round_qty_mt(effective_po_qty(po) - sold)
+    return round_qty_mt(max(0, effective_po_qty(po) - sold))
 
 
 def _producer_to_company(producer: dict) -> dict:
@@ -133,32 +138,53 @@ def apply_lift_totals(data: dict) -> dict:
 
     Keys are side-prefixed (``purchase:`` / ``sale:``) so a PO and SO that share
     the same bare ref (common after spreadsheet import) do not double-count.
+
+    For POs, own-stock lifts and later SO dispatches from that stock must not
+    double-count against ``liftedQty`` (qty that left the seller):
+    ``lifted_from_seller = max(stock_in, so_dispatch)``.
     """
-    committed_by_ref: dict[str, float] = {}
-    delivered_by_ref: dict[str, float] = {}
+    # Per PO: stock-in vs SO-dispatch, committed (all) and delivered-only
+    po_stock_committed: dict[str, float] = {}
+    po_so_committed: dict[str, float] = {}
+    po_stock_delivered: dict[str, float] = {}
+    po_so_delivered: dict[str, float] = {}
+    so_committed: dict[str, float] = {}
+    so_delivered: dict[str, float] = {}
+
     for lift in data.get("lifts") or []:
         if lift.get("deletedAt"):
             continue
         delivered = (lift.get("status") or "delivered") == "delivered"
         for a in get_lift_allocations(lift):
-            po_key = f"purchase:{a['poRef']}"
-            committed_by_ref[po_key] = committed_by_ref.get(po_key, 0) + a["qtyMt"]
+            po_ref = a["poRef"]
+            qty = float(a.get("qtyMt") or 0)
             so_ref = a.get("soRef") or ""
             if so_ref:
-                so_key = f"sale:{so_ref}"
-                committed_by_ref[so_key] = committed_by_ref.get(so_key, 0) + a["qtyMt"]
-            if delivered:
-                delivered_by_ref[po_key] = delivered_by_ref.get(po_key, 0) + a["qtyMt"]
-                if so_ref:
-                    delivered_by_ref[f"sale:{so_ref}"] = (
-                        delivered_by_ref.get(f"sale:{so_ref}", 0) + a["qtyMt"]
-                    )
+                po_so_committed[po_ref] = po_so_committed.get(po_ref, 0) + qty
+                so_committed[so_ref] = so_committed.get(so_ref, 0) + qty
+                if delivered:
+                    po_so_delivered[po_ref] = po_so_delivered.get(po_ref, 0) + qty
+                    so_delivered[so_ref] = so_delivered.get(so_ref, 0) + qty
+            else:
+                po_stock_committed[po_ref] = po_stock_committed.get(po_ref, 0) + qty
+                if delivered:
+                    po_stock_delivered[po_ref] = po_stock_delivered.get(po_ref, 0) + qty
 
     trade_orders = []
     for o in data.get("tradeOrders") or []:
-        key = f"purchase:{o['ref']}" if o.get("side") == "purchase" else f"sale:{o['ref']}"
-        committed = committed_by_ref.get(key, 0)
-        lifted = delivered_by_ref.get(key, 0)
+        if o.get("side") == "purchase":
+            ref = o["ref"]
+            stock_c = po_stock_committed.get(ref, 0)
+            so_c = po_so_committed.get(ref, 0)
+            stock_d = po_stock_delivered.get(ref, 0)
+            so_d = po_so_delivered.get(ref, 0)
+            # max(stock, so_dispatch) == stock + max(0, so_dispatch - stock)
+            committed = round_qty_mt(max(stock_c, so_c))
+            lifted = round_qty_mt(max(stock_d, so_d))
+        else:
+            ref = o["ref"]
+            committed = round_qty_mt(so_committed.get(ref, 0))
+            lifted = round_qty_mt(so_delivered.get(ref, 0))
         updated = {**o, "committedLiftQty": committed, "liftedQty": lifted}
         updated["status"] = order_status(updated)
         trade_orders.append(updated)
@@ -274,29 +300,59 @@ def sync_lot_quantities(data: dict) -> dict:
             lots.append(lot)
             continue
         linked_sos = get_sos_for_po(orders, po_ref)
-        allocated = sum(o.get("orderQty", 0) for o in linked_sos)
-        stock_lift_qty = 0.0
+        allocated = sum(
+            o.get("orderQty", 0)
+            for o in linked_sos
+            if o.get("status") != "cancelled" and not o.get("deleteScheduledAt")
+        )
+        # On hand = delivered own-stock minus delivered SO dispatches from this PO.
+        stock_in_delivered = 0.0
+        so_out_delivered = 0.0
         for lift in lifts:
             if lift.get("deletedAt"):
                 continue
+            if (lift.get("status") or "delivered") != "delivered":
+                continue
             for a in get_lift_allocations(lift):
-                if a.get("poRef") == po_ref and not a.get("soRef"):
-                    stock_lift_qty += a.get("qtyMt", 0) or 0
-        stock_lift_qty = round_qty_mt(stock_lift_qty)
+                if a.get("poRef") != po_ref:
+                    continue
+                qty = float(a.get("qtyMt") or 0)
+                if a.get("soRef"):
+                    so_out_delivered += qty
+                else:
+                    stock_in_delivered += qty
+        stock_in_delivered = round_qty_mt(stock_in_delivered)
+        so_out_delivered = round_qty_mt(so_out_delivered)
+        on_hand = round_qty_mt(max(0.0, stock_in_delivered - so_out_delivered))
+
         effective = effective_po_qty(po)
         avg_so_rate = sum(o.get("rate", 0) for o in linked_sos) / len(linked_sos) if linked_sos else 0
         margin = lot.get("margin", 0)
         if avg_so_rate > po.get("rate", 0):
             margin = ((avg_so_rate - po["rate"]) / po["rate"]) * 100
+
+        # Avail to sell from godown = on hand − SO qty still left to lift.
+        # Before any stock-in, allow pre-selling the open PO qty (book against PO).
+        # Once stock has been received, do not fall back to PO open qty when on hand is 0.
+        if stock_in_delivered > 0:
+            so_unlifted = sum(
+                max(0.0, float(so.get("orderQty") or 0) - float(so.get("liftedQty") or 0))
+                for so in linked_sos
+                if so.get("status") != "cancelled" and not so.get("deleteScheduledAt")
+            )
+            available = max(0.0, on_hand - round_qty_mt(so_unlifted))
+        else:
+            available = max(0.0, effective - allocated)
+
         lots.append(
             {
                 **lot,
                 "commodity": po["itemName"],
                 "purchasePrice": po["rate"],
                 "quantityPurchased": round_qty_mt(po["orderQty"]),
-                "remaining": round_qty_mt(max(0, effective - po.get("liftedQty", 0))),
+                "remaining": round_qty_mt(on_hand),
                 "allocated": round_qty_mt(allocated),
-                "available": round_qty_mt(max(0, effective - allocated - stock_lift_qty)),
+                "available": round_qty_mt(available),
                 "producer": po["partyName"],
                 "broker": po["brokerName"],
                 "purchaseDate": po["date"],
@@ -326,7 +382,8 @@ def ensure_lots_for_pos(data: dict) -> dict:
                 **build_lot_from_po(po),
                 "allocated": allocated,
                 "available": round_qty_mt(effective - allocated),
-                "remaining": max(0, effective - po.get("liftedQty", 0)),
+                # No own-stock received yet — on hand is 0 until a stock lift.
+                "remaining": 0,
             }
         )
     return {**data, "lots": lots}

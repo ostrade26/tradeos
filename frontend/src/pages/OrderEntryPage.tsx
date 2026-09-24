@@ -1060,12 +1060,12 @@ function SOEntryForm({
             selectedPO || sellFromLot
               ? [
                   {
-                    label: 'Available before SO',
+                    label: 'Open to book before SO',
                     value: formatQty(availableBeforeSo),
                     valueClassName: cn('font-semibold', availableQtyClass(availableBeforeSo)),
                   },
                   {
-                    label: 'Available after SO',
+                    label: 'Open to book after SO',
                     value: formatQty(availableAfterSo),
                     valueClassName: soRemainingQtyClass(availableAfterSo),
                   },

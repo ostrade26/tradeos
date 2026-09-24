@@ -147,7 +147,7 @@ def allocation_total(allocations: list[dict]) -> float:
 def qty_committed_on_ref(lifts: list[dict], ref: str, exclude_lift_id: str | None = None) -> float:
     total = 0.0
     for lift in lifts:
-        if lift.get("id") == exclude_lift_id:
+        if lift.get("id") == exclude_lift_id or lift.get("deletedAt"):
             continue
         for a in get_lift_allocations(lift):
             if a["poRef"] == ref or (a.get("soRef") and a["soRef"] == ref):
@@ -155,12 +155,52 @@ def qty_committed_on_ref(lifts: list[dict], ref: str, exclude_lift_id: str | Non
     return round_qty_mt(total)
 
 
+def qty_so_dispatch_on_po(lifts: list[dict], po_ref: str, exclude_lift_id: str | None = None) -> float:
+    """SO-linked lift qty against a PO (excludes own-stock lifts)."""
+    total = 0.0
+    for lift in lifts:
+        if lift.get("id") == exclude_lift_id or lift.get("deletedAt"):
+            continue
+        for a in get_lift_allocations(lift):
+            if a.get("poRef") == po_ref and a.get("soRef"):
+                total += a["qtyMt"]
+    return round_qty_mt(total)
+
+
 def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | None = None) -> float:
     from .buy_back import effective_po_qty
 
-    cap = effective_po_qty(order) if order.get("side") == "purchase" else float(order.get("orderQty", 0) or 0)
+    if order.get("side") == "purchase":
+        # Qty still at seller — do not double-count stock-in + SO dispatch from stock.
+        cap = effective_po_qty(order)
+        stock = 0.0
+        so_dispatch = 0.0
+        for lift in lifts:
+            if lift.get("id") == exclude_lift_id or lift.get("deletedAt"):
+                continue
+            for a in get_lift_allocations(lift):
+                if a.get("poRef") != order["ref"]:
+                    continue
+                qty = float(a.get("qtyMt") or 0)
+                if a.get("soRef"):
+                    so_dispatch += qty
+                else:
+                    stock += qty
+        return round_qty_mt(max(0, cap - max(stock, so_dispatch)))
+
+    cap = float(order.get("orderQty", 0) or 0)
     remaining = cap - qty_committed_on_ref(lifts, order["ref"], exclude_lift_id)
     return round_qty_mt(max(0, remaining))
+
+
+def remaining_on_po_for_dispatch(po: dict, lifts: list[dict], exclude_lift_id: str | None = None) -> float:
+    """PO qty available for SO dispatch. Own-stock lifts do not block dispatching that stock."""
+    from .buy_back import effective_po_qty
+
+    if po.get("side") != "purchase":
+        return remaining_on_order(po, lifts, exclude_lift_id)
+    cap = effective_po_qty(po)
+    return round_qty_mt(max(0, cap - qty_so_dispatch_on_po(lifts, po["ref"], exclude_lift_id)))
 
 
 def scale_allocations(allocations: list[dict], next_total: float) -> list[dict]:
@@ -327,7 +367,7 @@ def validate_lift_allocations(
         po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
         if not po:
             continue
-        remaining = remaining_on_order(po, lifts, exclude_lift_id)
+        remaining = remaining_on_po_for_dispatch(po, lifts, exclude_lift_id)
         if qty > remaining:
             return f"{po_ref} only has {format_qty(remaining)} left to lift"
 
