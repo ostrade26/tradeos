@@ -84,6 +84,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
+import { compareSemver } from '../lib/releaseVersion'
 import { isOpenSeatRequest } from '../lib/platformSeatRequestInbox'
 const PLATFORM_SECTIONS = [
   'organisations',
@@ -1033,7 +1034,15 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const latestReleaseId = useMemo(() => {
     const published = releases.filter(r => r.status === 'published')
     if (published.length === 0) return null
-    return published.reduce((best, row) => (row.id > best.id ? row : best), published[0]).id
+    // "Last update" = most recently published, not highest draft id (older drafts can publish later).
+    return published.reduce((best, row) => {
+      const bestAt = best.published_at || ''
+      const rowAt = row.published_at || ''
+      if (rowAt !== bestAt) return rowAt > bestAt ? row : best
+      const versionCmp = compareSemver(row.version, best.version)
+      if (versionCmp !== 0) return versionCmp > 0 ? row : best
+      return row.id > best.id ? row : best
+    }, published[0]).id
   }, [releases])
 
   const relColumns = useMemo(
