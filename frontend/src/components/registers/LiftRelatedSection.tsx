@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Link2 } from 'lucide-react'
 import type { Lift, LiftAllocation, TradeOrder } from '../../data/mockData'
-import { toBeLifted } from '../../data/mockData'
 import { liftsForSoOnPo } from '../../lib/orderRelatedLifts'
 import { formatQty } from '../../lib/utils'
 import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
@@ -61,7 +60,7 @@ function SoAllocationCard({
           <Link
             to={`/sales-orders?ref=${encodeURIComponent(soRef)}`}
             onClick={onNavigate}
-            className="font-mono text-sm font-medium text-accent hover:underline"
+            className="text-sm font-medium text-accent hover:underline"
           >
             {formatSoRef(soRef)}
           </Link>
@@ -73,7 +72,6 @@ function SoAllocationCard({
             deliveredQty={so.liftedQty}
             onLiftQty={onLiftQty}
             pendingQty={pendingQty}
-            toScheduleQty={toBeLifted(so)}
           />
         )}
       />
@@ -99,14 +97,14 @@ function SoAllocationCard({
             <Link
               to={`/purchase-orders?ref=${encodeURIComponent(poRef)}`}
               onClick={onNavigate}
-              className="font-mono text-sm text-accent hover:underline"
+              className="text-sm text-accent hover:underline"
             >
               {formatPoRef(poRef)}{crossPo ? ' (dispatch lot)' : ''}
             </Link>
           )}
         />
         {crossPo && bookedPoRef && (
-          <RelatedDetailRow label="Booked PO" value={<span className="font-mono text-sm">{bookedPoRef}</span>} />
+          <RelatedDetailRow label="Booked PO" value={<span className="text-sm">{bookedPoRef}</span>} />
         )}
         <RelatedDetailRow label="Seller" value={`${po.partyName} · ${formatQty(po.orderQty)} ordered`} />
         {outstandingBalance > 0 && (
@@ -158,7 +156,7 @@ function StockAllocationCard({
             <Link
               to={`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`}
               onClick={onNavigate}
-              className="font-mono text-sm text-accent hover:underline"
+              className="text-sm text-accent hover:underline"
             >
               {formatPoRef(allocation.poRef)}
             </Link>
@@ -189,7 +187,7 @@ function MissingOrderAllocationCard({
     <RelatedCard>
       <RelatedCardHeader
         title={(
-          <span className="font-mono text-sm font-medium text-heading">{refLabel}</span>
+          <span className="text-sm font-medium text-heading">{refLabel}</span>
         )}
         subtitle={party || (missingSide === 'purchase' ? 'Purchase order' : 'Sales order')}
       />
@@ -207,7 +205,7 @@ function MissingOrderAllocationCard({
               <Link
                 to={`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`}
                 onClick={onNavigate}
-                className="font-mono text-sm text-accent hover:underline"
+                className="text-sm text-accent hover:underline"
               >
                 {formatPoRef(allocation.poRef)}
               </Link>

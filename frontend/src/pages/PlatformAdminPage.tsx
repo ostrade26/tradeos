@@ -1828,7 +1828,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             }
             mobileRender={row => (
               <div className="px-4 py-3 space-y-1">
-                <p className="font-medium text-heading font-mono tabular-nums">{row.version}</p>
+                <p className="font-medium text-heading tabular-nums">{row.version}</p>
                 <p className="text-xs text-muted">{row.title}</p>
               </div>
             )}
@@ -2030,7 +2030,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           {suspendLicenceConfirm?.licence_number ? (
             <>
               {' '}
-              (<span className="font-mono text-xs">{suspendLicenceConfirm.licence_number}</span>)
+              (<span className="text-xs">{suspendLicenceConfirm.licence_number}</span>)
             </>
           ) : null}{' '}
           will not be able to sign in until the licence is activated again. Data and seats are kept.
@@ -2087,7 +2087,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
           {editingPlan?.slug ? (
             <>
               {' '}
-              (<span className="font-mono text-xs">{editingPlan.slug}</span>)
+              (<span className="text-xs">{editingPlan.slug}</span>)
             </>
           ) : null}{' '}
           from Plans &amp; Pricing. Organisations still on this plan are moved to another active plan

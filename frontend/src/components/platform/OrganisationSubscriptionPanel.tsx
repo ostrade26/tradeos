@@ -55,7 +55,7 @@ function SeatCard({
             {assignee || (assigned ? 'Licensed user' : 'Unassigned')}
           </p>
           <div className="flex items-center gap-1.5 mt-1 min-w-0">
-            <p className="font-mono text-xs text-muted tabular-nums break-all">{seat.seat_label}</p>
+            <p className="text-xs text-muted tabular-nums break-all">{seat.seat_label}</p>
             <button
               type="button"
               onClick={() => onCopy(seat.id, seat.seat_label)}
@@ -242,7 +242,7 @@ export function OrganisationSubscriptionPanel({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-heading leading-snug">{licence.plan_name}</p>
-                <p className="font-mono text-xs text-muted tabular-nums mt-1">{licence.licence_number}</p>
+                <p className="text-xs text-muted tabular-nums mt-1">{licence.licence_number}</p>
               </div>
               {platformStatusBadge(String(licence.status))}
             </div>
@@ -366,7 +366,7 @@ export function OrganisationSubscriptionPanel({
                       {paymentTypeLabel(String(payment.payment_type))}
                     </p>
                     {hasText(payment.payment_reference) ? (
-                      <p className="font-mono text-xs text-muted tabular-nums mt-1 truncate">
+                      <p className="text-xs text-muted tabular-nums mt-1 truncate">
                         {payment.payment_reference}
                       </p>
                     ) : null}

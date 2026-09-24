@@ -451,7 +451,7 @@ function TeamSection() {
                     <p className="text-sm font-medium text-heading truncate">{admin.name || admin.username}</p>
                     {isYou ? <Badge variant="info">You</Badge> : null}
                   </div>
-                  <p className="text-xs text-muted font-mono mt-0.5 truncate">{admin.username}</p>
+                  <p className="text-xs text-muted mt-0.5 truncate">{admin.username}</p>
                 </div>
                 {isYou ? (
                   <p className="text-xs text-muted shrink-0">Change password in Account</p>
@@ -513,7 +513,7 @@ function ShortcutsSection() {
         ].map(item => (
           <div key={item.keys} className="flex items-center justify-between gap-4 py-3">
             <span className="text-sm text-heading">{item.action}</span>
-            <kbd className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-mono text-muted dark:border-gray-600 dark:bg-gray-800">
+            <kbd className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-muted dark:border-gray-600 dark:bg-gray-800">
               {item.keys}
             </kbd>
           </div>

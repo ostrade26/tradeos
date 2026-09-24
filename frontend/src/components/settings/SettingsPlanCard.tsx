@@ -94,7 +94,7 @@ export function SettingsPlanCard({
               </Badge>
             </div>
             {licenceNumber ? (
-              <p className="mt-1 text-xs font-mono tabular-nums text-muted leading-none">{licenceNumber}</p>
+              <p className="mt-1 text-xs tabular-nums text-muted leading-none">{licenceNumber}</p>
             ) : null}
           </div>
           {headerAction ? <div className="shrink-0">{headerAction}</div> : null}

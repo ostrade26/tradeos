@@ -260,7 +260,7 @@ export function PartyPage() {
                   <div className="space-y-2">
                     {lots.map(lot => (
                       <Link key={lot.id} to={`/inventory/${lot.id}`} className="flex justify-between rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                        <span className="font-mono text-sm">{lot.lotNumber}</span>
+                        <span className="text-sm">{lot.lotNumber}</span>
                         <Badge variant="info">{formatQty(lot.available)} available</Badge>
                       </Link>
                     ))}
@@ -284,7 +284,7 @@ export function PartyPage() {
               emptyState={tabEmptyState('No purchase orders', 'POs with this party will appear here.')}
               columns={[
                 { key: 'ref', header: 'Ref', render: r => (
-                  <Link to={`/purchase-orders?ref=${encodeURIComponent(r.ref)}`} className="font-mono text-accent hover:underline">{formatOrderRef(r.ref, r.side)}</Link>
+                  <Link to={`/purchase-orders?ref=${encodeURIComponent(r.ref)}`} className="text-accent hover:underline">{formatOrderRef(r.ref, r.side)}</Link>
                 )},
                 { key: 'date', header: 'Date', render: r => <span className="tabular-nums">{formatDate(r.date)}</span> },
                 { key: 'item', header: 'Item', render: r => r.itemName },
@@ -304,7 +304,7 @@ export function PartyPage() {
               emptyState={tabEmptyState('No sales orders', 'SOs with this party will appear here.')}
               columns={[
                 { key: 'ref', header: 'Ref', render: r => (
-                  <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="font-mono text-accent hover:underline">{formatOrderRef(r.ref, r.side)}</Link>
+                  <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="text-accent hover:underline">{formatOrderRef(r.ref, r.side)}</Link>
                 )},
                 { key: 'poRef', header: 'PO', render: r => r.poRef ?? '—' },
                 { key: 'item', header: 'Item', render: r => r.itemName },

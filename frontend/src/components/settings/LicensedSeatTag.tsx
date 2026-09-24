@@ -31,7 +31,7 @@ export function LicensedSeatTag({
     >
       <span className="inline-flex items-center gap-2 px-2.5 py-1.5">
         <span
-          className={cn('font-mono tabular-nums', onBlue ? 'text-white/85' : 'text-muted')}
+          className={cn('tabular-nums', onBlue ? 'text-white/85' : 'text-muted')}
         >
           {seat.seat_label}
         </span>

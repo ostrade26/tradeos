@@ -162,7 +162,7 @@ export function LotDetailsPage() {
                 qtyNote
                 columns={[
                   { key: 'ref', header: 'SO Ref#', render: (r: typeof allocations[0]) => (
-                    <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="font-mono text-accent hover:underline text-sm">{formatSoRef(r.ref)}</Link>
+                    <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="text-accent hover:underline text-sm">{formatSoRef(r.ref)}</Link>
                   )},
                   { key: 'retailer', header: 'Buyer' },
                   { key: 'poQty', header: 'PO Qty', render: () => <span className="tabular-nums">{formatMt(lot.quantityPurchased)}</span>, className: 'text-right' },
@@ -215,7 +215,7 @@ export function LotDetailsPage() {
                     <span className={cn('tabular-nums', r.quantity > 0 ? 'text-success' : 'text-danger')}>{r.quantity > 0 ? '+' : ''}{formatMt(r.quantity)}</span>
                   ), className: 'text-right' },
                   { key: 'balance', header: 'Balance', render: (r) => <span className="tabular-nums">{formatMt(r.balance)}</span>, className: 'text-right' },
-                  { key: 'ref', header: 'Reference', render: (r) => <span className="font-mono">{r.ref}</span> },
+                  { key: 'ref', header: 'Reference', render: (r) => <span className="">{r.ref}</span> },
                 ]}
                 data={movements}
               />

@@ -131,7 +131,7 @@ export function PlatformFeatureOfferUsageDrawer({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-heading truncate">{org.organisation_name}</p>
                   {org.org_code ? (
-                    <p className="text-xs text-muted font-mono mt-0.5">{org.org_code}</p>
+                    <p className="text-xs text-muted mt-0.5">{org.org_code}</p>
                   ) : null}
                 </div>
                 <p className="text-xs text-muted tabular-nums shrink-0">
@@ -157,7 +157,7 @@ export function PlatformFeatureOfferUsageDrawer({
                   <p className="text-xs text-muted mt-0.5">
                     {req.requested_by_name ? `Requested by ${req.requested_by_name}` : 'Access request'}
                     {req.org_code ? (
-                      <span className="font-mono"> · {req.org_code}</span>
+                      <span className=""> · {req.org_code}</span>
                     ) : null}
                   </p>
                 </div>

@@ -83,7 +83,7 @@ export const PlatformFeatureAccessPanel = forwardRef<
               render: r => (
                 <div>
                   <p className="font-medium text-heading">{r.feature_title}</p>
-                  <p className="text-xs text-muted font-mono">{r.feature_key}</p>
+                  <p className="text-xs text-muted">{r.feature_key}</p>
                 </div>
               ),
             },

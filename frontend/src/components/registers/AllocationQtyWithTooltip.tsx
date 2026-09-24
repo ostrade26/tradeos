@@ -35,7 +35,7 @@ export function AllocationQtyWithTooltip({
                 key={line.soRef}
                 className="flex items-baseline justify-between gap-4 text-xs text-heading"
               >
-                <span className="font-mono font-medium">{formatSoRef(line.soRef)}</span>
+                <span className="font-medium">{formatSoRef(line.soRef)}</span>
                 <span className="tabular-nums text-muted">{formatMt(line.qtyMt)}</span>
               </li>
             ))}

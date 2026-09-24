@@ -133,7 +133,7 @@ function PlanPreview({
             <p className={cn('text-lg font-semibold tracking-tight', name ? 'text-heading' : 'text-muted')}>
               {name || 'Plan name'}
             </p>
-            <p className={cn('text-xs font-mono mt-0.5', slug ? 'text-muted' : 'text-muted/70')}>
+            <p className={cn('text-xs mt-0.5', slug ? 'text-muted' : 'text-muted/70')}>
               {slug || 'slug'}
             </p>
           </div>

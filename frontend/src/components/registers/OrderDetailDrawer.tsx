@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users,
   Package,
   IndianRupee,
   FileText,
@@ -15,20 +14,21 @@ import {
   Plus,
   Trash2,
   Undo2,
+  TrendingUp,
 } from 'lucide-react'
 import { Drawer, DockedPanel } from '../ui/Drawer'
 import { DetailPanelMenu, groupMenuItems, type DetailPanelMenuItem } from '../ui/DetailPanelMenu'
 import { Badge, StatusBadge } from '../ui/Badge'
 import { VerifiedPeriod } from '../ui/GroupedDataTable'
-import { formatDate, formatCurrency, formatQty } from '../../lib/utils'
-import { formatContractRate, orderLineAmount, contractRateFromOrder } from '../../lib/orderRate'
+import { formatDate, formatQty } from '../../lib/utils'
+import { formatContractRate } from '../../lib/orderRate'
 import { formatOrderRef, refCore } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
-import { useAccountTrader } from '../../lib/useAccountTrader'
 import {
   type TradeOrder,
   type OrderSide,
   toBeLifted,
+  unliftedQty,
 } from '../../data/mockData'
 import { canBuyBackPO, totalBuyBackQty } from '../../lib/buyBack'
 import { BuyBackModal } from '../orders/BuyBackModal'
@@ -44,21 +44,12 @@ import {
   DetailInlineStat,
   DetailInlineStatRow,
   DetailMetricsSection,
-  PartyRow,
 } from './DetailPanelSections'
 import { OrderDetailFooter } from './OrderDetailFooter'
 import { OrderRelatedSection } from './OrderRelatedSection'
-import { TradeProfitSection } from '../orders/TradeProfitSection'
+import { TradeProfitModal } from '../orders/TradeProfitModal'
 import { shareOrderOnWhatsApp } from '../../lib/whatsappShare'
 import { appPath } from '../../lib/appShellMode'
-
-function formatBrokerage(order: TradeOrder): string {
-  if (order.brokeragePerTon != null && order.brokeragePerTon > 0) {
-    return `₹${order.brokeragePerTon.toLocaleString('en-IN')}/MT`
-  }
-  if (order.brokeragePct > 0) return `${order.brokeragePct}%`
-  return '—'
-}
 
 interface OrderDetailDrawerProps {
   order: TradeOrder | null
@@ -77,13 +68,14 @@ export function OrderDetailDrawer({
 }: OrderDetailDrawerProps) {
   const store = useTradeStore()
   const { canEditOrders, canCreateOrders, canDeleteOrders } = usePermissions()
-  const { name: accountTrader } = useAccountTrader()
   const [buyBackOpen, setBuyBackOpen] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
+  const [tradeProfitOpen, setTradeProfitOpen] = useState(false)
 
   useEffect(() => {
     setBuyBackOpen(false)
     setCloseOpen(false)
+    setTradeProfitOpen(false)
   }, [order?.ref])
 
   const closeCheck = useMemo(
@@ -129,6 +121,9 @@ export function OrderDetailDrawer({
         items: [
           { type: 'link', label: 'Flow', icon: GitBranch, href: `${pathPrefix}/${ref}/flow` },
           { type: 'link', label: 'Timeline', icon: History, href: `${pathPrefix}/${ref}/timeline` },
+          ...(isPO
+            ? [{ type: 'button' as const, label: 'Trade profit', icon: TrendingUp, onClick: () => setTradeProfitOpen(true) }]
+            : []),
         ],
       },
       ...(canEditOrders
@@ -177,16 +172,15 @@ export function OrderDetailDrawer({
 
   const isPO = order.side === 'purchase'
   const shortLabel = isPO ? 'PO' : 'SO'
-  const contractRate = contractRateFromOrder(order.rate, order.rateBasis, order.ratePerBasis)
-  const lineAmount = orderLineAmount(order.orderQty, contractRate, order.rateBasis)
   const remaining = toBeLifted(order)
-  const liftPct = order.orderQty > 0 ? Math.min(100, (order.liftedQty / order.orderQty) * 100) : 0
+  const pending = unliftedQty(order)
 
   const linkedSOs = isPO ? store.getSOsForPO(order.ref) : []
   const buyBackTotal = isPO ? totalBuyBackQty(order) : 0
 
-  const seller = order.sellerName || (isPO ? order.partyName : accountTrader)
-  const buyer = order.buyerName || (!isPO ? order.partyName : accountTrader)
+  const productLine = order.spot
+    ? `${order.itemName} • ${order.spot}`
+    : order.itemName
 
   const dockToggle = onDockChange && (
     <button
@@ -213,8 +207,6 @@ export function OrderDetailDrawer({
       isPO={isPO}
       remaining={remaining}
       linkedSoCount={linkedSOs.length}
-      buyBackOk={canEditOrders && buyBackCheck.ok}
-      onBuyBack={() => setBuyBackOpen(true)}
       onPanelClose={onClose}
     />
   )
@@ -222,18 +214,16 @@ export function OrderDetailDrawer({
   const content = (
     <DetailPanelBody>
       <DetailHero>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-base font-semibold text-heading leading-snug">{order.itemName}</p>
-            {order.spot && (
-              <p className="text-xs text-muted mt-0.5 leading-snug">{order.spot}</p>
-            )}
-          </div>
-          <div className="flex flex-wrap justify-end gap-1.5 shrink-0 max-w-[52%]">
-            {isPO && <BuyBackTag order={order} />}
-            <StatusBadge status={order.status} />
-            {closureLabel && <Badge variant="default">{closureLabel}</Badge>}
-            {order.deliveryType === 'ready' && <Badge variant="info">Ready</Badge>}
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-heading leading-snug">{order.partyName}</p>
+          <div className="flex items-start justify-between gap-3 mt-0.5">
+            <p className="text-[14px] text-muted leading-snug min-w-0">{productLine}</p>
+            <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
+              {isPO && <BuyBackTag order={order} />}
+              <StatusBadge status={order.status} />
+              {closureLabel && <Badge variant="default">{closureLabel}</Badge>}
+              {order.deliveryType === 'ready' && <Badge variant="info">Ready</Badge>}
+            </div>
           </div>
         </div>
       </DetailHero>
@@ -242,44 +232,9 @@ export function OrderDetailDrawer({
         <DetailInlineStatRow>
           <DetailInlineStat label="Order" value={formatQty(order.orderQty)} />
           <DetailInlineStat label="Delivered" value={formatQty(order.liftedQty)} valueClassName="text-success" />
-          <DetailInlineStat
-            label="Pending"
-            value={formatQty(remaining)}
-            valueClassName={
-              remaining <= 0 ? undefined : remaining < 1 ? 'text-warning' : 'text-heading'
-            }
-          />
+          <DetailInlineStat label="Pending" value={formatQty(pending)} />
         </DetailInlineStatRow>
       </DetailMetricsSection>
-
-      <DetailMetricsSection>
-        <div>
-          <div className="flex justify-between text-xs text-muted mb-1">
-            <span>Lift progress</span>
-            <span className="tabular-nums">{liftPct.toFixed(0)}%</span>
-          </div>
-          <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-success transition-all"
-              style={{ width: `${liftPct}%` }}
-            />
-          </div>
-        </div>
-        <div className="flex items-baseline justify-between gap-4 text-sm">
-          <p className="min-w-0">
-            <span className="text-muted">Value </span>
-            <span className="font-semibold tabular-nums text-heading">{formatCurrency(lineAmount)}</span>
-          </p>
-          <p className="text-right shrink-0">
-            <span className="text-muted">Rate </span>
-            <span className="font-medium text-heading">{formatContractRate(order.rate, order.rateBasis, order.ratePerBasis)}</span>
-          </p>
-        </div>
-      </DetailMetricsSection>
-
-      <DetailGroup title="Parties" icon={Users}>
-        <PartyRow seller={seller} buyer={buyer} />
-      </DetailGroup>
 
       <DetailGroup title="Delivery" icon={Package}>
         <DetailRow
@@ -293,22 +248,15 @@ export function OrderDetailDrawer({
             />
           }
         />
-        <DetailRow label="Type" value={order.deliveryType === 'ready' ? 'Ready (same day)' : 'Period'} />
-        <DetailRow label="Spot" value={order.spot} />
       </DetailGroup>
 
       <DetailGroup title="Pricing" icon={IndianRupee}>
         <DetailRow label="Contract rate" value={formatContractRate(order.rate, order.rateBasis, order.ratePerBasis)} highlight />
         <DetailRow label="Tax (GST)" value={`${order.taxRate}%`} />
-        <DetailRow label="Line amount" value={formatCurrency(lineAmount)} highlight />
       </DetailGroup>
 
       <DetailGroup title="Terms & broker" icon={FileText}>
         <DetailRow label="Broker" value={order.brokerName} />
-        <DetailRow label="Brokerage" value={formatBrokerage(order)} />
-        {order.brokerContractRef && (
-          <DetailRow label="Broker contract #" value={order.brokerContractRef} mono />
-        )}
         <DetailRow label="Payment terms" value={order.paymentTerms} />
         {order.remarks && <DetailRow label="Remarks" value={order.remarks} />}
       </DetailGroup>
@@ -334,14 +282,6 @@ export function OrderDetailDrawer({
         lifts={store.lifts}
         onNavigate={onClose}
       />
-
-      {isPO && (
-        <TradeProfitSection
-          po={order}
-          orders={store.tradeOrders}
-          lifts={store.lifts}
-        />
-      )}
     </DetailPanelBody>
   )
 
@@ -367,6 +307,13 @@ export function OrderDetailDrawer({
           open={closeOpen}
           onClose={() => setCloseOpen(false)}
         />
+        <TradeProfitModal
+          po={isPO ? order : null}
+          orders={store.tradeOrders}
+          lifts={store.lifts}
+          open={tradeProfitOpen}
+          onClose={() => setTradeProfitOpen(false)}
+        />
       </>
     )
   }
@@ -381,6 +328,13 @@ export function OrderDetailDrawer({
         orders={order ? [order] : []}
         open={closeOpen}
         onClose={() => setCloseOpen(false)}
+      />
+      <TradeProfitModal
+        po={isPO ? order : null}
+        orders={store.tradeOrders}
+        lifts={store.lifts}
+        open={tradeProfitOpen}
+        onClose={() => setTradeProfitOpen(false)}
       />
     </>
   )

@@ -100,7 +100,7 @@ export function LiftSoActualQtyForm({
               className="grid grid-cols-1 sm:grid-cols-[1fr_min(9rem,35%)] gap-3 sm:gap-4 sm:items-end pb-4 border-b border-gray-100 dark:border-gray-800 last:border-0 last:pb-0"
             >
               <div className="min-w-0 pb-1 sm:pb-0">
-                <p className="font-mono text-sm font-medium text-heading">{label}</p>
+                <p className="text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5 truncate">
                   {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
                   {showPlanned ? ` · planned ${formatQty(a.qtyMt)}` : ''}
@@ -131,7 +131,7 @@ export function LiftSoActualQtyForm({
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-mono text-sm font-medium text-heading">{label}</p>
+                <p className="text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
                 </p>

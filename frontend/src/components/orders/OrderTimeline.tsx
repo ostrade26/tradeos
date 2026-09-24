@@ -40,7 +40,7 @@ export function OrderTimeline({ order }: { order: TradeOrder }) {
             <p className="text-sm font-medium text-heading">{event.title}</p>
           )}
           <p className="text-xs text-muted mt-0.5">{event.subtitle}</p>
-          {event.meta && <p className="text-xs text-gray-500 mt-0.5 font-mono">{event.meta}</p>}
+          {event.meta && <p className="text-xs text-gray-500 mt-0.5">{event.meta}</p>}
         </div>
       ))}
     </div>
@@ -53,7 +53,7 @@ export function OrderTimelineSummary({ order }: { order: TradeOrder }) {
     <div className="flex items-center gap-2 mb-6 p-3 rounded-lg bg-gray-100 dark:bg-gray-700/50">
       <Icon className="h-5 w-5 text-accent shrink-0" />
       <div>
-        <p className="font-mono font-semibold text-heading">{formatOrderRef(order.ref, order.side)}</p>
+        <p className="font-semibold text-heading">{formatOrderRef(order.ref, order.side)}</p>
         <p className="text-xs text-muted">{order.itemName} · {order.partyName}</p>
       </div>
       {order.side === 'purchase' && (

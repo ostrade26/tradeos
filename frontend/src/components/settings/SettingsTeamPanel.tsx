@@ -166,7 +166,7 @@ export function SettingsTeamPanel({
         render: (r: OrganisationMember) => (
           <div className="min-w-[8rem]">
             <p className="font-medium text-heading">{r.name?.trim() || '—'}</p>
-            <p className="text-xs text-muted font-mono truncate max-w-[14rem]">{r.username || r.email}</p>
+            <p className="text-xs text-muted truncate max-w-[14rem]">{r.username || r.email}</p>
           </div>
         ),
       },
@@ -184,7 +184,7 @@ export function SettingsTeamPanel({
         sortable: true,
         sortValue: (r: OrganisationMember) => r.seat_label ?? '',
         render: (r: OrganisationMember) => (
-          <span className="font-mono text-xs tabular-nums text-muted">{r.seat_label ?? '—'}</span>
+          <span className="text-xs tabular-nums text-muted">{r.seat_label ?? '—'}</span>
         ),
         className: 'hidden md:table-cell',
       },

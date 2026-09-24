@@ -226,7 +226,7 @@ export const PlatformShipQueuePanel = forwardRef<
         render: (r: ShipQueueItem) => (
           <div className="min-w-0 space-y-1.5">
             <p className="font-medium text-heading truncate">{r.title}</p>
-            <p className="text-xs text-muted truncate font-mono">{r.subtitle || r.feature_key || '—'}</p>
+            <p className="text-xs text-muted truncate">{r.subtitle || r.feature_key || '—'}</p>
             {r.kind === 'release' && r.change_lines && r.change_lines.length > 0 ? (
               <ul className="mt-1 space-y-1">
                 {r.change_lines.slice(0, 6).map((line, i) => (
@@ -354,7 +354,7 @@ export const PlatformShipQueuePanel = forwardRef<
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-medium text-heading truncate">{r.title}</p>
-                <p className="text-xs text-muted font-mono truncate">{r.subtitle}</p>
+                <p className="text-xs text-muted truncate">{r.subtitle}</p>
               </div>
               {kindBadge(r.kind)}
             </div>

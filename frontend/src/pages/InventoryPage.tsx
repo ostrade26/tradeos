@@ -137,7 +137,7 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
               <div className="p-8 pb-5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs font-mono text-muted">{lot.lotNumber}</p>
+                    <p className="text-xs text-muted">{lot.lotNumber}</p>
                     <h3 className="text-base font-semibold text-heading mt-0.5 truncate">{lot.commodity}</h3>
                   </div>
                   {overAllocated ? (

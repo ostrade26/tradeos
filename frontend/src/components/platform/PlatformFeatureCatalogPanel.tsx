@@ -220,7 +220,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
               render: r => (
                 <div>
                   <p className="font-medium text-heading">{r.title}</p>
-                  <p className="text-xs text-muted font-mono">{r.feature_key}</p>
+                  <p className="text-xs text-muted">{r.feature_key}</p>
                 </div>
               ),
             },
@@ -409,7 +409,7 @@ export const PlatformFeatureCatalogPanel = forwardRef<
           {deleting?.feature_key ? (
             <>
               {' '}
-              (<span className="font-mono text-xs">{deleting.feature_key}</span>)
+              (<span className="text-xs">{deleting.feature_key}</span>)
             </>
           ) : null}{' '}
           from the catalog. Orgs will no longer see this card in Add-ons.

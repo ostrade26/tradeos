@@ -330,7 +330,7 @@ export function BulkMarkLiftsDeliveredModal({
               className="pb-8 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0 space-y-5"
             >
               <div className="space-y-3">
-                <p className="font-mono text-sm font-semibold text-heading">
+                <p className="text-sm font-semibold text-heading">
                   {formatLiftRef(lift.liftRef)}
                 </p>
                 <p className="text-xs text-muted -mt-2">{formatLiftSoRefs(lift)}</p>

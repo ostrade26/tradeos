@@ -61,7 +61,7 @@ export function DetailPanelShell({
             {(subtitle || headerBadges) && (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 min-w-0">
                 {subtitle ? (
-                  <p className="text-[14px] text-muted font-mono tabular-nums truncate leading-snug">{subtitle}</p>
+                  <p className="text-[14px] text-muted tabular-nums truncate leading-snug">{subtitle}</p>
                 ) : null}
                 {headerBadges}
               </div>
@@ -282,6 +282,8 @@ interface ModalProps {
   bodyClassName?: string
   /** Applied to the dialog panel (e.g. shorter max-height). */
   panelClassName?: string
+  /** Optional muted surface between header and main body — edge-to-edge, same padding as secondaryBody. */
+  ledeBody?: ReactNode
   /** Optional second body below the main one — muted surface, same padding as body. */
   secondaryBody?: ReactNode
 }
@@ -299,6 +301,7 @@ export function Modal({
   dismissible = true,
   bodyClassName,
   panelClassName,
+  ledeBody,
   secondaryBody,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -323,6 +326,8 @@ export function Modal({
 
   const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-5xl' }
   const isSplitPane = Boolean(bodyClassName?.includes('split-pane'))
+  const mutedBandClass =
+    'shrink-0 border-gray-200 bg-gray-100/80 px-6 py-6 dark:border-gray-700 dark:bg-gray-800/40'
 
   return createPortal(
     <div className="fixed inset-0 flex items-center justify-center p-5 sm:p-8" style={{ zIndex: OVERLAY_Z }}>
@@ -373,10 +378,15 @@ export function Modal({
               isSplitPane ? 'overflow-hidden' : 'overflow-y-auto',
             )}
           >
+            {ledeBody ? (
+              <div className={cn(mutedBandClass, 'border-b')}>
+                {ledeBody}
+              </div>
+            ) : null}
             <div
               className={cn(
                 'px-6',
-                hideHeader ? 'pt-8 pb-6' : 'py-6',
+                hideHeader && !ledeBody ? 'pt-8 pb-6' : 'py-6',
                 isSplitPane && 'flex min-h-0 flex-1 flex-col',
                 bodyClassName,
               )}
@@ -384,7 +394,7 @@ export function Modal({
               {children}
             </div>
             {secondaryBody ? (
-              <div className="shrink-0 border-t border-gray-200 bg-gray-100/80 px-6 py-6 dark:border-gray-700 dark:bg-gray-800/40">
+              <div className={cn(mutedBandClass, 'border-t')}>
                 {secondaryBody}
               </div>
             ) : null}

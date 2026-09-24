@@ -122,11 +122,11 @@ export function ActivityPage() {
                             {a.entityRef && (() => {
                               const href = activityEntityHref(a.entityRef)
                               return href ? (
-                                <Link to={href} className="text-xs font-mono text-accent hover:underline">
+                                <Link to={href} className="text-xs text-accent hover:underline">
                                   {a.entityRef}
                                 </Link>
                               ) : (
-                                <span className="text-xs font-mono text-muted">{a.entityRef}</span>
+                                <span className="text-xs text-muted">{a.entityRef}</span>
                               )
                             })()}
                           </div>

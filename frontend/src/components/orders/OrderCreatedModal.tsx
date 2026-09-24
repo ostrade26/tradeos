@@ -103,7 +103,7 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
       <div className="-mx-6 -mt-8 px-6 pt-8 pb-6 text-center bg-gray-50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-700">
         <SuccessCheckmark />
         <p className="text-sm font-medium text-success mt-5">{orderLabel} created</p>
-        <p className="text-xl font-semibold font-mono text-heading mt-1 tracking-tight">{formatOrderRef(order.ref, order.side)}</p>
+        <p className="text-xl font-semibold text-heading mt-1 tracking-tight">{formatOrderRef(order.ref, order.side)}</p>
         <p className="text-sm text-muted mt-1.5">{order.itemName}</p>
       </div>
 

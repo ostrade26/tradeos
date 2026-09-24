@@ -112,7 +112,7 @@ function FlowCard({
                 {node.statusLabel}
               </span>
             </div>
-            <p className="font-mono text-base font-semibold text-heading leading-tight mt-0.5 group-hover:text-accent transition-colors">
+            <p className="text-base font-semibold text-heading leading-tight mt-0.5 group-hover:text-accent transition-colors">
               {node.ref}
             </p>
           </div>

@@ -723,7 +723,7 @@ export function LiftRegisterPage() {
           <div className="px-4 py-3 space-y-1">
             <div className="min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono font-medium">{formatLiftRef(r.liftRef)}</span>
+                <span className="font-medium">{formatLiftRef(r.liftRef)}</span>
                 <div className="flex items-center gap-1 shrink-0">
                   {liftHasCrossPoAllocations(r, store.tradeOrders) && <Badge variant="warning">Cross lot</Badge>}
                   {r.isSelfLift && <Badge variant="info">Self</Badge>}

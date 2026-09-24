@@ -17,10 +17,10 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Reference # cells in DataTable rows — accent + underline when the row is hovered. */
 export const tableRefCellClass =
-  'font-mono font-medium text-accent whitespace-nowrap transition-colors group-hover:underline group-hover:font-semibold'
+  'font-medium text-accent whitespace-nowrap transition-colors group-hover:underline group-hover:font-semibold'
 
 export const tableRefCellMutedClass =
-  'font-mono font-medium text-heading whitespace-nowrap transition-colors group-hover:text-accent group-hover:font-semibold'
+  'font-medium text-heading whitespace-nowrap transition-colors group-hover:text-accent group-hover:font-semibold'
 
 export function formatCurrency(amount: number, currency = 'INR'): string {
   return new Intl.NumberFormat('en-IN', {
@@ -40,9 +40,10 @@ const SHORT_MONTH_INDEX: Record<string, number> = Object.fromEntries(
   SHORT_MONTHS.map((m, i) => [m.toLowerCase(), i + 1]),
 )
 
-/** Calendar date — always `16 Sep 2026` (no comma, English short month). */
+/** Calendar date — always day + short month + year, e.g. `04 Jan 2026`. */
 function formatDayMonthYear(date: Date): string {
-  return `${date.getDate()} ${SHORT_MONTHS[date.getMonth()]} ${date.getFullYear()}`
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${dd} ${SHORT_MONTHS[date.getMonth()]} ${date.getFullYear()}`
 }
 
 function excelSerialToIso(value: number): string {
@@ -200,20 +201,18 @@ function parseDateValue(date: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-/** Page heading date — e.g. `Monday, 16 Sep`. */
+/** Page heading date — e.g. `Monday, 16 Jan 2026`. */
 export function formatDateHeading(date: Date = new Date()): string {
   const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(date)
-  return `${weekday}, ${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`
+  return `${weekday}, ${formatDayMonthYear(date)}`
 }
 
-/** Activity group heading — e.g. `Monday, 31 August 2026`. */
+/** Activity group heading — e.g. `Monday, 31 Aug 2026`. */
 export function formatDateGroupHeading(timestamp: string): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(timestamp))
+  const parsed = new Date(timestamp)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(parsed)
+  return `${weekday}, ${formatDayMonthYear(parsed)}`
 }
 
 export function formatDate(date: string): string {
@@ -223,24 +222,21 @@ export function formatDate(date: string): string {
   return formatDayMonthYear(parsed)
 }
 
-/** Delivery period date — no year, e.g. `6 Apr`. */
+/** Delivery period date — always includes year, e.g. `06 Apr 2026`. */
 export function formatDeliveryPeriodDate(date: string): string {
-  if (!date) return '—'
-  const parsed = parseDateValue(date)
-  if (!parsed) return '—'
-  return `${parsed.getDate()} ${SHORT_MONTHS[parsed.getMonth()]}`
+  return formatDate(date)
 }
 
-/** Delivery period — no year, one line, e.g. `6 Apr – 15 Aug`. */
+/** Delivery period — one line, e.g. `06 Apr 2026 – 15 Aug 2026`. */
 export function formatDeliveryPeriodRange(start: string, end: string): string {
   if (!start && !end) return '—'
-  if (start && end && start.slice(0, 10) === end.slice(0, 10)) return formatDeliveryPeriodDate(start)
-  if (start && end) return `${formatDeliveryPeriodDate(start)} – ${formatDeliveryPeriodDate(end)}`
-  if (start) return formatDeliveryPeriodDate(start)
-  return formatDeliveryPeriodDate(end)
+  if (start && end && start.slice(0, 10) === end.slice(0, 10)) return formatDate(start)
+  if (start && end) return `${formatDate(start)} – ${formatDate(end)}`
+  if (start) return formatDate(start)
+  return formatDate(end)
 }
 
-/** Table date range — same tokens as `formatDate`, e.g. `28 Aug 2026 – 5 Sep 2026`. */
+/** Table date range — same tokens as `formatDate`, e.g. `28 Aug 2026 – 05 Sep 2026`. */
 export function formatDateRange(start: string, end: string): string {
   if (!start && !end) return '—'
   if (start && end && start.slice(0, 10) === end.slice(0, 10)) return formatDate(start)

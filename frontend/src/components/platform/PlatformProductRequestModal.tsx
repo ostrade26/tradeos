@@ -102,7 +102,7 @@ export function PlatformProductRequestModal({
         <ScreenshotStrip shots={request.attachments} />
         <p className="mt-1.5 text-xs tabular-nums text-muted">{formatDateTime(request.created_at)}</p>
         {isUsefulFeedbackPagePath(request.page_path) ? (
-          <p className="mt-1.5 text-xs font-mono text-muted break-all">{request.page_path}</p>
+          <p className="mt-1.5 text-xs text-muted break-all">{request.page_path}</p>
         ) : null}
         {closed && request.reply ? (
           <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">

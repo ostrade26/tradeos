@@ -59,7 +59,7 @@ function CredentialRow({
         <p
           className={cn(
             'text-sm font-semibold break-all mt-1 leading-snug',
-            mono && 'font-mono tabular-nums',
+            mono && 'tabular-nums',
             muted ? 'text-muted font-medium' : 'text-heading',
           )}
         >

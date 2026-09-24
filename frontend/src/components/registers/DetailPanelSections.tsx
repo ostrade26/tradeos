@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Children, Fragment, type ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 
-const sectionPad = 'py-6'
+const sectionPad = 'py-5'
 
 export function DetailPanelBody({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -14,7 +14,7 @@ export function DetailPanelBody({ children, className }: { children: ReactNode; 
 
 export function DetailHero({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('space-y-3', sectionPad, className)}>
+    <div className={cn('space-y-2.5', sectionPad, className)}>
       {children}
     </div>
   )
@@ -37,15 +37,16 @@ export function DetailGroup({
 }) {
   return (
     <section className={cn(sectionPad, className)}>
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-center justify-between gap-3 mb-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <Icon className="h-4 w-4 text-muted shrink-0" />
-          <h4 className="text-sm font-semibold text-muted">{title}</h4>
+          <h4 className="text-sm font-semibold text-heading">{title}</h4>
         </div>
         {trailing}
       </div>
       <div
         className={cn(
+          'space-y-2.5',
           surface === 'muted' && 'rounded-md bg-gray-50 dark:bg-gray-800/50 px-4 py-4',
         )}
       >
@@ -72,7 +73,7 @@ export function DetailRow({
       <span className="text-[14px] text-muted shrink-0">{label}</span>
       <span className={cn(
         'text-[14px] text-right min-w-0',
-        mono && 'font-mono font-medium',
+        mono && 'font-medium',
         highlight && 'font-semibold text-heading tabular-nums',
         !highlight && !mono && 'text-heading',
       )}>
@@ -179,7 +180,7 @@ export function DetailInlineStatRow({ children }: { children: ReactNode }) {
 
 export function DetailMetricsSection({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn('space-y-3', sectionPad, className)}>
+    <section className={cn('space-y-2.5', sectionPad, className)}>
       {children}
     </section>
   )

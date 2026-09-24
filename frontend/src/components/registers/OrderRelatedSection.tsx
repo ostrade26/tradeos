@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Link2 } from 'lucide-react'
+import { Layers } from 'lucide-react'
 import type { Lift, TradeOrder } from '../../data/mockData'
-import { toBeLifted } from '../../data/mockData'
 import {
   groupLiftsBySoForPo,
   liftsForSoOnPo,
@@ -9,16 +8,16 @@ import {
   type SoLiftEntry,
   type SoLiftGroup,
 } from '../../lib/orderRelatedLifts'
-import { formatDate, formatQty } from '../../lib/utils'
-import { formatLiftRef, formatOrderRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
+import { formatDate, formatQty, cn } from '../../lib/utils'
+import { formatLiftRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
+import { formatTankerNo, getLiftTankers } from '../../lib/liftTankers'
 import { appPath } from '../../lib/appShellMode'
-import { StatusBadge } from '../ui/Badge'
 import { DetailGroup } from './DetailPanelSections'
 import {
+  AllocationSoCard,
   RelatedCard,
   RelatedCardHeader,
   RelatedCardsStack,
-  RelatedOrderStats,
 } from './RelatedSectionCards'
 
 interface OrderRelatedSectionProps {
@@ -28,37 +27,75 @@ interface OrderRelatedSectionProps {
   onNavigate?: () => void
 }
 
-function LiftRows({ entries, onNavigate }: { entries: SoLiftEntry[]; onNavigate?: () => void }) {
+function LiftRows({
+  entries,
+  onNavigate,
+  showTopBorder = true,
+}: {
+  entries: SoLiftEntry[]
+  onNavigate?: () => void
+  showTopBorder?: boolean
+}) {
   if (entries.length === 0) {
     return (
-      <p className="px-3 py-2.5 text-xs text-muted border-t border-gray-100 dark:border-gray-800">
+      <p
+        className={cn(
+          'px-3 py-2.5 text-[14px] text-muted',
+          showTopBorder && 'border-t border-gray-100 dark:border-gray-800',
+        )}
+      >
         No lifts recorded yet
       </p>
     )
   }
 
   return (
-    <ul className="divide-y divide-gray-100 dark:divide-gray-800 border-t border-gray-100 dark:border-gray-800">
-      {entries.map(({ lift, qtyMt }) => (
-        <li key={`${lift.id}-${qtyMt}`}>
-          <Link
-            to={`/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`}
-            onClick={onNavigate}
-            className="flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-          >
-            <span className="font-mono text-sm font-medium text-accent shrink-0">
-              {formatLiftRef(lift.liftRef)}
-            </span>
-            <StatusBadge status={lift.status} context="lift" />
-            <span className="ml-auto tabular-nums text-sm font-medium text-heading shrink-0">
-              {formatQty(qtyMt)}
-            </span>
-            <span className="text-xs text-muted tabular-nums shrink-0 w-16 text-right">
-              {formatDate(lift.date)}
-            </span>
-          </Link>
-        </li>
-      ))}
+    <ul
+      className={cn(
+        'divide-y divide-gray-100 dark:divide-gray-800',
+        showTopBorder && 'border-t border-gray-100 dark:border-gray-800',
+      )}
+    >
+      {entries.flatMap(({ lift, qtyMt }) => {
+        const tankers = getLiftTankers(lift).filter(t => t.tankerNo.trim())
+        const rows = tankers.length > 0
+          ? tankers
+          : [{ tankerNo: '', actualQtyMt: qtyMt }]
+
+        return rows.map((tanker, index) => {
+          const tankerNo = tanker.tankerNo.trim()
+            ? formatTankerNo(tanker.tankerNo)
+            : '—'
+          const rowQty = tanker.actualQtyMt != null
+            ? tanker.actualQtyMt
+            : tankers.length <= 1
+              ? qtyMt
+              : undefined
+
+          return (
+            <li key={`${lift.id}-${qtyMt}-${index}`}>
+              <Link
+                to={`/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`}
+                onClick={onNavigate}
+                className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+              >
+                <span className="text-[14px] font-medium text-accent whitespace-nowrap">
+                  {formatLiftRef(lift.liftRef)}
+                </span>
+                <span className="text-[14px] text-heading tabular-nums whitespace-nowrap">
+                  {formatDate(lift.date)}
+                </span>
+                <span className="text-[14px] text-heading whitespace-nowrap">
+                  {tankerNo}
+                </span>
+                <span className="text-[14px] text-heading tabular-nums whitespace-nowrap text-right">
+                  {rowQty != null ? formatQty(rowQty) : '—'}
+                </span>
+              </Link>
+            </li>
+          )
+        })
+      })}
     </ul>
   )
 }
@@ -71,35 +108,25 @@ function SoLiftGroupBlock({
   onNavigate?: () => void
 }) {
   const { so, deliveredQty, pendingQty, lifts } = group
-  const onLiftQty = lifts
-    .filter(e => e.lift.status === 'pending')
-    .reduce((sum, e) => sum + e.qtyMt, 0)
 
   return (
-    <RelatedCard>
-      <RelatedCardHeader
-        title={(
-          <Link
-            to={`/sales-orders?ref=${encodeURIComponent(so.ref)}`}
-            onClick={onNavigate}
-            className="font-mono text-sm font-medium text-accent hover:underline"
-          >
-            {formatSoRef(so.ref)}
-          </Link>
-        )}
-        subtitle={so.partyName}
-        trailing={<span className="text-xs text-muted tabular-nums shrink-0">{formatQty(so.orderQty)}</span>}
-        stats={(
-          <RelatedOrderStats
-            deliveredQty={deliveredQty}
-            onLiftQty={onLiftQty}
-            pendingQty={pendingQty}
-            toScheduleQty={toBeLifted(so)}
-          />
-        )}
-      />
-      <LiftRows entries={lifts} onNavigate={onNavigate} />
-    </RelatedCard>
+    <AllocationSoCard
+      title={(
+        <Link
+          to={`/sales-orders?ref=${encodeURIComponent(so.ref)}`}
+          onClick={onNavigate}
+          className="text-[14px] font-medium text-accent hover:underline"
+        >
+          {formatSoRef(so.ref)}
+        </Link>
+      )}
+      subtitle={so.partyName}
+      totalQty={so.orderQty}
+      deliveredQty={deliveredQty}
+      pendingQty={pendingQty}
+    >
+      <LiftRows entries={lifts} onNavigate={onNavigate} showTopBorder={false} />
+    </AllocationSoCard>
   )
 }
 
@@ -117,25 +144,21 @@ function StockLiftGroup({
   const deliveredQty = entries
     .filter(e => e.lift.status === 'delivered')
     .reduce((sum, e) => sum + e.qtyMt, 0)
-  const onLiftQty = entries
+  const pendingQty = entries
     .filter(e => e.lift.status === 'pending')
     .reduce((sum, e) => sum + e.qtyMt, 0)
 
   return (
-    <RelatedCard>
-      <RelatedCardHeader
-        title={<span className="text-sm font-medium text-heading">Stock lifts</span>}
-        subtitle={`From ${formatPoRef(poRef)} · not linked to an SO`}
-        stats={(
-          <RelatedOrderStats
-            deliveredQty={deliveredQty}
-            onLiftQty={onLiftQty}
-            pendingQty={0}
-          />
-        )}
-      />
-      <LiftRows entries={entries} onNavigate={onNavigate} />
-    </RelatedCard>
+    <AllocationSoCard
+      title={<span className="text-[14px] font-medium text-heading">Stock lifts</span>}
+      subtitle={`From ${formatPoRef(poRef)} · not linked to an SO`}
+      totalLabel="Total"
+      totalQty={deliveredQty + pendingQty}
+      deliveredQty={deliveredQty}
+      pendingQty={pendingQty}
+    >
+      <LiftRows entries={entries} onNavigate={onNavigate} showTopBorder={false} />
+    </AllocationSoCard>
   )
 }
 
@@ -150,7 +173,7 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
     if (!hasContent) return null
 
     return (
-      <DetailGroup title="Related" icon={Link2}>
+      <DetailGroup title="Allocations" icon={Layers}>
         <RelatedCardsStack>
           {soGroups.map(group => (
             <SoLiftGroupBlock key={group.so.id} group={group} onNavigate={onNavigate} />
@@ -167,12 +190,8 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
 
   if (!hasContent) return null
 
-  const onLiftQty = soLifts
-    .filter(e => e.lift.status === 'pending')
-    .reduce((sum, e) => sum + e.qtyMt, 0)
-
   return (
-    <DetailGroup title="Related" icon={Link2}>
+    <DetailGroup title="Allocations" icon={Layers}>
       <RelatedCardsStack>
         {poRef && (
           <RelatedCard>
@@ -181,7 +200,7 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
                 <Link
                   to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
                   onClick={onNavigate}
-                  className="font-mono text-sm font-medium text-accent hover:underline"
+                  className="text-[14px] font-medium text-accent hover:underline"
                 >
                   {formatPoRef(poRef)}
                 </Link>
@@ -191,21 +210,11 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
           </RelatedCard>
         )}
 
-        <RelatedCard>
-          <RelatedCardHeader
-            title={<span className="text-sm font-medium text-heading">{formatOrderRef(order.ref, order.side)}</span>}
-            subtitle={`${formatQty(order.orderQty)} · ${order.partyName}`}
-            stats={(
-              <RelatedOrderStats
-                deliveredQty={order.liftedQty}
-                onLiftQty={onLiftQty}
-                pendingQty={Math.max(0, order.orderQty - order.liftedQty)}
-                toScheduleQty={toBeLifted(order)}
-              />
-            )}
-          />
-          <LiftRows entries={soLifts} onNavigate={onNavigate} />
-        </RelatedCard>
+        {(soLifts.length > 0 || !poRef) && (
+          <RelatedCard>
+            <LiftRows entries={soLifts} onNavigate={onNavigate} showTopBorder={false} />
+          </RelatedCard>
+        )}
       </RelatedCardsStack>
     </DetailGroup>
   )

@@ -21,7 +21,7 @@ import { MarkLiftDeliveredModal } from '../lifts/MarkLiftDeliveredModal'
 import { formatDate, formatCurrency, formatQty } from '../../lib/utils'
 import { formatContractRate } from '../../lib/orderRate'
 import { type Lift } from '../../data/mockData'
-import { getLiftTankers } from '../../lib/liftTankers'
+import { formatTankerNo, getLiftTankers } from '../../lib/liftTankers'
 import { formatLiftOrderSummary, getLiftAllocations, crossPoAllocationsForLift, liftHasCrossPoAllocations } from '../../lib/liftAllocations'
 import { formatLiftRef, formatSoRef } from '../../lib/tradeRefs'
 import { crossPoAllocationMessage } from '../../lib/sellerLiftPool'
@@ -244,33 +244,40 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
       </DetailGroup>
 
       <DetailGroup title="Tankers & transport" icon={Truck}>
-          {tankers.map((t, i) => (
-            <div key={i}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-heading">{t.tankerNo || '—'}</p>
-                  {t.transportName && (
-                    <p className="text-[14px] text-muted">{t.transportName}</p>
+        {tankers.length === 0 ? (
+          <p className="text-xs text-muted">No tanker details</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
+            {tankers.map((t, i) => {
+              const tankerNo = t.tankerNo.trim() ? formatTankerNo(t.tankerNo) : '—'
+              const hasInvoiceMeta = Boolean(t.salesInvoiceNo || t.poInvoiceNo)
+              return (
+                <li key={i} className="px-3 py-2.5">
+                  <div className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3">
+                    <span className="text-xs font-medium text-accent whitespace-nowrap">
+                      {formatLiftRef(lift.liftRef)}
+                    </span>
+                    <span className="text-xs text-heading tabular-nums whitespace-nowrap">
+                      {formatDate(lift.date)}
+                    </span>
+                    <span className="text-xs text-heading whitespace-nowrap">
+                      {tankerNo}
+                    </span>
+                    <span className="text-xs text-heading tabular-nums whitespace-nowrap text-right">
+                      {t.actualQtyMt != null ? formatQty(t.actualQtyMt) : '—'}
+                    </span>
+                  </div>
+                  {hasInvoiceMeta && (
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-muted">
+                      {t.salesInvoiceNo && <span>{t.salesInvoiceNo}</span>}
+                      {t.poInvoiceNo && <span>{t.poInvoiceNo}</span>}
+                    </div>
                   )}
-                </div>
-                {t.actualQtyMt != null && (
-                  <p className="text-[14px] font-semibold tabular-nums shrink-0">{formatQty(t.actualQtyMt)}</p>
-                )}
-              </div>
-              {(t.lrNo || t.driverMobile || t.salesInvoiceNo || t.poInvoiceNo) && (
-                <div className="flex flex-wrap gap-x-4 text-[14px] text-muted">
-                  {t.lrNo && <span className="font-mono text-xs uppercase">LR {t.lrNo}</span>}
-                  {t.driverMobile && <span>{t.driverMobile}</span>}
-                  {t.salesInvoiceNo && (
-                    <span className="text-xs">{t.salesInvoiceNo}</span>
-                  )}
-                  {t.poInvoiceNo && (
-                    <span className="text-xs">{t.poInvoiceNo}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </DetailGroup>
 
       <DetailGroup title="Documents" icon={FileText}>

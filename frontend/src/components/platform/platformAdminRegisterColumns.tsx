@@ -90,7 +90,7 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
       header: 'Code',
       sortable: true,
       sortValue: r => r.org_code ?? '',
-      render: r => <span className="font-mono text-[14px] tabular-nums">{r.org_code ?? '—'}</span>,
+      render: r => <span className="text-[14px] tabular-nums">{r.org_code ?? '—'}</span>,
     },
     {
       key: 'account_type',
@@ -142,7 +142,7 @@ export function organisationColumns(): Column<PlatformOrganisation>[] {
       header: 'GSTIN',
       sortable: true,
       sortValue: r => r.gstin ?? '',
-      render: r => <span className="font-mono text-[14px] tabular-nums">{r.gstin?.trim() || '—'}</span>,
+      render: r => <span className="text-[14px] tabular-nums">{r.gstin?.trim() || '—'}</span>,
       className: 'hidden xl:table-cell',
     },
     {
@@ -192,7 +192,7 @@ export function platformSeatColumns(): Column<OrganisationSeat>[] {
         <div className="min-w-[10rem]">
           <p className="font-medium text-heading truncate">{r.organisation_name ?? '—'}</p>
           {r.org_code?.trim() && (
-            <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{r.org_code}</p>
+            <p className="text-xs text-muted tabular-nums mt-0.5">{r.org_code}</p>
           )}
         </div>
       ),
@@ -202,7 +202,7 @@ export function platformSeatColumns(): Column<OrganisationSeat>[] {
       header: 'Seat',
       sortable: true,
       sortValue: r => r.seat_label,
-      render: r => <span className="font-mono text-[14px] tabular-nums">{r.seat_label}</span>,
+      render: r => <span className="text-[14px] tabular-nums">{r.seat_label}</span>,
     },
     {
       key: 'seat_type',
@@ -411,7 +411,7 @@ export function licenceColumns(handlers: {
       render: r => (
         <div className="min-w-[10rem]">
           <p className="font-medium text-heading truncate">{r.organisation_name ?? '—'}</p>
-          <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{r.org_code ?? ''}</p>
+          <p className="text-xs text-muted tabular-nums mt-0.5">{r.org_code ?? ''}</p>
         </div>
       ),
     },
@@ -420,7 +420,7 @@ export function licenceColumns(handlers: {
       header: 'Licence',
       sortable: true,
       sortValue: r => r.licence_number,
-      render: r => <span className="font-mono text-[14px] tabular-nums">{r.licence_number}</span>,
+      render: r => <span className="text-[14px] tabular-nums">{r.licence_number}</span>,
     },
     {
       key: 'plan_name',
@@ -517,7 +517,7 @@ export function amcColumns(handlers: {
       render: r => (
         <div className="min-w-[10rem]">
           <p className="font-medium text-heading truncate">{r.organisation_name ?? '—'}</p>
-          <p className="text-xs text-muted font-mono tabular-nums mt-0.5">{r.licence_number ?? ''}</p>
+          <p className="text-xs text-muted tabular-nums mt-0.5">{r.licence_number ?? ''}</p>
         </div>
       ),
     },
@@ -626,7 +626,7 @@ export function paymentColumns(handlers?: {
       header: 'Reference',
       sortable: true,
       sortValue: r => r.payment_reference,
-      render: r => <span className="font-mono text-[13px]">{r.payment_reference?.trim() || '—'}</span>,
+      render: r => <span className="text-[13px]">{r.payment_reference?.trim() || '—'}</span>,
       className: 'hidden md:table-cell',
     },
     {
@@ -861,7 +861,7 @@ export function releaseColumns(handlers: {
       sortValue: r => r.version,
       render: r => (
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-[14px] tabular-nums">{r.version}</span>
+          <span className="text-[14px] tabular-nums">{r.version}</span>
           {handlers.latestReleaseId != null && handlers.latestReleaseId === r.id ? (
             <Badge variant="accent">
               {r.status === 'published' ? 'Last update' : 'Latest'}

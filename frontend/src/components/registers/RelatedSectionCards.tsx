@@ -1,13 +1,19 @@
 import type { ReactNode } from 'react'
 import { cn, formatQty } from '../../lib/utils'
+import { DetailInlineStatRow } from './DetailPanelSections'
 
 export function RelatedCardsStack({ children }: { children: ReactNode }) {
-  return <div className="space-y-3">{children}</div>
+  return <div className="space-y-2.5">{children}</div>
 }
 
-export function RelatedCard({ children }: { children: ReactNode }) {
+export function RelatedCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div
+      className={cn(
+        'rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden bg-card',
+        className,
+      )}
+    >
       {children}
     </div>
   )
@@ -25,20 +31,63 @@ export function RelatedCardHeader({
   stats?: ReactNode
 }) {
   return (
-    <div className="px-3 py-2.5 bg-gray-50/90 dark:bg-gray-800/50">
+    <div className="px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">{title}</div>
+        <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
+          <div className="shrink-0">{title}</div>
+          {subtitle != null && subtitle !== '' && (
+            <p className="text-xs text-muted min-w-0">{subtitle}</p>
+          )}
+        </div>
         {trailing}
       </div>
-      {subtitle != null && subtitle !== '' && (
-        <p className="text-xs text-muted mt-0.5 truncate">{subtitle}</p>
-      )}
       {stats && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
+        <div className="mt-2.5">
           {stats}
         </div>
       )}
     </div>
+  )
+}
+
+/** Allocation SO card: SO + party, then Total/Delivered/Pending, then lift rows. */
+export function AllocationSoCard({
+  title,
+  subtitle,
+  totalQty,
+  deliveredQty,
+  pendingQty,
+  totalLabel = 'Total SO',
+  children,
+}: {
+  title: ReactNode
+  subtitle?: ReactNode
+  totalQty: number
+  deliveredQty: number
+  pendingQty: number
+  totalLabel?: string
+  children?: ReactNode
+}) {
+  return (
+    <RelatedCard>
+      <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="text-[14px]">{title}</div>
+          {subtitle != null && subtitle !== '' && (
+            <p className="text-[14px] text-heading mt-0.5 leading-snug">{subtitle}</p>
+          )}
+        </div>
+        <div className="mt-2.5 border-t border-gray-200 dark:border-gray-700 pt-2.5">
+          <RelatedAllocationStats
+            totalLabel={totalLabel}
+            totalQty={totalQty}
+            deliveredQty={deliveredQty}
+            pendingQty={pendingQty}
+          />
+        </div>
+      </div>
+      {children}
+    </RelatedCard>
   )
 }
 
@@ -100,14 +149,11 @@ export function RelatedOrderStats({
   deliveredQty,
   onLiftQty = 0,
   pendingQty = 0,
-  toScheduleQty,
 }: {
   deliveredQty: number
   onLiftQty?: number
   pendingQty?: number
-  toScheduleQty?: number
 }) {
-  const toSchedule = toScheduleQty ?? 0
   return (
     <>
       <RelatedStat label="Delivered" value={formatQty(deliveredQty)} tone="success" />
@@ -117,9 +163,46 @@ export function RelatedOrderStats({
       {pendingQty > 0 && (
         <RelatedStat label="Pending" value={formatQty(pendingQty)} tone="warning" />
       )}
-      {toSchedule > 0 && toSchedule !== pendingQty && (
-        <RelatedStat label="To schedule" value={formatQty(toSchedule)} tone="warning" />
-      )}
     </>
+  )
+}
+
+/** Allocation card metrics: Total SO | Delivered | Pending (pending green per mockup). */
+export function RelatedAllocationStats({
+  totalQty,
+  deliveredQty,
+  pendingQty,
+  totalLabel = 'Total SO',
+}: {
+  totalQty: number
+  deliveredQty: number
+  pendingQty: number
+  totalLabel?: string
+}) {
+  return (
+    <DetailInlineStatRow>
+      <AllocationStat label={totalLabel} value={formatQty(totalQty)} />
+      <AllocationStat label="Delivered" value={formatQty(deliveredQty)} />
+      <AllocationStat label="Pending" value={formatQty(pendingQty)} valueClassName="text-success" />
+    </DetailInlineStatRow>
+  )
+}
+
+function AllocationStat({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string
+  value: ReactNode
+  valueClassName?: string
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <p className="text-xs text-muted">{label}</p>
+      <p className={cn('text-base font-semibold tabular-nums mt-0.5 text-heading', valueClassName)}>
+        {value}
+      </p>
+    </div>
   )
 }

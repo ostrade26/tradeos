@@ -222,7 +222,7 @@ export function PlatformReleaseDetailDrawer({
                         </p>
                       ) : null}
                       {item.feature_key?.trim() ? (
-                        <p className="text-xs font-mono text-muted mt-2 truncate">
+                        <p className="text-xs text-muted mt-2 truncate">
                           {item.feature_key.trim()}
                         </p>
                       ) : null}
