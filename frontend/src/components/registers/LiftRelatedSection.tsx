@@ -1,18 +1,15 @@
 import { Link } from 'react-router-dom'
-import { Link2 } from 'lucide-react'
+import { Layers } from 'lucide-react'
 import type { Lift, LiftAllocation, TradeOrder } from '../../data/mockData'
-import { liftsForSoOnPo } from '../../lib/orderRelatedLifts'
-import { formatQty } from '../../lib/utils'
-import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
-import { StatusBadge } from '../ui/Badge'
+import { formatDate, formatQty } from '../../lib/utils'
+import { formatLiftRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
+import { formatTankerNo, getLiftTankers } from '../../lib/liftTankers'
+import { appPath } from '../../lib/appShellMode'
 import { DetailGroup } from './DetailPanelSections'
 import {
+  AllocationSoCard,
   RelatedCard,
-  RelatedCardBody,
-  RelatedCardHeader,
   RelatedCardsStack,
-  RelatedDetailRow,
-  RelatedOrderStats,
 } from './RelatedSectionCards'
 
 interface LiftRelatedSectionProps {
@@ -24,13 +21,63 @@ interface LiftRelatedSectionProps {
   onNavigate?: () => void
 }
 
+function ThisLiftRows({
+  lift,
+  qtyMt,
+  onNavigate,
+}: {
+  lift: Lift
+  qtyMt: number
+  onNavigate?: () => void
+}) {
+  const tankers = getLiftTankers(lift).filter(t => t.tankerNo.trim())
+  const rows = tankers.length > 0
+    ? tankers
+    : [{ tankerNo: '', actualQtyMt: qtyMt as number | undefined }]
+
+  return (
+    <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+      {rows.map((tanker, index) => {
+        const tankerNo = tanker.tankerNo.trim()
+          ? formatTankerNo(tanker.tankerNo)
+          : '—'
+        const rowQty = tanker.actualQtyMt != null
+          ? tanker.actualQtyMt
+          : tankers.length <= 1
+            ? qtyMt
+            : undefined
+
+        return (
+          <li key={`${lift.id}-${index}`}>
+            <Link
+              to={`/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`}
+              onClick={onNavigate}
+              className="grid grid-cols-[auto_auto_auto_auto] justify-between items-center gap-x-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+            >
+              <span className="text-[13px] font-medium text-accent whitespace-nowrap">
+                {formatLiftRef(lift.liftRef)}
+              </span>
+              <span className="text-[13px] text-heading tabular-nums whitespace-nowrap">
+                {formatDate(lift.date)}
+              </span>
+              <span className="text-[13px] text-heading whitespace-nowrap">
+                {tankerNo}
+              </span>
+              <span className="text-[13px] text-heading tabular-nums whitespace-nowrap text-right">
+                {rowQty != null ? formatQty(rowQty) : '—'}
+              </span>
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 function SoAllocationCard({
   allocation,
   lift,
   so,
-  po,
-  lifts,
-  outstandingBalance,
   crossPo,
   bookedPoRef,
   onNavigate,
@@ -38,90 +85,45 @@ function SoAllocationCard({
   allocation: LiftAllocation
   lift: Lift
   so: TradeOrder
-  po: TradeOrder
-  lifts: Lift[]
-  outstandingBalance: number
   crossPo: boolean
   bookedPoRef?: string
   onNavigate?: () => void
 }) {
   const poRef = allocation.poRef
   const soRef = allocation.soRef!
-  const soLifts = liftsForSoOnPo(lifts, poRef, soRef)
-  const onLiftQty = soLifts
-    .filter(e => e.lift.status === 'pending')
-    .reduce((sum, e) => sum + e.qtyMt, 0)
   const pendingQty = Math.max(0, so.orderQty - so.liftedQty)
 
   return (
-    <RelatedCard>
-      <RelatedCardHeader
-        title={(
-          <Link
-            to={`/sales-orders?ref=${encodeURIComponent(soRef)}`}
-            onClick={onNavigate}
-            className="text-sm font-medium text-accent hover:underline"
-          >
-            {formatSoRef(soRef)}
-          </Link>
-        )}
-        subtitle={so.partyName}
-        trailing={<span className="text-xs text-muted tabular-nums shrink-0">{formatQty(so.orderQty)}</span>}
-        stats={(
-          <RelatedOrderStats
-            deliveredQty={so.liftedQty}
-            onLiftQty={onLiftQty}
-            pendingQty={pendingQty}
-          />
-        )}
-      />
-      <RelatedCardBody>
-        {crossPo && bookedPoRef && (
-          <div className="rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/20">
-            <p className="text-xs font-medium uppercase tracking-wide text-warning">Cross lot dispatch</p>
-            <p className="text-xs text-heading mt-1">
-              {formatSoRef(soRef)} booked on {formatPoRef(bookedPoRef)} · dispatching from {formatPoRef(poRef)}
-            </p>
-          </div>
-        )}
-        <div className="flex items-center gap-2 rounded-md bg-gray-50/80 dark:bg-gray-800/40 px-2.5 py-2">
-          <span className="text-xs text-muted">This lift</span>
-          <StatusBadge status={lift.status} context="lift" />
-          <span className="ml-auto tabular-nums text-sm font-semibold text-heading">
-            {formatQty(allocation.qtyMt)}
-          </span>
+    <AllocationSoCard
+      title={(
+        <Link
+          to={`/sales-orders?ref=${encodeURIComponent(soRef)}`}
+          onClick={onNavigate}
+          className="text-[13px] font-medium text-accent hover:underline"
+        >
+          {formatSoRef(soRef)}
+        </Link>
+      )}
+      subtitle={so.partyName}
+      totalQty={so.orderQty}
+      deliveredQty={so.liftedQty}
+      pendingQty={pendingQty}
+    >
+      {crossPo && bookedPoRef && (
+        <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/20">
+          <p className="text-[13px] text-heading">
+            {formatSoRef(soRef)} booked on {formatPoRef(bookedPoRef)} · dispatching from {formatPoRef(poRef)}
+          </p>
         </div>
-        <RelatedDetailRow
-          label="Purchase order"
-          value={(
-            <Link
-              to={`/purchase-orders?ref=${encodeURIComponent(poRef)}`}
-              onClick={onNavigate}
-              className="text-sm text-accent hover:underline"
-            >
-              {formatPoRef(poRef)}{crossPo ? ' (dispatch lot)' : ''}
-            </Link>
-          )}
-        />
-        {crossPo && bookedPoRef && (
-          <RelatedDetailRow label="Booked PO" value={<span className="text-sm">{bookedPoRef}</span>} />
-        )}
-        <RelatedDetailRow label="Seller" value={`${po.partyName} · ${formatQty(po.orderQty)} ordered`} />
-        {outstandingBalance > 0 && (
-          <RelatedDetailRow
-            label="Balance owed"
-            value={<span className="text-warning font-medium tabular-nums">{formatQty(outstandingBalance)}</span>}
-          />
-        )}
-      </RelatedCardBody>
-    </RelatedCard>
+      )}
+      <ThisLiftRows lift={lift} qtyMt={allocation.qtyMt} onNavigate={onNavigate} />
+    </AllocationSoCard>
   )
 }
 
 function StockAllocationCard({
   allocation,
   lift,
-  po,
   onNavigate,
 }: {
   allocation: LiftAllocation
@@ -131,39 +133,19 @@ function StockAllocationCard({
 }) {
   return (
     <RelatedCard>
-      <RelatedCardHeader
-        title={<span className="text-sm font-medium text-heading">Stock lift</span>}
-        subtitle={`From ${formatPoRef(allocation.poRef)} · not linked to an SO`}
-        stats={(
-          <RelatedOrderStats
-            deliveredQty={lift.status === 'delivered' ? allocation.qtyMt : 0}
-            onLiftQty={lift.status === 'pending' ? allocation.qtyMt : 0}
-            pendingQty={0}
-          />
-        )}
-      />
-      <RelatedCardBody>
-        <div className="flex items-center gap-2 rounded-md bg-gray-50/80 dark:bg-gray-800/40 px-2.5 py-2">
-          <span className="text-xs text-muted">This lift</span>
-          <StatusBadge status={lift.status} context="lift" />
-          <span className="ml-auto tabular-nums text-sm font-semibold text-heading">
-            {formatQty(allocation.qtyMt)}
-          </span>
+      <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
+        <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+          <Link
+            to={appPath(`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`)}
+            onClick={onNavigate}
+            className="text-[13px] font-medium text-accent hover:underline shrink-0"
+          >
+            {formatPoRef(allocation.poRef)}
+          </Link>
+          <span className="text-[13px] text-muted">Stock lift · not linked to an SO</span>
         </div>
-        <RelatedDetailRow
-          label="Purchase order"
-          value={(
-            <Link
-              to={`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`}
-              onClick={onNavigate}
-              className="text-sm text-accent hover:underline"
-            >
-              {formatPoRef(allocation.poRef)}
-            </Link>
-          )}
-        />
-        <RelatedDetailRow label="Seller" value={`${po.partyName} · ${formatQty(po.orderQty)} ordered`} />
-      </RelatedCardBody>
+      </div>
+      <ThisLiftRows lift={lift} qtyMt={allocation.qtyMt} onNavigate={onNavigate} />
     </RelatedCard>
   )
 }
@@ -185,34 +167,18 @@ function MissingOrderAllocationCard({
 
   return (
     <RelatedCard>
-      <RelatedCardHeader
-        title={(
-          <span className="text-sm font-medium text-heading">{refLabel}</span>
-        )}
-        subtitle={party || (missingSide === 'purchase' ? 'Purchase order' : 'Sales order')}
-      />
-      <RelatedCardBody>
-        <div className="rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/20">
-          <p className="text-xs text-heading">
-            {refLabel} is not in your register yet — shown from this lift only.
-          </p>
-        </div>
-        <RelatedDetailRow label="This lift qty" value={formatQty(allocation.qtyMt)} />
-        {allocation.poRef && missingSide === 'sale' && (
-          <RelatedDetailRow
-            label="Purchase order"
-            value={(
-              <Link
-                to={`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`}
-                onClick={onNavigate}
-                className="text-sm text-accent hover:underline"
-              >
-                {formatPoRef(allocation.poRef)}
-              </Link>
-            )}
-          />
-        )}
-      </RelatedCardBody>
+      <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
+        <p className="text-[13px] font-medium text-heading">{refLabel}</p>
+        <p className="text-[13px] text-muted mt-0.5">
+          {party || (missingSide === 'purchase' ? 'Purchase order' : 'Sales order')}
+        </p>
+      </div>
+      <div className="p-3 space-y-2">
+        <p className="text-[13px] text-muted">
+          {refLabel} is not in your register yet — shown from this lift only.
+        </p>
+        <ThisLiftRows lift={lift} qtyMt={allocation.qtyMt} onNavigate={onNavigate} />
+      </div>
     </RelatedCard>
   )
 }
@@ -240,9 +206,6 @@ export function LiftRelatedSection({
             allocation={a}
             lift={lift}
             so={so}
-            po={po}
-            lifts={lifts}
-            outstandingBalance={getOutstandingBalance(a.poRef, a.soRef)}
             crossPo={crossPo}
             bookedPoRef={crossPo ? so.poRef : undefined}
             onNavigate={onNavigate}
@@ -308,7 +271,7 @@ export function LiftRelatedSection({
   if (cards.length === 0) return null
 
   return (
-    <DetailGroup title="Related" icon={Link2}>
+    <DetailGroup title="Allocations" icon={Layers}>
       <RelatedCardsStack>{cards}</RelatedCardsStack>
     </DetailGroup>
   )
