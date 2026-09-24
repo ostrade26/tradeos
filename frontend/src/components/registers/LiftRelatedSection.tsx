@@ -16,8 +16,6 @@ interface LiftRelatedSectionProps {
   lift: Lift
   allocations: LiftAllocation[]
   getOrderByRef: (ref: string, side: 'purchase' | 'sale') => TradeOrder | undefined
-  lifts: Lift[]
-  getOutstandingBalance: (poRef: string, soRef: string) => number
   onNavigate?: () => void
 }
 
@@ -128,7 +126,6 @@ function StockAllocationCard({
 }: {
   allocation: LiftAllocation
   lift: Lift
-  po: TradeOrder
   onNavigate?: () => void
 }) {
   return (
@@ -187,8 +184,6 @@ export function LiftRelatedSection({
   lift,
   allocations,
   getOrderByRef,
-  lifts,
-  getOutstandingBalance,
   onNavigate,
 }: LiftRelatedSectionProps) {
   if (allocations.length === 0) return null
@@ -262,7 +257,6 @@ export function LiftRelatedSection({
         key={`stock-${a.poRef}`}
         allocation={a}
         lift={lift}
-        po={po}
         onNavigate={onNavigate}
       />
     )

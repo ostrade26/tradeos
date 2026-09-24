@@ -224,8 +224,6 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
         lift={lift}
         allocations={allocations}
         getOrderByRef={store.getOrderByRef}
-        lifts={store.lifts}
-        getOutstandingBalance={store.getOutstandingBalance}
         onNavigate={onClose}
       />
     </DetailPanelBody>
