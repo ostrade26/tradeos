@@ -210,7 +210,7 @@ export function LiftTankersForm({
                   value={tanker.tankerNo}
                   error={fieldErrors?.[index]?.tankerNo}
                   onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-                  className={cn(fieldSize, 'uppercase font-mono')}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="e.g. MH-12-RF-4236"
@@ -228,19 +228,19 @@ export function LiftTankersForm({
                   placeholder={qtyPlaceholder}
                 />
                 <Input
-                  label="SO invoice no."
+                  label="Sales invoice no"
                   value={tanker.salesInvoiceNo}
-                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
-                  className={cn(fieldSize, 'font-mono uppercase')}
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value })}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
                 />
                 <Input
-                  label="PO invoice no."
+                  label="Purchase invoice no"
                   value={tanker.poInvoiceNo}
-                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
-                  className={cn(fieldSize, 'font-mono uppercase')}
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value })}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
@@ -254,26 +254,26 @@ export function LiftTankersForm({
                   value={tanker.tankerNo}
                   error={fieldErrors?.[index]?.tankerNo}
                   onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-                  className={cn(fieldSize, 'uppercase font-mono')}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="e.g. MH-12-RF-4236"
                 />
                 <div className="hidden sm:block" aria-hidden />
                 <Input
-                  label="SO invoice no."
+                  label="Sales invoice no"
                   value={tanker.salesInvoiceNo}
-                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
-                  className={cn(fieldSize, 'font-mono uppercase')}
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value })}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
                 />
                 <Input
-                  label="PO invoice no."
+                  label="Purchase invoice no"
                   value={tanker.poInvoiceNo}
-                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
-                  className={cn(fieldSize, 'font-mono uppercase')}
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value })}
+                  className={fieldSize}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
@@ -302,7 +302,7 @@ export function LiftTankersForm({
                     value={tanker.tankerNo}
                     error={fieldErrors?.[index]?.tankerNo}
                     onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-                    className={cn(fieldSize, 'uppercase font-mono')}
+                    className={fieldSize}
                     autoComplete="off"
                     spellCheck={false}
                     placeholder="e.g. MH-12-RF-4236"

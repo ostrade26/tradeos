@@ -98,7 +98,6 @@ function BulkLiftTankerFields({
               value={tanker.tankerNo}
               error={fieldErrors?.[index]?.tankerNo}
               onChange={e => updateTanker(index, { tankerNo: formatTankerNo(e.target.value) })}
-              className="uppercase font-mono"
               autoComplete="off"
               spellCheck={false}
               placeholder="e.g. MH-12-RF-4236"
@@ -118,19 +117,17 @@ function BulkLiftTankerFields({
             {!hideQty && tankers.length > 1 ? (
               <>
                 <Input
-                  label="SO invoice no."
+                  label="Sales invoice no"
                   value={tanker.salesInvoiceNo}
-                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value.toUpperCase() })}
-                  className="font-mono uppercase"
+                  onChange={e => updateTanker(index, { salesInvoiceNo: e.target.value })}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
                 />
                 <Input
-                  label="PO invoice no."
+                  label="Purchase invoice no"
                   value={tanker.poInvoiceNo}
-                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value.toUpperCase() })}
-                  className="font-mono uppercase"
+                  onChange={e => updateTanker(index, { poInvoiceNo: e.target.value })}
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Optional"
@@ -365,23 +362,21 @@ export function BulkMarkLiftsDeliveredModal({
                 {hideQty && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Input
-                      label="SO invoice no."
+                      label="Sales invoice no"
                       value={salesInvoiceNos[lift.id] ?? ''}
                       onChange={e =>
-                        setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value.toUpperCase() }))
+                        setSalesInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value }))
                       }
-                      className="font-mono uppercase"
                       autoComplete="off"
                       spellCheck={false}
                       placeholder="Optional"
                     />
                     <Input
-                      label="PO invoice no."
+                      label="Purchase invoice no"
                       value={poInvoiceNos[lift.id] ?? ''}
                       onChange={e =>
-                        setPoInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value.toUpperCase() }))
+                        setPoInvoiceNos(prev => ({ ...prev, [lift.id]: e.target.value }))
                       }
-                      className="font-mono uppercase"
                       autoComplete="off"
                       spellCheck={false}
                       placeholder="Optional"

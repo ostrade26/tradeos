@@ -302,7 +302,7 @@ export function LiftRegisterPage() {
         { key: 'rate', header: RATE_COLUMN_HEADER },
         { key: 'qty', header: mode === 'pending' ? 'Planned Qty' : 'Actual Qty' },
         { key: 'tankers', header: 'Tanker No.' },
-        ...(mode === 'completed' ? [{ key: 'salesInvoiceNo' as const, header: 'Sales Invoice No.' }] : []),
+        ...(mode === 'completed' ? [{ key: 'salesInvoiceNo' as const, header: 'Sales invoice no' }] : []),
       ],
       `lift-register-${mode}-${new Date().toISOString().slice(0, 10)}`,
     )
@@ -518,9 +518,9 @@ export function LiftRegisterPage() {
     },
     ...(mode === 'completed' ? [{
       key: 'salesInvoiceNo',
-      header: 'Sales Invoice No.',
+      header: 'Sales invoice no',
       className: 'hidden xl:table-cell whitespace-nowrap min-w-[8rem]',
-      render: (r: Lift) => <span className="font-mono">{r.salesInvoiceNo ?? '—'}</span>,
+      render: (r: Lift) => <span>{r.salesInvoiceNo ?? '—'}</span>,
     }] : []),
     {
       key: 'actions',

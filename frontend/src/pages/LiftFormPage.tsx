@@ -231,6 +231,27 @@ function LiftFormSidebar({
         </div>
       </div>
     </div>
+            <SidebarMetaRow label="Balance applied" value={formatQty(balanceApplied)} tabular />
+          )}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
+            <SidebarMetaRow label="Tankers" value={tankerCount} tabular />
+          </div>
+          <p className="text-xs text-muted pt-1">{TABLE_QTY_NOTE}</p>
+        </div>
+      </Card>
+
+      <div className="hidden sm:flex flex-col gap-2 w-full">
+        {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
+        <div className="flex gap-2 w-full">
+          <Button variant="outline" className="flex-1" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button className="flex-[1.4]" onClick={onSave} disabled={saveDisabled} loading={saveLoading}>
+            {isEdit ? 'Update Lift' : 'Save Lift'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -707,18 +728,16 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
                     {isEdit && editingLift?.status === 'delivered' ? (
                       <>
                         <Input
-                          label="SO Invoice No."
+                          label="Sales invoice no"
                           value={salesInvoiceNo}
-                          onChange={e => setSalesInvoiceNo(e.target.value.toUpperCase())}
-                          className="font-mono uppercase"
+                          onChange={e => setSalesInvoiceNo(e.target.value)}
                           autoComplete="off"
                           spellCheck={false}
                         />
                         <Input
-                          label="PO Invoice No."
+                          label="Purchase invoice no"
                           value={poInvoiceNo}
-                          onChange={e => setPoInvoiceNo(e.target.value.toUpperCase())}
-                          className="font-mono uppercase"
+                          onChange={e => setPoInvoiceNo(e.target.value)}
                           autoComplete="off"
                           spellCheck={false}
                         />

@@ -29,7 +29,7 @@ import {
 import { formatDate, formatCurrency, formatQty, roundQtyMt, availableQtyClass, cn } from '../lib/utils'
 import { soRemainingQtyClass } from '../components/ui/AvailableQtyHint'
 import { type OrderSide, type DeliveryType, type TradeOrder, toBeLifted } from '../data/mockData'
-import { lockedAccountPartyFields, displayPartyConfirmedBy } from '../lib/accountBuyer'
+import { lockedAccountPartyFields } from '../lib/accountBuyer'
 import { useAccountTrader } from '../lib/useAccountTrader'
 import { parseIndianAmount, formatIndianAmount } from '../lib/indianAmount'
 import { formatContractRate, orderLineAmount, parseRateNumber, rateInputLabel, syncedRateFields } from '../lib/orderRate'
@@ -689,6 +689,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
               <div className="px-4 pb-4">
                 <ContractPdfUpload
                   key={pdfUploadKey}
+                  embedded
                   side={side}
                   onParsed={applyPdfImport}
                   onBeforeApply={confirmPdfReplace}
@@ -715,7 +716,6 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
           shortLabel={shortLabel}
           form={form}
           store={store}
-          accountTrader={accountTrader}
           lastEntry={lastEntry}
           amount={amount}
           taxRate={form.taxRate}
@@ -809,7 +809,6 @@ function SOEntryForm({
   sellFromLot?: OrderEntryPageProps['sellFromLot']
   saveLoading?: boolean
 }) {
-  const { name: accountTrader } = useAccountTrader()
   const [poLinkItem, setPoLinkItem] = useState('')
   const [poLinkSeller, setPoLinkSeller] = useState('')
   const [poLinkSpot, setPoLinkSpot] = useState('')
@@ -1045,7 +1044,6 @@ function SOEntryForm({
           shortLabel="SO"
           form={form}
           store={store}
-          accountTrader={accountTrader}
           lastEntry={lastEntry}
           amount={amount}
           taxRate={form.taxRate}
@@ -1112,31 +1110,6 @@ function FormFieldGroup({
     <section>
       <div className={cn('grid gap-3', columns)}>{children}</div>
     </section>
-  )
-}
-
-function ContractPartiesPreview({ form, isPO, accountTrader }: { form: FormApi; isPO: boolean; accountTrader: string }) {
-  // Prefer PDF-extracted contract names when present so import matches the confirmation.
-  const sellerName = isPO
-    ? (form.sellerName || 'Select seller')
-    : (form.extractedSellerName?.trim() || form.sellerName || accountTrader)
-  const buyerName = isPO
-    ? (form.extractedBuyerName?.trim() || form.buyerName || accountTrader)
-    : (form.buyerName || 'Select buyer')
-  const sellerConfirmed = displayPartyConfirmedBy(form.sellerConfirmedBy, accountTrader)
-  const buyerConfirmed = displayPartyConfirmedBy(form.buyerConfirmedBy, accountTrader)
-
-  return (
-    <div className="grid grid-cols-2 gap-3 text-sm">
-      <div className="min-w-0">
-        <p className="text-xs text-muted">Seller · {sellerConfirmed}</p>
-        <p className="font-medium truncate" title={sellerName}>{sellerName}</p>
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs text-muted">Buyer · {buyerConfirmed}</p>
-        <p className="font-medium truncate" title={buyerName}>{buyerName}</p>
-      </div>
-    </div>
   )
 }
 
@@ -1468,7 +1441,6 @@ function OrderFormSidebar({
   shortLabel,
   form,
   store,
-  accountTrader,
   lastEntry,
   amount,
   taxRate,
@@ -1486,7 +1458,6 @@ function OrderFormSidebar({
   shortLabel: string
   form: FormApi
   store: ReturnType<typeof useTradeStore>
-  accountTrader: string
   lastEntry?: TradeOrder
   amount: number
   taxRate: string
@@ -1534,7 +1505,14 @@ function OrderFormSidebar({
     <div className="space-y-3 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
       {previewNotes.length > 0 && (
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
-          <div className="flex flex-wrap items-stretch divide-x divide-gray-200 bg-gray-100/90 px-3 py-3 dark:divide-gray-700 dark:bg-gray-800/50">
+          <div
+            className={cn(
+              'flex flex-wrap items-stretch divide-x divide-gray-200 px-3 py-3 dark:divide-gray-700',
+              isPO
+                ? 'bg-gray-100/90 dark:bg-gray-800/50'
+                : 'bg-card',
+            )}
+          >
             {previewNotes.map(note => (
               <div key={note.label} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0 py-1">
                 <p className="text-xs font-medium text-muted leading-tight">{note.label}</p>
@@ -1547,41 +1525,62 @@ function OrderFormSidebar({
         </div>
       )}
 
-      <Card className="p-8" padding={false}>
-        <h3 className="text-sm font-semibold mb-3">Summary</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between gap-3">
-            <span className="text-muted shrink-0">{shortLabel} Ref.</span>
-            <span className="font-mono font-medium text-right truncate">
-              {formatOrderRef(form.ref, isPO ? 'purchase' : 'sale')}
-            </span>
-          </div>
+      <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-heading">Summary</h3>
+          <span className="text-sm text-heading truncate">
+            {formatOrderRef(form.ref, isPO ? 'purchase' : 'sale')}
+          </span>
+        </div>
 
-          {showParties && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-              <ContractPartiesPreview form={form} isPO={isPO} accountTrader={accountTrader} />
+        <div className="px-6 py-4 space-y-4">
+          {showParties ? (
+            <div className="flex justify-between gap-3 text-sm">
+              <span className="text-muted shrink-0">{isPO ? 'Seller' : 'Buyer'}</span>
+              <span
+                className="font-medium text-heading text-right truncate"
+                title={
+                  isPO
+                    ? (form.sellerName || form.partyName || undefined)
+                    : (form.buyerName || form.partyName || undefined)
+                }
+              >
+                {isPO
+                  ? (form.sellerName || form.partyName || 'Select seller')
+                  : (form.buyerName || form.partyName || 'Select buyer')}
+              </span>
             </div>
-          )}
+          ) : null}
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1.5">
-            <div className="flex justify-between"><span className="text-muted">{shortLabel} Value</span><span className="font-semibold tabular-nums">{formatCurrency(amount)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Tax ({taxRate}%)</span><span className="tabular-nums">{formatCurrency(amount * (parseFloat(taxRate) / 100 || 0))}</span></div>
-            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-2">
-              <span className="text-muted">Total</span>
-              <span className="font-semibold tabular-nums">{formatCurrency(amount * (1 + (parseFloat(taxRate) / 100 || 0)))}</span>
+          <div className="rounded-md bg-gray-50/90 dark:bg-gray-800/50 px-4 py-3 space-y-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted">{shortLabel} Value</span>
+              <span className="tabular-nums text-heading">{formatCurrency(amount)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted">Tax ({taxRate}%)</span>
+              <span className="tabular-nums text-heading">
+                {formatCurrency(amount * (parseFloat(taxRate) / 100 || 0))}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3 border-t border-gray-200 dark:border-gray-700 pt-2">
+              <span className="font-semibold text-heading">Total</span>
+              <span className="font-semibold tabular-nums text-heading">
+                {formatCurrency(amount * (1 + (parseFloat(taxRate) / 100 || 0)))}
+              </span>
             </div>
           </div>
         </div>
-      </Card>
+      </div>
 
       {lastEntry && (
         <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden flex items-center">
             Last entry
-            <span className="ml-auto text-xs font-normal text-muted font-mono">{formatOrderRef(lastEntry.ref, lastEntry.side)}</span>
+            <span className="ml-auto text-xs font-normal text-muted">{formatOrderRef(lastEntry.ref, lastEntry.side)}</span>
           </summary>
           <div className="px-4 pb-3 space-y-1.5 text-sm">
-            {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span className="font-mono">{formatPoRef(lastEntry.poRef)}</span></div>}
+            {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span>{formatPoRef(lastEntry.poRef)}</span></div>}
             <div className="flex justify-between"><span className="text-muted">Date</span><span>{formatDate(lastEntry.date)}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">{isPO ? 'Seller' : 'Buyer'}</span><span className="font-medium text-right truncate">{lastEntry.partyName}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">Item</span><span className="font-medium text-right truncate">{lastEntry.itemName}</span></div>
