@@ -104,7 +104,7 @@ def _create_tables(conn) -> None:
 
 
 DRAFT_RELEASE_SHIP_NOTE = (
-    "Draft release — not published to organisations yet. Review in Ship queue before publishing."
+    "Draft release — not published to organisations yet. Review on Releases before publishing."
 )
 
 

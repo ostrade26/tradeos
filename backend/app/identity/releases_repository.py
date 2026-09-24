@@ -466,15 +466,15 @@ def _notify_admins_of_deploy_draft(
             + "Review pricing and Publish from Features & Access when ready."
         )
         if inform_items:
-            body += "\nUI & fix notes are in Ship queue — publish from there to notify organisations."
+            body += "\nUI & fix notes are on Releases — publish when ready. Ship-later items stay in Ship queue."
         cta = "review_features"
     else:
-        href = f"/platform-admin/ship-queue"
+        href = f"/platform-admin/releases?releaseId={release_id}"
         title = f"Release draft from deploy · {short}"
         body = (
             f"Production deploy {short} created a release draft.\n\n"
             + ("\n".join(body_lines) + "\n\n" if body_lines else "")
-            + "Review in Ship queue. Version is assigned when you publish; organisations are notified only for Publish-now items."
+            + "Review on Releases. Version is assigned when you publish; Ship-later items stay in Ship queue until you publish them there."
         )
         cta = "review_release"
 
@@ -559,7 +559,7 @@ def create_deploy_draft_release(
         summary_text = _summary_from_items(cleaned, env=env, sha=sha)
     now = _now_iso()
     deploy_ship_note = (
-        f"From deploy {sha[:7]} ({env}). Review in Ship queue before publishing to organisations."
+        f"From deploy {sha[:7]} ({env}). Review on Releases before publishing to organisations."
     )
     if uses_postgres():
         row = conn.execute(
@@ -655,7 +655,7 @@ def create_release(
                 now,
                 now,
                 actor_user_id,
-                "Draft release — not published to organisations yet. Review in Ship queue before publishing.",
+                "Draft release — not published to organisations yet. Review on Releases before publishing.",
             ),
         ).fetchone()
         release_id = int(dict(row_dict(row))["id"])
@@ -673,7 +673,7 @@ def create_release(
                 now,
                 now,
                 actor_user_id,
-                "Draft release — not published to organisations yet. Review in Ship queue before publishing.",
+                "Draft release — not published to organisations yet. Review on Releases before publishing.",
             ),
         )
         release_id = int(cur.lastrowid)

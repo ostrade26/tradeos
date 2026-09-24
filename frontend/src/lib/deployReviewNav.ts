@@ -18,19 +18,24 @@ export function deployReviewCta(
 
 /** Destination for a deploy-review notice — never the inbox. */
 export function deployReviewHref(item: Pick<UnifiedInboxItem, 'href' | 'notice'>): string {
+  const releaseId = String(item.notice?.payload?.release_id || '').trim()
+  const releaseHref = releaseId
+    ? `/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`
+    : '/platform-admin/releases'
+
   const fromNotice = String(item.notice?.href || '').trim()
+  // Legacy deploy notices pointed at Ship queue; Releases is the review surface now.
+  if (fromNotice.includes('/ship-queue')) return releaseHref
   if (fromNotice.startsWith('/platform-admin/')) return fromNotice
+
   const fromRow = String(item.href || '').trim()
+  if (fromRow.includes('/ship-queue')) return releaseHref
   if (fromRow.startsWith('/platform-admin/')) return fromRow
-  if (deployReviewCta(item) === 'review_release') {
-    const releaseId = String(item.notice?.payload?.release_id || '').trim()
-    return releaseId
-      ? `/platform-admin/releases?releaseId=${encodeURIComponent(releaseId)}`
-      : '/platform-admin/ship-queue'
-  }
+
+  if (deployReviewCta(item) === 'review_release') return releaseHref
   return '/platform-admin/add-ons'
 }
 
 export function deployReviewActionLabel(item: Pick<UnifiedInboxItem, 'href' | 'notice'>): string {
-  return deployReviewCta(item) === 'review_release' ? 'Open Ship queue' : 'Open Features & Access'
+  return deployReviewCta(item) === 'review_release' ? 'Open Releases' : 'Open Features & Access'
 }
