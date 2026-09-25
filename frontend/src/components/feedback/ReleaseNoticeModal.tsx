@@ -48,6 +48,11 @@ function bodyHeading(variant: AnnouncementVariant, notice: UserNotification): st
     return notice.body.split('\n')[0]?.trim() || 'Tradeal may be briefly unavailable'
   }
   if (variant === 'marketplace') return 'Explore Available Features'
+  if (variant === 'generalAnnouncement') {
+    const heading = notice.title.trim()
+    if (!heading || heading === 'General Announcement' || heading === 'Message from Tradeal') return ''
+    return heading
+  }
   return ''
 }
 
@@ -76,6 +81,12 @@ function bodyCopy(variant: AnnouncementVariant, notice: UserNotification): strin
         'Browse available features, learn what they offer, and enable the ones that best fit your business needs.',
     ]
   }
+  if (variant === 'generalAnnouncement') {
+    return notice.body
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(Boolean)
+  }
   return []
 }
 
@@ -88,6 +99,9 @@ function subtitleFor(variant: AnnouncementVariant, notice: UserNotification, ver
   }
   if (variant === 'marketplace') {
     return 'Discover tools and capabilities designed to help you get more out of Tradeal.'
+  }
+  if (variant === 'generalAnnouncement') {
+    return 'A message from Tradeal.'
   }
   if (variant === 'productUpdate' && version) {
     return 'Review what is included in this update.'
@@ -116,7 +130,9 @@ export function ReleaseNoticeModal({
         ? 'Maintenance Scheduled'
         : variant === 'marketplace'
           ? 'Add-ons'
-          : releaseHeading(notice, version)
+          : variant === 'generalAnnouncement'
+            ? 'General Announcement'
+            : releaseHeading(notice, version)
 
   const subtitle = subtitleFor(variant, notice, version)
   const heading = bodyHeading(variant, notice)
@@ -153,8 +169,8 @@ export function ReleaseNoticeModal({
       ) : (
         <div className="space-y-3 text-left">
           {heading ? <h3 className="text-base font-semibold text-heading">{heading}</h3> : null}
-          {paragraphs.map(p => (
-            <p key={p.slice(0, 48)} className="text-sm leading-relaxed text-heading/90">
+          {paragraphs.map((p, index) => (
+            <p key={`${index}-${p.slice(0, 32)}`} className="text-sm leading-relaxed text-heading/90">
               {p.split(/(Settings → Data)/).map((chunk, i) =>
                 chunk === 'Settings → Data' ? (
                   <strong key={i} className="font-semibold text-heading">

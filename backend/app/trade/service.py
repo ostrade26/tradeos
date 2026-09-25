@@ -1295,10 +1295,15 @@ class TradeService:
             allocations = scale_allocations(planned_allocations, lifted_qty)
 
         stock_lift = bool(existing.get("stockLift"))
+        # Weighed actual may exceed planned. Capacity was already reserved when the lift was created.
         if stock_lift:
-            alloc_error = validate_stock_lift_allocations(allocations, data["tradeOrders"], data["lifts"], lift_id)
+            alloc_error = validate_stock_lift_allocations(
+                allocations, data["tradeOrders"], data["lifts"], lift_id, enforce_capacity=False,
+            )
         else:
-            alloc_error = validate_lift_allocations(allocations, data["tradeOrders"], data["lifts"], lift_id)
+            alloc_error = validate_lift_allocations(
+                allocations, data["tradeOrders"], data["lifts"], lift_id, enforce_capacity=False,
+            )
         if alloc_error:
             raise ValueError(alloc_error)
 

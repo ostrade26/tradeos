@@ -9,6 +9,7 @@ export type AnnouncementVariant =
   | 'maintenance'
   | 'backup'
   | 'marketplace'
+  | 'generalAnnouncement'
   | 'platformRelease'
   /** @deprecated aliases — map to the five above */
   | 'release'
@@ -29,7 +30,7 @@ export type AnnouncementTheme = {
 }
 
 const THEMES: Record<
-  'productUpdate' | 'maintenance' | 'backup' | 'marketplace' | 'platformRelease',
+  'productUpdate' | 'maintenance' | 'backup' | 'marketplace' | 'generalAnnouncement' | 'platformRelease',
   AnnouncementTheme
 > = {
   productUpdate: {
@@ -68,6 +69,15 @@ const THEMES: Record<
     ring: 'ring-sky-300/40',
     primaryButton: 'bg-accent hover:bg-accent-hover text-white',
   },
+  generalAnnouncement: {
+    label: 'General announcement',
+    icon: Megaphone,
+    headerGradient:
+      'bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,#ffffff_0%,rgba(244,114,182,0.55)_100%)] dark:bg-[radial-gradient(ellipse_120%_75%_at_50%_0%,rgba(255,255,255,0.06)_0%,rgba(244,114,182,0.35)_100%)]',
+    illustration: 'generalAnnouncement',
+    ring: 'ring-pink-300/50',
+    primaryButton: 'bg-accent hover:bg-accent-hover text-white',
+  },
   platformRelease: {
     label: 'Platform release',
     icon: Megaphone,
@@ -90,6 +100,7 @@ export const ANNOUNCEMENT_THEMES: Record<AnnouncementVariant, AnnouncementTheme>
   maintenance: THEMES.maintenance,
   backup: THEMES.backup,
   marketplace: THEMES.marketplace,
+  generalAnnouncement: THEMES.generalAnnouncement,
   platformRelease: THEMES.platformRelease,
   release: THEMES.productUpdate,
   feature: THEMES.marketplace,
@@ -99,7 +110,8 @@ export const ANNOUNCEMENT_THEMES: Record<AnnouncementVariant, AnnouncementTheme>
 export function announcementVariantFromKind(kind: NotificationKind | string): AnnouncementVariant {
   if (kind === 'backup_reminder') return 'backup'
   if (kind === 'maintenance') return 'maintenance'
-  if (kind === 'feature_launch' || kind === 'announcement') return 'marketplace'
+  if (kind === 'announcement') return 'generalAnnouncement'
+  if (kind === 'feature_launch') return 'marketplace'
   if (kind === 'release_notes' || kind === 'product_update') return 'productUpdate'
   return 'productUpdate'
 }

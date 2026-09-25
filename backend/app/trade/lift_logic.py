@@ -321,6 +321,8 @@ def validate_lift_allocations(
     orders: list[dict],
     lifts: list[dict],
     exclude_lift_id: str | None = None,
+    *,
+    enforce_capacity: bool = True,
 ) -> str | None:
     if not allocations:
         return "Add at least one SO"
@@ -355,21 +357,22 @@ def validate_lift_allocations(
     if len(item_names) > 1:
         return "All SOs on one tanker must be the same item"
 
-    for so_ref, qty in used_on_so.items():
-        so = next((o for o in orders if o.get("ref") == so_ref and o.get("side") == "sale"), None)
-        if not so:
-            continue
-        remaining = remaining_on_order(so, lifts, exclude_lift_id)
-        if qty > remaining:
-            return f"{so_ref} only has {format_qty(remaining)} left to lift"
+    if enforce_capacity:
+        for so_ref, qty in used_on_so.items():
+            so = next((o for o in orders if o.get("ref") == so_ref and o.get("side") == "sale"), None)
+            if not so:
+                continue
+            remaining = remaining_on_order(so, lifts, exclude_lift_id)
+            if qty > remaining:
+                return f"{so_ref} only has {format_qty(remaining)} left to lift"
 
-    for po_ref, qty in used_on_po.items():
-        po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
-        if not po:
-            continue
-        remaining = remaining_on_po_for_dispatch(po, lifts, exclude_lift_id)
-        if qty > remaining:
-            return f"{po_ref} only has {format_qty(remaining)} left to lift"
+        for po_ref, qty in used_on_po.items():
+            po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
+            if not po:
+                continue
+            remaining = remaining_on_po_for_dispatch(po, lifts, exclude_lift_id)
+            if qty > remaining:
+                return f"{po_ref} only has {format_qty(remaining)} left to lift"
 
     return None
 
@@ -379,6 +382,8 @@ def validate_stock_lift_allocations(
     orders: list[dict],
     lifts: list[dict],
     exclude_lift_id: str | None = None,
+    *,
+    enforce_capacity: bool = True,
 ) -> str | None:
     if not allocations:
         return "Select a purchase order"
@@ -397,9 +402,10 @@ def validate_stock_lift_allocations(
         return "PO not found"
     if po.get("status") == "cancelled":
         return f"{a['poRef']} is cancelled"
-    remaining = remaining_on_order(po, lifts, exclude_lift_id)
-    if a["qtyMt"] > remaining:
-        return f"{a['poRef']} only has {format_qty(remaining)} left to lift"
+    if enforce_capacity:
+        remaining = remaining_on_order(po, lifts, exclude_lift_id)
+        if a["qtyMt"] > remaining:
+            return f"{a['poRef']} only has {format_qty(remaining)} left to lift"
     return None
 
 

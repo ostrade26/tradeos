@@ -168,7 +168,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
           {showLabels ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <div className={brandMarkClass}>
-                <TradealMark className="h-8 w-8" />
+                <TradealMark className="h-8 w-8" tone={themed ? 'white' : 'auto'} />
               </div>
               <div className="min-w-0 flex flex-col gap-0 leading-none">
                 <span className={cn('text-lg font-semibold truncate leading-tight', themed ? 'text-white' : 'text-heading')}>
@@ -191,7 +191,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
               className={cn('relative', brandMarkClass)}
               title={organisationIsTest ? 'Test account' : undefined}
             >
-              <TradealMark className="h-8 w-8" />
+              <TradealMark className="h-8 w-8" tone={themed ? 'white' : 'auto'} />
               {organisationIsTest ? (
                 <span
                   className={cn('absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full bg-warning ring-2', badgeRing)}

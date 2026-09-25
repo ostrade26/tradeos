@@ -7,6 +7,7 @@ import featureRocketGreenPana from './modal-feature-rocket-green-pana.png'
 import releaseRocketBluePana from './modal-release-rocket-blue-pana.png'
 import updateUiDesignPana from './modal-update-ui-design-pana.png'
 import maintenanceConstructionPana from './modal-maintenance-construction-pana.png'
+import generalAnnouncementMarketingPana from './modal-general-announcement-marketing-pana.png'
 
 export const MODAL_ILLUSTRATIONS = {
   /** Product update — blue rocket */
@@ -19,6 +20,8 @@ export const MODAL_ILLUSTRATIONS = {
   backup: backupHardDrivePana,
   /** Maintenance — under construction */
   maintenance: maintenanceConstructionPana,
+  /** General announcement — mobile marketing / megaphone */
+  generalAnnouncement: generalAnnouncementMarketingPana,
 } as const
 
 export type ModalIllustrationKey = keyof typeof MODAL_ILLUSTRATIONS

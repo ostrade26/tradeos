@@ -88,20 +88,12 @@ export function LiftFiltersBar({
         'rounded-md border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-card',
         !filtersOpen && 'hidden lg:block',
       )}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <DateFilterPicker
             label="Created date"
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
             onChange={(dateFrom, dateTo) => onFiltersChange({ ...filters, dateFrom, dateTo })}
-          />
-          <DateFilterPicker
-            label="Delivery period"
-            dateFrom={filters.deliveryPeriodFrom}
-            dateTo={filters.deliveryPeriodTo}
-            onChange={(deliveryPeriodFrom, deliveryPeriodTo) =>
-              onFiltersChange({ ...filters, deliveryPeriodFrom, deliveryPeriodTo })
-            }
           />
           <MultiSelect
             label="Item"

@@ -18,6 +18,7 @@ import {
   SAMPLE_BACKUP_NOTICE,
   SAMPLE_FEATURE_ENHANCEMENT_NOTICE,
   SAMPLE_FEATURE_LAUNCH_NOTICE,
+  SAMPLE_GENERAL_ANNOUNCEMENT_NOTICE,
   SAMPLE_MAINTENANCE_NOTICE,
   SAMPLE_MARKETPLACE_NOTICE,
   SAMPLE_PRODUCT_UPDATE_NOTICE,
@@ -126,6 +127,16 @@ export function SpecialStatesGalleryPage() {
               {
                 label: 'Open marketplace',
                 onClick: () => setOpen({ type: 'notice', notice: SAMPLE_MARKETPLACE_NOTICE }),
+              },
+            ]}
+          />
+          <GalleryCard
+            title="General announcement"
+            description="Pink header, marketing illustration, heading and paragraphs."
+            actions={[
+              {
+                label: 'Open general announcement',
+                onClick: () => setOpen({ type: 'notice', notice: SAMPLE_GENERAL_ANNOUNCEMENT_NOTICE }),
               },
             ]}
           />

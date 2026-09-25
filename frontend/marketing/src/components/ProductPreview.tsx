@@ -1,6 +1,6 @@
 import { AlertCircle, Clock, Package, Truck } from 'lucide-react'
 import { cn } from '../lib/utils'
-import markUrl from '../assets/tradeal-mark-square.png'
+import markUrl from '../assets/tradeal-mark-blue.png'
 
 const stats = [
   { label: 'Inventory value', value: '₹2.14 Cr', detail: '186.4 MT on hand', icon: Package },

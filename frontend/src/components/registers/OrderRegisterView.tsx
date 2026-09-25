@@ -16,6 +16,7 @@ import { canBuyBackPO, totalBuyBackQty } from '../../lib/buyBack'
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../ui/DeleteActions'
 import { OrderRowActions } from './OrderRowActions'
 import { OrderDetailDrawer, findOrderByRef } from './OrderDetailDrawer'
+import { DashboardQuickActions } from '../dashboard/DashboardQuickActions'
 import { formatDate, cn, formatMt, formatQty, tableRefCellClass, availableQtyClass } from '../../lib/utils'
 import { ORDER_DELETE_GRACE_DAYS } from '../../lib/orderDeletion'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER, weightedAverageRatePer10Kg } from '../../lib/orderRate'
@@ -853,7 +854,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           { label: pageTitle },
         ]} />}
         actions={
-          <Button to={`${pathPrefix}/new`} size="sm"><Plus className="h-4 w-4" /> New {shortLabel}</Button>
+          <DashboardQuickActions />
         }
         hideActionsOnMobile
       />

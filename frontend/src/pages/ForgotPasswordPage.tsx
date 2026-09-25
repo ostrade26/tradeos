@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input'
 import { authApi } from '../api/tradeApi'
 import { ApiError } from '../api/client'
 import { tradealCopyright } from '../lib/copyright'
+import { TradealMark } from '../components/brand/TradealMark'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -39,8 +40,8 @@ export function ForgotPasswordPage() {
     <div className="h-viewport overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white font-bold text-lg mb-4">
-            T
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent mb-4">
+            <TradealMark tone="white" className="h-7 w-7" title="" />
           </div>
           <h1 className="text-2xl font-semibold text-heading">Forgot password</h1>
           <p className="text-sm text-muted mt-2">

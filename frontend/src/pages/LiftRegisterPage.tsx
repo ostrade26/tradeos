@@ -5,13 +5,12 @@ import { PageHeader } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { DataTable } from '../components/ui/DataTable'
-import { VerifiedPeriod } from '../components/ui/GroupedDataTable'
 import { Badge } from '../components/ui/Badge'
 import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDeliveredModal'
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../components/ui/DeleteActions'
 import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
 import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
-import { cn, formatDate, formatDeliveryPeriodRange, formatMt, formatQty, tableRefCellMutedClass } from '../lib/utils'
+import { cn, formatDate, formatMt, formatQty, tableRefCellMutedClass } from '../lib/utils'
 import { REGISTER_TABLE_LAYER_Z } from '../components/ui/Drawer'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
 import { formatLiftRef } from '../lib/tradeRefs'
@@ -32,6 +31,8 @@ import {
 import { applyRowSelection, type RowSelectMeta } from '../lib/tableSelection'
 import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
+import { TruncatedTextWithTooltip } from '../components/ui/DelayedHoverTooltip'
+import { DashboardQuickActions } from '../components/dashboard/DashboardQuickActions'
 import { usePermissions } from '../hooks/useAuth'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../lib/orderPanelDock'
@@ -251,10 +252,8 @@ export function LiftRegisterPage() {
         case 'liftRef': return row.liftRef
         case 'date': return row.date
         case 'itemName': return row.itemName
-        case 'parties': return `${row.sellerName} → ${row.buyerName}`
         case 'buyerName': return row.buyerName
         case 'sellerName': return row.sellerName
-        case 'deliveryPeriod': return row.deliveryPeriodStart || row.deliveryPeriodEnd || row.deliveryPeriod || ''
         case 'liftedQty': return row.liftedQty
         case 'rate': return row.rate
         case 'balanceQtyMt': return getLiftBalanceQty(row)
@@ -282,7 +281,6 @@ export function LiftRegisterPage() {
         buyer: l.buyerName,
         seller: l.sellerName,
         item: l.itemName,
-        deliveryPeriod: formatDeliveryPeriodRange(l.deliveryPeriodStart, l.deliveryPeriodEnd),
         rate: contractRateFromOrder(l.rate),
         qty: l.liftedQty,
         tankers: getLiftTankers(l).map(t => t.tankerNo).join('; '),
@@ -298,7 +296,6 @@ export function LiftRegisterPage() {
         { key: 'buyer', header: 'Buyer Name' },
         { key: 'seller', header: 'Seller Name' },
         { key: 'item', header: 'Item Name' },
-        { key: 'deliveryPeriod', header: 'Delivery Period' },
         { key: 'rate', header: RATE_COLUMN_HEADER },
         { key: 'qty', header: mode === 'pending' ? 'Planned Qty' : 'Actual Qty' },
         { key: 'tankers', header: 'Tanker No.' },
@@ -456,30 +453,20 @@ export function LiftRegisterPage() {
       ),
     },
     {
-      key: 'parties',
-      header: 'Seller → Buyer',
-      className: 'hidden lg:table-cell min-w-[12rem]',
+      key: 'sellerName',
+      header: 'Seller',
+      className: 'min-w-[9rem]',
       sortable: true,
-      sortValue: (r: Lift) => `${r.sellerName} → ${r.buyerName}`,
-      render: (r: Lift) => (
-        <span className="max-w-[14rem] truncate block text-muted">{r.sellerName} → {r.buyerName}</span>
-      ),
+      sortValue: (r: Lift) => r.sellerName,
+      render: (r: Lift) => <TruncatedTextWithTooltip text={r.sellerName} className="max-w-[11rem]" />,
     },
     {
-      key: 'deliveryPeriod',
-      header: 'Delivery Period',
-      className: 'hidden xl:table-cell whitespace-nowrap min-w-[9rem]',
+      key: 'buyerName',
+      header: 'Buyer',
+      className: 'min-w-[9rem]',
       sortable: true,
-      sortValue: (r: Lift) => r.deliveryPeriodStart || r.deliveryPeriodEnd || r.deliveryPeriod || '',
-      render: (r: Lift) => (
-        <VerifiedPeriod
-          period={r.deliveryPeriod}
-          start={r.deliveryPeriodStart}
-          end={r.deliveryPeriodEnd}
-          verified={r.deliveryPeriodVerified}
-          display="label"
-        />
-      ),
+      sortValue: (r: Lift) => r.buyerName,
+      render: (r: Lift) => <TruncatedTextWithTooltip text={r.buyerName} className="max-w-[11rem]" />,
     },
     {
       key: 'rate',
@@ -562,7 +549,7 @@ export function LiftRegisterPage() {
         }
         breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Lift Register' }]} />}
         actions={
-          <Button to="/lifts/new" size="sm"><Plus className="h-4 w-4" /> Record Lift</Button>
+          <DashboardQuickActions />
         }
         hideActionsOnMobile
       />
@@ -748,7 +735,12 @@ export function LiftRegisterPage() {
               </div>
               <p className="text-heading truncate">{r.itemName} · {formatMt(r.liftedQty)}</p>
               <p className="truncate"><LiftOrderRouteLinks lift={r} /></p>
-              <p className="text-muted truncate">{r.sellerName} → {r.buyerName}</p>
+              <p className="text-muted truncate">
+                <TruncatedTextWithTooltip text={r.sellerName} />
+              </p>
+              <p className="text-muted truncate">
+                <TruncatedTextWithTooltip text={r.buyerName} />
+              </p>
             </div>
           </div>
         )}

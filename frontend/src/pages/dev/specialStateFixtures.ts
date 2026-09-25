@@ -72,9 +72,18 @@ export const SAMPLE_BACKUP_NOTICE = notice({
 /** 4. Features marketplace */
 export const SAMPLE_MARKETPLACE_NOTICE = notice({
   id: 9004,
-  kind: 'announcement',
+  kind: 'feature_launch',
   title: 'Add-ons',
   body: 'Browse available features, learn what they offer, and enable the ones that best fit your business needs.',
+  payload: {},
+})
+
+/** General announcement */
+export const SAMPLE_GENERAL_ANNOUNCEMENT_NOTICE = notice({
+  id: 9007,
+  kind: 'announcement',
+  title: 'Inbox seat request details and status badges',
+  body: 'Org and Tradeal admins see seat type, amount, and Approved/Rejected in the inbox side panel.',
   payload: {},
 })
 
