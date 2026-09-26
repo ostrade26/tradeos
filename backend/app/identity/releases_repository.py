@@ -253,6 +253,58 @@ def latest_version(conn) -> str:
     return max_version(versions)
 
 
+def _release_version_holder(conn, version: str) -> tuple[int, str] | None:
+    ph = "%s" if uses_postgres() else "?"
+    row = conn.execute(
+        f"SELECT id, status FROM platform_releases WHERE version = {ph}",
+        (version,),
+    ).fetchone()
+    if not row:
+        return None
+    data = dict(row_dict(row))
+    return int(data["id"]), str(data.get("status") or "")
+
+
+def peek_next_publish_version(conn, categories: list[str] | None = None) -> str:
+    """Hint for the next publish. Matches publishing the newest draft."""
+    newest_draft_id: int | None = None
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT id FROM platform_releases WHERE status <> 'published' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id FROM platform_releases WHERE status <> 'published' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if row:
+        newest_draft_id = int(dict(row_dict(row))["id"])
+    candidate = suggest_next_version(latest_published_version(conn), categories)
+    for _ in range(500):
+        holder = _release_version_holder(conn, candidate)
+        if holder is None or holder[0] == newest_draft_id:
+            return candidate
+        candidate = suggest_next_version(candidate)
+    raise HTTPException(status_code=500, detail="Could not allocate a release version")
+
+
+def allocate_publish_version(conn, categories: list[str] | None, exclude_id: int | None) -> str:
+    """Version assigned when a draft is published.
+
+    Deploy drafts are numbered as they land (1.0.63, 1.0.64, …) but only published
+    rows show on Releases. The next publish starts after the last published update
+    and skips any number another row already holds, so "1.0.63 already exists"
+    cannot block a later push.
+    """
+    candidate = suggest_next_version(latest_published_version(conn), categories)
+    exclude_ids = {exclude_id} if exclude_id is not None else set()
+    for _ in range(500):
+        holder = _release_version_holder(conn, candidate)
+        if holder is None or holder[0] in exclude_ids:
+            return candidate
+        candidate = suggest_next_version(candidate)
+    raise HTTPException(status_code=500, detail="Could not allocate a release version")
+
+
 def _items_for_release(conn, release_id: int) -> list[dict[str, Any]]:
     if uses_postgres():
         rows = conn.execute(
@@ -301,7 +353,7 @@ def list_releases(conn, *, for_display: bool = False) -> dict[str, Any]:
     return {
         "releases": releases,
         "latest_version": latest or None,
-        "next_version": suggest_next_version(latest),
+        "next_version": peek_next_publish_version(conn),
     }
 
 
@@ -975,7 +1027,7 @@ def announce_product_update(
         raise HTTPException(status_code=400, detail="Already published")
 
     category = str(item.get("category") or "bug_fix")
-    publish_version = suggest_next_version(latest_published_version(conn), [category])
+    publish_version = allocate_publish_version(conn, [category], None)
     _assert_unique_version(conn, publish_version)
     now = _now_iso()
     release_title = str(item.get("title") or "").strip() or f"Tradeal {publish_version}"
@@ -1159,7 +1211,7 @@ def publish_release(
     # Customer-facing version is assigned at publish time (order of publish), not when the
     # draft was created — so unpublished drafts never "use up" 1.0.47 forever.
     categories = [str(i.get("category") or "") for i in items]
-    publish_version = suggest_next_version(latest_published_version(conn), categories)
+    publish_version = allocate_publish_version(conn, categories, release_id)
     _assert_unique_version(conn, publish_version, exclude_id=release_id)
 
     base_title = f"Tradeal {publish_version}"
