@@ -1054,14 +1054,13 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   )
   const sortedReleases = useMemo(
     () => {
-      // Releases page = published only. Drafts are managed in Ship queue.
-      const published = releases.filter(r => r.status === 'published')
-      // Default / "latest" view: highest id first (newest release on top).
+      // Every numbered release stays on the list, including unpublished deploys
+      // such as 1.0.63 and 1.0.64 that never became the Last update.
       if (releaseSort.key === 'id') {
         const dir = releaseSort.direction === 'asc' ? 1 : -1
-        return [...published].sort((a, b) => (a.id - b.id) * dir)
+        return [...releases].sort((a, b) => (a.id - b.id) * dir)
       }
-      return sortPlatformRows(published, releaseSort, relColumns)
+      return sortPlatformRows(releases, releaseSort, relColumns)
     },
     [releases, releaseSort, relColumns],
   )

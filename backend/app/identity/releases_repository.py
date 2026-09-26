@@ -345,9 +345,6 @@ def list_releases(conn, *, for_display: bool = False) -> dict[str, Any]:
         status = str(data.get("status") or "")
         if for_display and status == "published":
             items = visible_release_items(items, for_releases_page=True)
-            # Empty published shells (only Ship-later still waiting) stay off Releases.
-            if not items:
-                continue
         releases.append(_release_row(data, items))
     latest = latest_published_version(conn)
     return {
