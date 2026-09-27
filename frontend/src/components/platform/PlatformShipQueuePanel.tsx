@@ -222,9 +222,9 @@ export const PlatformShipQueuePanel = forwardRef<
       {
         key: 'title',
         header: 'Item',
-        className: 'min-w-[14rem]',
+        className: 'min-w-[14rem] max-w-[24rem]',
         render: (r: ShipQueueItem) => (
-          <div className="min-w-0 space-y-1.5">
+          <div className="w-0 min-w-full max-w-[24rem] space-y-1.5 whitespace-normal break-words">
             <p className="font-medium text-heading truncate">{r.title}</p>
             <p className="text-xs text-muted truncate">{r.subtitle || r.feature_key || '—'}</p>
             {r.kind === 'release' && r.change_lines && r.change_lines.length > 0 ? (
@@ -331,6 +331,7 @@ export const PlatformShipQueuePanel = forwardRef<
         data={items}
         columns={columns}
         getRowId={r => `${r.kind}-${r.id}`}
+        fullWidth
         stickyFirstColumn
         stickyLastColumn={false}
         emptyState={
