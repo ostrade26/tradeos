@@ -1,16 +1,10 @@
-import { ArrowDown, Sparkles } from 'lucide-react'
-import { useState, type MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useState, type MouseEvent } from 'react'
+import heroBg from '../../public/images/tanker-lift.jpg'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { cn } from '../lib/utils'
 import { Marquee } from './Marquee'
 import { ProductPreview } from './ProductPreview'
-
-const chips = [
-  { label: 'On hand', value: '186 MT' },
-  { label: 'To lift', value: '92 MT' },
-  { label: 'In transit', value: '4 tankers' },
-]
 
 export function Hero() {
   const reduced = usePrefersReducedMotion()
@@ -20,104 +14,88 @@ export function Hero() {
     if (reduced) return
     const r = e.currentTarget.getBoundingClientRect()
     setShift({
-      x: ((e.clientX - r.left) / r.width - 0.5) * 18,
-      y: ((e.clientY - r.top) / r.height - 0.5) * 12,
+      x: ((e.clientX - r.left) / r.width - 0.5) * 16,
+      y: ((e.clientY - r.top) / r.height - 0.5) * 10,
     })
   }
 
   return (
     <section
-      className="relative min-h-[100svh] overflow-hidden bg-ink text-white"
+      className="relative flex min-h-[100svh] flex-col overflow-hidden bg-ink text-white"
       onMouseMove={onMove}
       onMouseLeave={() => setShift({ x: 0, y: 0 })}
     >
-      <div
-        className="absolute -inset-[4%] will-change-transform"
-        style={{
-          transform: reduced ? undefined : `translate3d(${shift.x}px, ${shift.y}px, 0)`,
-          transition: 'transform 0.45s ease-out',
-        }}
-      >
-        <img
-          src="/images/hero-terminal.jpg"
-          alt=""
-          width={1920}
-          height={1080}
-          fetchPriority="high"
-          className={cn('h-full w-full object-cover', !reduced && 'hero-kenburns')}
-        />
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div
+          className="absolute -inset-[6%]"
+          style={{
+            transform: reduced ? undefined : `translate3d(${shift.x}px, ${shift.y}px, 0)`,
+            transition: 'transform 0.45s ease-out',
+          }}
+        >
+          <img
+            src={heroBg}
+            alt=""
+            width={1920}
+            height={1280}
+            fetchPriority="high"
+            className={cn('h-full w-full object-cover object-[68%_center]', !reduced && 'hero-kenburns')}
+          />
+        </div>
+        <div className="absolute inset-0 bg-ink/45" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/78 to-ink/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-ink/60" />
+        <div className="hero-grid absolute inset-0" />
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-r from-ink/88 via-ink/55 to-ink/20" />
-      <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/45" />
-      <div className="pointer-events-none absolute left-[-10%] top-[20%] h-[28rem] w-[28rem] rounded-full bg-accent/25 blur-3xl" />
-      <div className="film-grain" />
-
-      <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-4 pb-28 pt-28 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8 lg:min-h-[100svh]">
-        <div>
-          <p className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
-            <Sparkles className="h-3.5 w-3.5 text-white" aria-hidden />
-            Built for edible oil traders
-          </p>
-          <h1 className="animate-fade-up mt-5 text-5xl font-semibold tracking-tight text-white drop-shadow-[0_12px_32px_rgba(0,0,0,0.55)] sm:text-6xl lg:text-[4.35rem] lg:leading-[1.05] [animation-delay:80ms]">
-            Run every trade
-            <span className="block text-white">from one desk.</span>
-          </h1>
-          <p className="animate-fade-up mt-5 max-w-xl text-lg leading-relaxed text-white/85 [animation-delay:140ms]">
-            Purchase orders, sales orders, and tanker lifts in one register — so remaining-to-lift
-            isn’t buried in WhatsApp threads and spreadsheets.
-          </p>
-
-          <div className="animate-fade-up mt-8 flex flex-wrap gap-3 [animation-delay:200ms]">
-            {chips.map(chip => (
-              <div
-                key={chip.label}
-                className="rounded-lg border border-accent/30 bg-ink/50 px-4 py-3 backdrop-blur-md"
+      <div className="relative z-10 mx-auto flex w-full max-w-[88rem] flex-1 items-center px-4 py-20 sm:px-6 lg:px-8 lg:py-16">
+        <div className="grid w-full gap-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
+          <div>
+            <p className="animate-fade-up inline-flex items-center rounded-full border border-accent/40 bg-accent/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+              B2B Trade Operations Platform
+            </p>
+            <h1 className="animate-fade-up mt-5 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-[3.35rem] lg:leading-[1.08] [animation-delay:80ms]">
+              Turn complex trade into a clear, connected workflow.
+            </h1>
+            <p className="animate-fade-up mt-5 max-w-xl text-lg leading-relaxed text-white/85 [animation-delay:140ms]">
+              Tradeal helps businesses manage buying, selling, inventory movement, deliveries,
+              documents, and payments — all in one connected place.
+            </p>
+            <div className="animate-fade-up mt-8 flex flex-wrap items-center gap-3 [animation-delay:220ms]">
+              <a
+                href="#demo"
+                className="btn-glow inline-flex h-12 items-center rounded-md bg-accent px-6 text-sm font-semibold text-white hover:bg-accent-hover cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">{chip.label}</p>
-                <p className="mt-0.5 text-lg font-semibold tabular-nums text-white">{chip.value}</p>
-              </div>
-            ))}
+                Get started
+              </a>
+              <a
+                href="#cycle"
+                className="inline-flex h-12 items-center rounded-md border border-white/25 bg-white/10 px-6 text-sm font-semibold text-white backdrop-blur-sm hover:bg-white/20 transition-colors duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                Explore Tradeal
+              </a>
+              <Link
+                to="/login"
+                className="inline-flex h-12 items-center text-sm font-semibold text-white/85 hover:text-white underline-offset-4 hover:underline cursor-pointer"
+              >
+                Sign in
+              </Link>
+            </div>
           </div>
 
-          <div className="animate-fade-up mt-8 flex flex-wrap items-center gap-3 [animation-delay:260ms]">
-            <a
-              href="#demo"
-              className="btn-glow inline-flex h-12 items-center rounded-md bg-accent px-6 text-sm font-semibold text-white hover:bg-accent-hover hover:-translate-y-0.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              Request a demo
-            </a>
-            <a
-              href="#how-it-works"
-              className="inline-flex h-12 items-center rounded-md border border-white/25 bg-white/10 px-6 text-sm font-semibold text-white backdrop-blur-sm hover:bg-white/20 transition-colors duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              See how it works
-            </a>
-            <Link
-              to="/login"
-              className="inline-flex h-12 items-center text-sm font-semibold text-white/85 hover:text-white underline-offset-4 hover:underline cursor-pointer"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
-
-        <div className={cn('mt-2 lg:mt-0', !reduced && 'hero-float')}>
-          <div className="rounded-xl shadow-[0_30px_80px_rgba(62,96,213,0.28)] ring-1 ring-white/25">
+          <div
+            className={cn(
+              'min-w-0 w-full lg:justify-self-stretch',
+              'rounded-xl shadow-[0_28px_70px_rgba(0,0,0,0.45)] ring-1 ring-white/20',
+              !reduced && 'hero-float',
+            )}
+          >
             <ProductPreview compact />
           </div>
         </div>
       </div>
 
-      <a
-        href="#story"
-        className="absolute bottom-20 left-1/2 z-10 hidden -translate-x-1/2 flex-col items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-white/70 hover:text-white sm:flex cursor-pointer"
-      >
-        Scroll
-        <ArrowDown className="h-4 w-4" aria-hidden />
-      </a>
-
-      <div className="absolute inset-x-0 bottom-0 z-10">
+      <div className="relative z-10">
         <Marquee />
       </div>
     </section>

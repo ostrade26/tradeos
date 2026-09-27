@@ -16,7 +16,7 @@ import type {
 import { accountTypeLabel, formatInrCents, seatRequestStatusLabel, seatTypeLabel } from '../../lib/platformLabels'
 import { Button } from '../ui/Button'
 import { formatDate, formatDateTime } from '../../lib/utils'
-import { releaseCategoryLabel } from '../../lib/releaseVersion'
+import { isAssignedReleaseVersion, releaseCategoryLabel } from '../../lib/releaseVersion'
 
 export function platformStatusBadge(status: string) {
   const variant =
@@ -861,7 +861,9 @@ export function releaseColumns(handlers: {
       sortValue: r => r.version,
       render: r => (
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[14px] tabular-nums">{r.version}</span>
+          <span className="text-[14px] tabular-nums">
+            {isAssignedReleaseVersion(r.version) ? r.version : 'Assigned on publish'}
+          </span>
           {handlers.latestReleaseId != null && handlers.latestReleaseId === r.id ? (
             <Badge variant="accent">
               {r.status === 'published' ? 'Last update' : 'Latest'}

@@ -21,7 +21,7 @@ import {
   DetailRow,
 } from '../registers/DetailPanelSections'
 import type { PlatformRelease, PlatformReleaseItem } from '../../api/platformApi'
-import { releaseCategoryLabel } from '../../lib/releaseVersion'
+import { isAssignedReleaseVersion, releaseCategoryLabel } from '../../lib/releaseVersion'
 import { formatDateTime } from '../../lib/utils'
 import { platformReleaseIcon as ReleaseIcon } from '../../lib/platformProductIcons'
 
@@ -251,7 +251,7 @@ export function PlatformReleaseDetailDrawer({
 
   const panelProps = {
     title: release.title,
-    subtitle: release.version,
+    subtitle: isAssignedReleaseVersion(release.version) ? release.version : 'Assigned on publish',
     headerBadges,
     headerIcon: ReleaseIcon,
     footer,

@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.identity.releases_repository import (  # noqa: E402
     allocate_publish_version,
+    assign_release_version,
+    latest_version,
     peek_next_publish_version,
 )
 
@@ -60,6 +62,28 @@ class PublishVersionAllocationTests(unittest.TestCase):
             (blocked,),
         ).fetchone()
         self.assertEqual(still["version"], "1.0.63")
+
+    def test_ship_later_draft_does_not_hold_a_version_number(self) -> None:
+        conn = _connect()
+        _insert(conn, "1.0.66", "published", "2026-09-01T00:00:00Z")
+        _insert(conn, "unversioned-12", "draft")
+
+        self.assertEqual(latest_version(conn), "1.0.66")
+        self.assertEqual(peek_next_publish_version(conn), "1.0.67")
+        version = assign_release_version(
+            conn,
+            "1.0.67",
+            [{"category": "bug_fix", "announce_timing": "later"}],
+        )
+        self.assertTrue(version.startswith("unversioned-"))
+        self.assertNotRegex(version, r"^\d+\.\d+\.\d+$")
+
+        numbered = assign_release_version(
+            conn,
+            "1.0.67",
+            [{"category": "bug_fix", "announce_timing": "now"}],
+        )
+        self.assertEqual(numbered, "1.0.67")
 
 
 if __name__ == "__main__":

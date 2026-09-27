@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -247,9 +248,17 @@ def latest_published_version(conn) -> str:
 
 
 def latest_version(conn) -> str:
-    """Highest semver across drafts and published — avoids colliding with unpublished drafts."""
+    """Highest semver across drafts and published.
+
+    Ship-later-only drafts use an unversioned token and do not count — their
+    number is assigned when they are published.
+    """
     rows = conn.execute("SELECT version FROM platform_releases").fetchall()
-    versions = [str(dict(row_dict(r)).get("version") or "") for r in rows]
+    versions: list[str] = []
+    for row in rows:
+        version = str(dict(row_dict(row)).get("version") or "")
+        if VERSION_RE.match(version):
+            versions.append(version)
     return max_version(versions)
 
 
@@ -352,6 +361,47 @@ def list_releases(conn, *, for_display: bool = False) -> dict[str, Any]:
         "latest_version": latest or None,
         "next_version": peek_next_publish_version(conn),
     }
+
+
+def _ship_later_only(items: list[dict[str, Any]]) -> bool:
+    """True when every item waits in Ship queue and none publish with this row."""
+    if not items:
+        return False
+    for item in items:
+        category = str(item.get("category") or "")
+        if not is_inform_release_category(category):
+            return False
+        if str(item.get("announce_timing") or "now") != "later":
+            return False
+    return True
+
+
+def _next_free_semver(conn, categories: list[str] | None) -> str:
+    candidate = suggest_next_version(latest_version(conn) or latest_published_version(conn), categories)
+    for _ in range(500):
+        if _release_version_holder(conn, candidate) is None:
+            return candidate
+        candidate = suggest_next_version(candidate)
+    raise HTTPException(status_code=500, detail="Could not allocate a release version")
+
+
+def assign_release_version(
+    conn,
+    requested: str,
+    items: list[dict[str, Any]],
+    *,
+    current: str | None = None,
+) -> str:
+    """Ship-later-only rows stay unnumbered until Ship queue publish."""
+    if _ship_later_only(items):
+        held = str(current or "").strip()
+        if held.startswith("unversioned-"):
+            return held
+        return f"unversioned-{uuid.uuid4().hex[:12]}"
+    raw = str(requested or "").strip()
+    if VERSION_RE.match(raw):
+        return raw
+    return _next_free_semver(conn, [str(i.get("category") or "") for i in items])
 
 
 def _normalize_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -598,9 +648,13 @@ def create_deploy_draft_release(
             }
         ]
     cleaned = _normalize_items(raw_items)
-    # Bump past drafts and published so each deploy gets its own version (no merge, no collision).
-    latest = latest_version(conn) or latest_published_version(conn)
-    version = suggest_next_version(latest, [i["category"] for i in cleaned])
+    # Ship-later-only deploys stay unnumbered. Everyone else still gets a semver
+    # so the next deploy does not collide — publish may renumber from the last live version.
+    if _ship_later_only(cleaned):
+        version = assign_release_version(conn, "", cleaned)
+    else:
+        latest = latest_version(conn) or latest_published_version(conn)
+        version = suggest_next_version(latest, [i["category"] for i in cleaned])
     _assert_unique_version(conn, version)
     release_title = (title or "").strip() or f"Production deploy · {sha[:7]}"
     summary_text = (summary or "").strip()
@@ -682,11 +736,11 @@ def create_release(
     items: list[dict[str, Any]],
     actor_user_id: int,
 ) -> dict[str, Any]:
-    version = _validate_version(version)
     title = title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
     cleaned = _normalize_items(items)
+    version = assign_release_version(conn, version, cleaned)
     _assert_unique_version(conn, version)
     now = _now_iso()
     if uses_postgres():
@@ -751,11 +805,11 @@ def update_release(
     current = _get_release(conn, release_id)
     if current.get("status") != "draft":
         raise HTTPException(status_code=400, detail="Published releases cannot be edited")
-    version = _validate_version(version)
     title = title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
     cleaned = _normalize_items(items)
+    version = assign_release_version(conn, version, cleaned, current=str(current.get("version") or ""))
     _assert_unique_version(conn, version, exclude_id=release_id)
     now = _now_iso()
     if uses_postgres():

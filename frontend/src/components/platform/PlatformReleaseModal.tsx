@@ -243,7 +243,7 @@ export function PlatformReleaseModal({
                           value: 'later',
                           label: 'Ship later',
                           description:
-                            'Stays in Ship queue only — not on Releases until you publish it from there.',
+                            'No version yet. It stays in Ship queue until you publish it, and the version number is assigned then.',
                         },
                       ]}
                     />

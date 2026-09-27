@@ -84,7 +84,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { schedulePersistPreferences } from '../hooks/usePersistUserPreferences'
 import { PLATFORM_WHATS_NEW_VERSION } from '../lib/platformWhatsNew'
-import { compareSemver } from '../lib/releaseVersion'
+import { compareSemver, isAssignedReleaseVersion } from '../lib/releaseVersion'
 import { isOpenSeatRequest } from '../lib/platformSeatRequestInbox'
 const PLATFORM_SECTIONS = [
   'organisations',
@@ -965,8 +965,10 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
   const submitRelease = async (payload: ReleaseFormPayload) => {
     setSavingRelease(true)
     try {
-      await saveReleaseDraft(payload)
-      toast.success(`Draft ${payload.version} saved`)
+      const saved = await saveReleaseDraft(payload)
+      toast.success(
+        isAssignedReleaseVersion(saved.version) ? `Draft ${saved.version} saved` : 'Draft saved. Version is assigned when you publish.',
+      )
       setReleaseModalOpen(false)
       setEditingRelease(null)
       clearReleaseIdParam()
@@ -982,7 +984,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
     setSavingRelease(true)
     try {
       const saved = await saveReleaseDraft(payload)
-      toast.success(`Draft ${payload.version} saved`)
+      toast.success(
+        isAssignedReleaseVersion(saved.version) ? `Draft ${saved.version} saved` : 'Draft saved. Version is assigned when you publish.',
+      )
       setReleaseModalOpen(false)
       setEditingRelease(null)
       clearReleaseIdParam()
@@ -1827,7 +1831,9 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
             }
             mobileRender={row => (
               <div className="px-4 py-3 space-y-1">
-                <p className="font-medium text-heading tabular-nums">{row.version}</p>
+                <p className="font-medium text-heading tabular-nums">
+                  {isAssignedReleaseVersion(row.version) ? row.version : 'Assigned on publish'}
+                </p>
                 <p className="text-xs text-muted">{row.title}</p>
               </div>
             )}

@@ -70,7 +70,7 @@ export function PlatformPublishReleaseModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={release ? `Publish ${versionLabel}` : 'Publish release'}
+      title={isProductUpdate ? 'Publish update' : release ? `Publish ${versionLabel}` : 'Publish release'}
       subtitle={
         isProductUpdate
           ? 'Publishes this Ship-later update as a new Releases version. Version is assigned on publish.'

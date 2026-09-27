@@ -1,65 +1,68 @@
-import { MessageSquare, Scale, FileText, Truck } from 'lucide-react'
 import { Reveal } from './Reveal'
+import { SectionHeading } from './SectionHeading'
 
-const pains = [
-  {
-    icon: MessageSquare,
-    title: 'Registers live in chats',
-    body: 'The latest PO qty is in a WhatsApp forward. The SO against it is in another group. Nobody has the book.',
-  },
-  {
-    icon: Scale,
-    title: 'Remaining-to-lift is tribal knowledge',
-    body: 'What is still due on a seller, or still to dispatch to a buyer, sits in someone’s head until it doesn’t.',
-  },
-  {
-    icon: Truck,
-    title: 'Tankers don’t fit a spreadsheet row',
-    body: 'One tanker covers three SOs. Actual weight comes in after weighbridge. The sheet is already stale.',
-  },
-  {
-    icon: FileText,
-    title: 'Contracts get retyped',
-    body: 'Broker PDFs are printed, highlighted, and keyed in again — parties, item, rate, and period, every time.',
-  },
-]
+const before = ['WhatsApp', 'Excel', 'PDFs', 'Email', 'Calls', 'Accounting software', 'Manual follow-ups']
+
+const after = ['Deal', 'Order', 'Movement', 'Inventory', 'Delivery', 'Invoice', 'Payment']
 
 export function Problem() {
   return (
-    <section className="relative overflow-hidden bg-ink text-white" id="story">
-      <img
-        src="/images/tanker-lift.jpg"
-        alt="Edible oil tanker at a weighbridge at dusk"
-        loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover opacity-35"
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/88 to-ink/70" />
-      <div className="film-grain" />
-
-      <div className="relative mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+    <section id="chaos" className="border-t border-gray-200 bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <Reveal>
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent">The problem</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Most desks still run on chats and Excel.
-          </h2>
-          <p className="mt-4 max-w-2xl text-white/70 leading-relaxed">
-            Tradeal is built for the way edible oil actually moves: producers, brokers, wholesalers,
-            spots like Kolhapur and Navi Mumbai, and lifts that close only when the tanker is weighed.
-          </p>
+          <SectionHeading eyebrow="The problem" title="From chaos to control.">
+            <p>
+              B2B trade involves too many connected activities, people, documents, quantities, rates,
+              movements, and payments. The pieces often live separately. Tradeal connects them.
+            </p>
+          </SectionHeading>
         </Reveal>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          {pains.map((pain, i) => (
-            <Reveal key={pain.title} delay={i * 80}>
-              <div className="group h-full rounded-xl border border-white/10 bg-white/10 p-6 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1 hover:border-accent/50 hover:bg-white/15">
-                <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent text-white shadow-[0_8px_24px_rgba(62,96,213,0.35)]">
-                  <pain.icon className="h-7 w-7" aria-hidden />
-                </span>
-                <h3 className="mt-5 text-lg font-semibold text-white">{pain.title}</h3>
-                <p className="mt-2 text-sm text-white/70 leading-relaxed">{pain.body}</p>
-              </div>
-            </Reveal>
-          ))}
+        <div className="mt-12 grid gap-5 lg:grid-cols-2">
+          <Reveal>
+            <div className="h-full rounded-2xl border border-gray-200 bg-body p-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Before Tradeal</p>
+              <p className="mt-2 text-lg font-semibold text-heading">Too many places to check what happened.</p>
+              <ul className="mt-5 flex flex-wrap gap-2">
+                {before.map(item => (
+                  <li
+                    key={item}
+                    className="chip-pop rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-heading cursor-default"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <ul className="mt-6 space-y-2 text-sm text-muted">
+                <li>Disconnected information</li>
+                <li>Manual reconciliation</li>
+                <li>Unclear status</li>
+                <li>Missed follow-ups</li>
+                <li>Difficult reporting</li>
+              </ul>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <div className="h-full rounded-2xl border border-accent/20 bg-accent-muted p-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-accent">With Tradeal</p>
+              <p className="mt-2 text-lg font-semibold text-heading">One connected trade workflow.</p>
+              <ol className="mt-5 flex flex-wrap items-center gap-2 text-sm font-medium text-heading">
+                {after.map((item, i) => (
+                  <li key={item} className="flex items-center gap-2">
+                    <span className="rounded-md bg-white px-2.5 py-1 shadow-[var(--shadow-card)] chip-pop">{item}</span>
+                    {i < after.length - 1 ? <span className="text-accent" aria-hidden>→</span> : null}
+                  </li>
+                ))}
+              </ol>
+              <ul className="mt-6 space-y-2 text-sm text-heading/80">
+                <li>One operational view</li>
+                <li>Connected records</li>
+                <li>Clear status</li>
+                <li>Traceable activity</li>
+                <li>Better control</li>
+              </ul>
+            </div>
+          </Reveal>
         </div>
       </div>
     </section>

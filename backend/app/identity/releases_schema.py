@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..db import _pg_connect, _sqlite_connect, uses_postgres
+from ..db import _pg_connect, _sqlite_connect, row_dict, uses_postgres
 
 
 def init_releases_schema() -> None:
@@ -100,6 +100,7 @@ def _create_tables(conn) -> None:
         """
     )
     _backfill_draft_release_ship_notes(conn)
+    _unversion_ship_later_only_drafts(conn)
     _relax_notifications_nullable_org(conn)
 
 
@@ -119,6 +120,50 @@ def _backfill_draft_release_ship_notes(conn) -> None:
         """,
         (DRAFT_RELEASE_SHIP_NOTE,),
     )
+
+
+_SHIP_LATER_CATEGORIES = (
+    "bug_fix",
+    "design_improvements",
+    "ui_and_fixes",
+    "improvement",
+    "cosmetic",
+)
+
+
+def _unversion_ship_later_only_drafts(conn) -> None:
+    """Drop semver from drafts that are only waiting in Ship queue."""
+    ph = "%s" if uses_postgres() else "?"
+    drafts = conn.execute(
+        "SELECT id, version FROM platform_releases WHERE status = 'draft'"
+    ).fetchall()
+    for row in drafts:
+        data = dict(row_dict(row))
+        release_id = int(data["id"])
+        version = str(data.get("version") or "")
+        if version.startswith("unversioned-"):
+            continue
+        items = conn.execute(
+            f"SELECT category, announce_timing, announced_at FROM platform_release_items WHERE release_id = {ph}",
+            (release_id,),
+        ).fetchall()
+        if not items:
+            continue
+        ship_later_only = True
+        for item_row in items:
+            item = dict(row_dict(item_row))
+            category = str(item.get("category") or "")
+            timing = str(item.get("announce_timing") or "now")
+            announced = str(item.get("announced_at") or "").strip()
+            if category not in _SHIP_LATER_CATEGORIES or timing != "later" or announced:
+                ship_later_only = False
+                break
+        if not ship_later_only:
+            continue
+        conn.execute(
+            f"UPDATE platform_releases SET version = {ph} WHERE id = {ph}",
+            (f"unversioned-{release_id}", release_id),
+        )
 
 
 def _relax_notifications_nullable_org(conn) -> None:

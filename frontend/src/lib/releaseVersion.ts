@@ -75,6 +75,10 @@ export function releaseCategorySelectOptions(current?: string): { value: string;
   return options
 }
 
+export function isAssignedReleaseVersion(version: string | null | undefined): boolean {
+  return /^\d+\.\d+\.\d+$/.test((version || '').trim())
+}
+
 export function parseSemver(value: string): [number, number, number] {
   const parts = value.trim().replace(/^v/, '').split('.')
   const nums = [0, 0, 0] as [number, number, number]

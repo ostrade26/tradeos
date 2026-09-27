@@ -1,5 +1,6 @@
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import deskUrl from '../../public/images/trading-desk.jpg'
 import { cn } from '../lib/utils'
 
 type FieldErrors = Partial<Record<'name' | 'company' | 'contact' | 'form', string>>
@@ -69,39 +70,42 @@ export function DemoForm() {
 
   return (
     <section id="demo" className="relative overflow-hidden bg-ink text-white">
-      <img
-        src="/images/trading-desk.jpg"
-        alt=""
-        loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover opacity-30"
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/75" />
-      <div className="film-grain" />
+      <div className="pointer-events-none absolute -inset-[5%]" aria-hidden>
+        <img src={deskUrl} alt="" className="hero-kenburns h-full w-full object-cover opacity-40" />
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/88 to-ink/70" />
 
       <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-24 lg:grid-cols-2 lg:px-8 lg:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Request a demo</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Get started</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            See the desk with your book.
+            Bring your trade into one connected workflow.
           </h2>
           <p className="mt-4 text-white/70 leading-relaxed">
-            Tell us how you buy, sell, and lift today. We’ll walk through purchase orders, tanker
-            splits, and remaining-to-lift on a working Tradeal desk.
+            From the first deal to the final payment, keep your commercial and operational workflow
+            connected. We’ll walk through orders, movement, inventory, and remaining-to-lift on a
+            working Tradeal desk.
           </p>
           <ul className="mt-6 space-y-3 text-sm text-white/75">
             <li className="flex items-center gap-3">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              30-minute walkthrough of POs, SOs, and lifts
+              Mapped to how you buy, sell, and move products
             </li>
             <li className="flex items-center gap-3">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              Mapped to edible oil workflow — not a generic CRM tour
+              Not a generic billing or CRM tour
             </li>
             <li className="flex items-center gap-3">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
               No account required to start the conversation
             </li>
           </ul>
+          <a
+            href="#cycle"
+            className="mt-8 inline-flex h-11 items-center text-sm font-semibold text-white/85 hover:text-white underline-offset-4 hover:underline cursor-pointer"
+          >
+            Explore the platform
+          </a>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white p-6 text-heading shadow-[0_24px_60px_rgba(0,0,0,0.35)] sm:p-8">
@@ -112,7 +116,7 @@ export function DemoForm() {
               </span>
               <h3 className="mt-4 text-lg font-semibold text-heading">Request received</h3>
               <p className="mt-2 text-sm text-muted leading-relaxed">
-                Thanks — we’ll be in touch shortly to schedule a demo of Tradeal on your trades.
+                Thanks — we’ll be in touch shortly to walk through Tradeal on your trades.
               </p>
             </div>
           ) : (
@@ -164,7 +168,7 @@ export function DemoForm() {
                   value={values.message}
                   onChange={e => setValues(v => ({ ...v, message: e.target.value }))}
                   className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-base text-heading placeholder:text-muted/80 transition-colors duration-150 focus:outline-none focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent/30"
-                  placeholder="e.g. tanker splits, PDF import, Kolhapur spots…"
+                  placeholder="e.g. lift splits, PDF import, remaining-to-lift…"
                 />
               </div>
               {errors.form && (
@@ -176,7 +180,7 @@ export function DemoForm() {
                 className="btn-glow inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-white hover:bg-accent-hover hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:hover:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-                {loading ? 'Sending…' : 'Request a demo'}
+                {loading ? 'Sending…' : 'Get started'}
               </button>
             </form>
           )}

@@ -96,7 +96,7 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "kind": "product_update",
                 "id": int(item["id"]),
                 "title": item.get("title") or "",
-                "subtitle": str(item.get("release_title") or "Ship later"),
+                "subtitle": "Version on publish",
                 "feature_key": "",
                 "ready_to_ship": bool(item.get("ready_to_ship")),
                 "target_ship_date": item.get("target_ship_date") or "",
@@ -108,7 +108,7 @@ def list_ship_queue(conn) -> dict[str, Any]:
                 "release_id": int(item["release_id"]),
                 "detail": item.get("detail") or "",
                 "category": item.get("category") or "",
-                "next_version_hint": next_version,
+                "next_version_hint": "",
             }
         )
 

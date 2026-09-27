@@ -56,7 +56,6 @@ export const PlatformShipQueuePanel = forwardRef<
     draft_releases: 0,
     deferred_product_updates: 0,
   })
-  const [nextVersion, setNextVersion] = useState('')
   const [planning, setPlanning] = useState<PlanningDraft | null>(null)
   const [savingPlanning, setSavingPlanning] = useState(false)
   const [listTarget, setListTarget] = useState<ShipQueueItem | null>(null)
@@ -75,7 +74,6 @@ export const PlatformShipQueuePanel = forwardRef<
         draft_releases: res.draft_releases,
         deferred_product_updates: res.deferred_product_updates ?? 0,
       })
-      setNextVersion(res.next_version || '')
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not load ship queue')
     } finally {
@@ -157,10 +155,9 @@ export const PlatformShipQueuePanel = forwardRef<
 
   const publishPreviewRelease = useMemo((): PlatformRelease | null => {
     if (!publishTarget || publishTarget.kind !== 'product_update') return null
-    const versionHint = publishTarget.next_version_hint || nextVersion || '—'
     return {
       id: publishTarget.release_id ?? publishTarget.id,
-      version: versionHint,
+      version: '',
       title: publishTarget.title,
       summary: '',
       status: 'draft',
@@ -180,7 +177,7 @@ export const PlatformShipQueuePanel = forwardRef<
         },
       ],
     }
-  }, [publishTarget, nextVersion])
+  }, [publishTarget])
 
   const confirmPublishProductUpdate = async (payload: {
     audience: NotificationAudience

@@ -1,67 +1,137 @@
-import { FileUp, Inbox, MessageCircle, Package, Scale, ScrollText } from 'lucide-react'
+import { useState } from 'react'
 import { Reveal } from './Reveal'
+import { SectionHeading } from './SectionHeading'
+import { cn } from '../lib/utils'
 
-const features = [
+const groups = [
   {
-    icon: ScrollText,
-    title: 'Purchase and sales registers',
-    body: 'Every PO and SO with quantity ordered, lifted, and still due — so the desk can see remaining-to-lift without opening a chat.',
+    id: 'buying',
+    label: 'Buying',
+    items: [
+      'Purchase orders with quantity ordered, lifted, and still due',
+      'Supplier parties in the directory',
+      'Contracts and purchase documents on the order',
+      'Purchase quantities and rates on the register',
+    ],
   },
   {
-    icon: Scale,
-    title: 'Tanker lifts across orders',
-    body: 'Dispatch one tanker against several SOs, split the load in MT, then mark delivered when actual weight is confirmed.',
+    id: 'selling',
+    label: 'Selling',
+    items: [
+      'Sales orders with remaining-to-lift',
+      'Customer parties in the directory',
+      'Fulfilment through lifts linked to sales orders',
+      'Delivery status when a lift is marked delivered',
+    ],
   },
   {
-    icon: Package,
-    title: 'Lot inventory',
-    body: 'What is on hand, what is available to sell, and which lots are running low — in the same book as the orders.',
+    id: 'inventory',
+    label: 'Inventory',
+    items: [
+      'Lot-level inventory with purchased, remaining, allocated, and available quantity',
+      'Stock movement from lifts',
+      'Purchase-rate context on the lot',
+      'Planned vs actual quantity on the lift',
+    ],
   },
   {
-    icon: FileUp,
-    title: 'Broker contract PDF import',
-    body: 'Drop the contract. Tradeal reads parties, item, rate, and quantity so the order is not retyped from a printout.',
+    id: 'movement',
+    label: 'Physical movement',
+    items: [
+      'Lifts and shipments against one or more sales orders',
+      'Quantity allocation on the lift',
+      'Actual quantity capture',
+      'Variance in the lift report',
+    ],
   },
   {
-    icon: MessageCircle,
-    title: 'WhatsApp share',
-    body: 'Send a lift or order summary in the format the market already uses — without rewriting tanker numbers and qty.',
+    id: 'documents',
+    label: 'Documents',
+    items: [
+      'Contract PDFs on the trade',
+      'Upload and review extracted parties, item, rate, and quantity',
+      'Keep the original document connected to the transaction',
+      'Share order and lift summaries on WhatsApp',
+    ],
   },
   {
-    icon: Inbox,
-    title: 'Action inbox',
-    body: 'Pending lifts, unlinked SOs, and low stock for today, in one list. Ask the assistant what is still owed to a seller.',
+    id: 'relationships',
+    label: 'Relationships',
+    items: [
+      'Customers and suppliers as parties',
+      'Brokers in the directory',
+      'Other counterparties on the same book',
+    ],
   },
-]
+  {
+    id: 'payments',
+    label: 'Payments',
+    items: [
+      'Invoice numbers recorded on lifts',
+      'Customer outstanding and supplier outstanding reports',
+      'Payment reconciliation report',
+      'Tradeal does not collect online payments or replace accounting software',
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports & audit',
+    items: [
+      'Purchase and sales registers',
+      'Inventory movement, lift, delivery, and variance reports',
+      'Outstanding, payment reconciliation, trade profitability, and landed cost',
+      'Audit trail, document completeness, and exception reporting',
+    ],
+  },
+] as const
 
 export function Features() {
+  const [active, setActive] = useState<(typeof groups)[number]['id']>('buying')
+  const current = groups.find(g => g.id === active) ?? groups[0]
+
   return (
-    <section id="product" className="border-t border-gray-200 bg-body">
+    <section id="product" className="border-t border-gray-200 bg-white">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <Reveal>
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Product</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-            The register, the tanker, and the lot — together.
-          </h2>
-          <p className="mt-4 max-w-2xl text-muted leading-relaxed">
-            Tradeal is the operating desk: capture the contract, dispatch the lift, and close the lot
-            without a second system for each step.
-          </p>
+          <SectionHeading eyebrow="Product" title="Everything that belongs on the trade book.">
+            <p>
+              Capture the contract, dispatch the movement, close the lot. Tradeal is the register,
+              the lift, and inventory together — with remaining-to-lift as the number that keeps the
+              desk honest.
+            </p>
+          </SectionHeading>
         </Reveal>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, i) => (
-            <Reveal key={feature.title} delay={i * 70}>
-              <article className="group h-full rounded-xl border border-gray-200 bg-white p-7 shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-accent/30 hover:shadow-md">
-                <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-white shadow-[0_10px_28px_rgba(62,96,213,0.28)] transition-transform duration-200 group-hover:-translate-y-0.5">
-                  <feature.icon className="h-8 w-8" aria-hidden />
-                </span>
-                <h3 className="mt-5 text-lg font-semibold text-heading">{feature.title}</h3>
-                <p className="mt-2 text-sm text-muted leading-relaxed">{feature.body}</p>
-              </article>
-            </Reveal>
-          ))}
-        </div>
+        <Reveal delay={60}>
+          <div className="mt-10 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+            {groups.map(group => (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => setActive(group.id)}
+                className={cn(
+                  'h-11 shrink-0 rounded-md px-4 text-sm font-medium whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                  active === group.id
+                    ? 'bg-accent text-white'
+                    : 'border border-gray-200 bg-white text-heading hover:bg-gray-50',
+                )}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 rounded-2xl border border-gray-200 bg-body p-6 transition-shadow duration-200">
+            <h3 className="text-lg font-semibold text-heading">{current.label}</h3>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+              {current.items.map(item => (
+                <li key={item} className="flex gap-3 text-sm text-muted leading-relaxed transition-colors duration-150 hover:text-heading">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Reveal>
       </div>
     </section>
   )

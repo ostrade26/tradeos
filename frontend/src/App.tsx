@@ -108,6 +108,7 @@ const router = createBrowserRouter([
     element: <RootProviders />,
     children: [
       { path: '/', element: <MarketingPage /> },
+      { path: '/website', element: <MarketingPage preview /> },
       { path: '/login', element: <LoginPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
