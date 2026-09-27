@@ -11,6 +11,9 @@ interface OrderCreatedModalProps {
   order: TradeOrder | null
   open: boolean
   onClose: () => void
+  /** PDFs still waiting after this order was saved. */
+  pdfsLeft?: number
+  onNextPdf?: () => void
 }
 
 function SummaryStat({ label, value }: { label: string; value: string }) {
@@ -51,7 +54,7 @@ function SuccessCheckmark() {
   )
 }
 
-export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalProps) {
+export function OrderCreatedModal({ order, open, onClose, pdfsLeft = 0, onNextPdf }: OrderCreatedModalProps) {
   if (!order) return null
 
   const isPO = order.side === 'purchase'
@@ -64,6 +67,7 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
   const canRecordLift = remaining > 0 && (isPO || Boolean(order.poRef))
   const orderLabel = isPO ? 'Purchase order' : 'Sales order'
   const partyLabel = isPO ? 'Seller' : 'Buyer'
+  const showNext = Boolean(onNextPdf && pdfsLeft > 0)
 
   return (
     <Modal
@@ -75,7 +79,7 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
       footer={
         <div
           className={
-            isPO || canRecordLift
+            isPO || canRecordLift || showNext
               ? 'grid grid-cols-2 gap-3 w-full'
               : 'grid w-full'
           }
@@ -83,7 +87,11 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
           <Button variant="secondary" onClick={onClose} className="w-full min-h-11">
             Done
           </Button>
-          {isPO ? (
+          {showNext ? (
+            <Button onClick={onNextPdf} className="w-full min-h-11">
+              Next
+            </Button>
+          ) : isPO ? (
             <Button
               to={`/sales-orders/new?poRef=${encodeURIComponent(order.ref)}`}
               className="w-full min-h-11"
@@ -105,6 +113,9 @@ export function OrderCreatedModal({ order, open, onClose }: OrderCreatedModalPro
         <p className="text-sm font-medium text-success mt-5">{orderLabel} created</p>
         <p className="text-xl font-semibold text-heading mt-1 tracking-tight">{formatOrderRef(order.ref, order.side)}</p>
         <p className="text-sm text-muted mt-1.5">{order.itemName}</p>
+        {showNext && (
+          <p className="text-sm text-muted mt-2">{pdfsLeft} PDF{pdfsLeft === 1 ? '' : 's'} left</p>
+        )}
       </div>
 
       <dl className="pt-6 space-y-5">

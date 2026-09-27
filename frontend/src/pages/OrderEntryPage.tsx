@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type Dispatch, type SetStateAction, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type Dispatch, type SetStateAction, type ReactNode, type RefObject } from 'react'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { Package, FileText, FileUp } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
@@ -19,7 +19,7 @@ import { StickyFormActions } from '../components/ui/StickyFormActions'
 import { FieldValidationBanner, FormErrorBanner } from '../components/ui/FieldError'
 import { useToast } from '../hooks/useToast'
 import { OrderCreatedModal } from '../components/orders/OrderCreatedModal'
-import { ContractPdfUpload } from '../components/orders/ContractPdfUpload'
+import { ContractPdfUpload, type ContractPdfUploadHandle } from '../components/orders/ContractPdfUpload'
 import { CaptionCard } from '../components/ui/CaptionCard'
 import {
   PartyFormModal,
@@ -238,8 +238,30 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     remarks: '',
   })
 
+  const previewUrlRef = useRef<string | null>(null)
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; name: string } | null>(null)
   const [pdfImported, setPdfImported] = useState(false)
+
+  const handleActivePdf = useCallback((file: File | null) => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+    if (!file) {
+      setPdfPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    previewUrlRef.current = url
+    setPdfPreview({ url, name: file.name })
+  }, [])
+
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+  }, [])
   const [pdfUploadKey, setPdfUploadKey] = useState(0)
+  const [pdfsLeft, setPdfsLeft] = useState(0)
+  const pdfUploadRef = useRef<ContractPdfUploadHandle>(null)
   const [createdOrder, setCreatedOrder] = useState<TradeOrder | null>(null)
   const orderBaseline = useRef('')
   const orderBaselineReady = useRef(false)
@@ -249,11 +271,6 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     navigate(`${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`)
   }
 
-  const confirmPdfReplace = () => {
-    if (pdfImported || !hasManualEntryProgress(form.values)) return true
-    return window.confirm('Import from PDF? This will replace the fields you have entered.')
-  }
-
   const applyPdfImport = (values: Record<string, string>, parsed?: import('../lib/parseContractPdf').ParsedContractPdf) => {
     const { brokerName: _importedBroker, ...imported } = values
     form.setValues(v => ({
@@ -261,7 +278,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       ...imported,
       ...(lockedAccountPartyFields(side, store.companies, accountTrader)),
       ref: v.ref || store.getNextRef(side),
-      poRef: linkedPoRef ?? v.poRef,
+      poRef: linkedPoRef ?? '',
       brokerName: v.brokerName,
     }))
     const itemNote = parsed?.itemName && values.itemName && parsed.itemName.trim() !== values.itemName.trim()
@@ -350,9 +367,10 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   }, [isEdit, form.ref, form.values, syncBaselineAfterAutofill])
 
   useEffect(() => {
-    if (linkedPoRef) form.set('poRef', linkedPoRef)
+    if (isEdit || sellFromLot) return
+    form.set('poRef', linkedPoRef ?? '')
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkedPoRef])
+  }, [linkedPoRef, isEdit, sellFromLot])
 
   useEffect(() => {
     if (isEdit || !prefill) return
@@ -569,6 +587,8 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       } else {
         orderBaseline.current = serializeOrderFormValues(form.values)
         orderBaselineReady.current = true
+        const left = pdfImported ? (pdfUploadRef.current?.completeCurrent() ?? 0) : 0
+        setPdfsLeft(left)
         setPdfImported(false)
         setCreatedOrder(saved)
       }
@@ -594,10 +614,97 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const resetEntryForm = () => {
+    const today = new Date().toISOString().slice(0, 10)
+    form.setValues({
+      ref: store.getNextRef(side),
+      poRef: linkedPoRef ?? '',
+      brokerContractRef: '',
+      date: today,
+      partyName: '',
+      partyCompanyId: '',
+      sellerCompanyId: '',
+      buyerCompanyId: '',
+      extractedPartyName: '',
+      extractedSellerName: '',
+      extractedBuyerName: '',
+      sellerConfirmedBy: '',
+      buyerConfirmedBy: '',
+      sellerName: isPO ? '' : accountTrader,
+      buyerName: isPO ? accountTrader : '',
+      itemName: '',
+      spot: '',
+      quantity: '',
+      rate: '',
+      contractRateDisplay: '',
+      ratePerBasis: '',
+      rateBasis: '',
+      taxRate: '5',
+      deliveryType: 'period',
+      deliveryPeriodStart: today,
+      deliveryPeriodEnd: today,
+      brokerName: '',
+      brokerageType: 'perTon',
+      brokeragePct: '0',
+      brokeragePerTon: '',
+      paymentTerms: isPO ? 'Advance' : 'Against delivery',
+      remarks: '',
+    })
+    setPdfImported(false)
+    setFieldErrors({})
+    setSaveError('')
+    setCreatedOrder(null)
+  }
+
+  const loadNextPdf = () => {
+    const today = new Date().toISOString().slice(0, 10)
+    form.setValues({
+      ref: '',
+      poRef: linkedPoRef ?? '',
+      brokerContractRef: '',
+      date: today,
+      partyName: '',
+      partyCompanyId: '',
+      sellerCompanyId: '',
+      buyerCompanyId: '',
+      extractedPartyName: '',
+      extractedSellerName: '',
+      extractedBuyerName: '',
+      sellerConfirmedBy: '',
+      buyerConfirmedBy: '',
+      sellerName: isPO ? '' : accountTrader,
+      buyerName: isPO ? accountTrader : '',
+      itemName: '',
+      spot: '',
+      quantity: '',
+      rate: '',
+      contractRateDisplay: '',
+      ratePerBasis: '',
+      rateBasis: '',
+      taxRate: '5',
+      deliveryType: 'period',
+      deliveryPeriodStart: today,
+      deliveryPeriodEnd: today,
+      brokerName: '',
+      brokerageType: 'perTon',
+      brokeragePct: '0',
+      brokeragePerTon: '',
+      paymentTerms: isPO ? 'Advance' : 'Against delivery',
+      remarks: '',
+    })
+    setPdfImported(false)
+    setFieldErrors({})
+    setSaveError('')
+    setCreatedOrder(null)
+    pdfUploadRef.current?.loadNext()
+  }
+
   const createdModal = (
     <OrderCreatedModal
       order={createdOrder}
       open={Boolean(createdOrder)}
+      pdfsLeft={pdfsLeft}
+      onNextPdf={pdfsLeft > 0 ? loadNextPdf : undefined}
       onClose={() => { if (createdOrder) viewCreatedOrder(createdOrder) }}
     />
   )
@@ -640,8 +747,11 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         onClearAll={clearSoEntry}
         showPdfImport={showPdfImport}
         pdfUploadKey={pdfUploadKey}
+        pdfUploadRef={pdfUploadRef}
         onPdfParsed={applyPdfImport}
-        onBeforePdfApply={confirmPdfReplace}
+        onActivePdf={handleActivePdf}
+        onCleared={resetEntryForm}
+        pdfPreview={pdfPreview}
         isEdit={isEdit}
         editingOrder={editingOrder}
         sellFromLot={sellFromLot}
@@ -681,22 +791,22 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-3">
           {showPdfImport && (
-            <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
+            <details className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)] group">
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold flex items-center gap-2 [&::-webkit-details-marker]:hidden">
                 <FileUp className="h-4 w-4 text-accent" />
                 Import from Contract PDF
                 <span className="ml-auto text-xs font-normal text-muted group-open:hidden">Show</span>
                 <span className="ml-auto text-xs font-normal text-muted hidden group-open:inline">Hide</span>
               </summary>
-              <div className="px-4 pb-4">
-                <ContractPdfUpload
-                  key={pdfUploadKey}
-                  embedded
-                  side={side}
-                  onParsed={applyPdfImport}
-                  onBeforeApply={confirmPdfReplace}
+              <ContractPdfUpload
+                ref={pdfUploadRef}
+                key={pdfUploadKey}
+                embedded
+                side={side}
+                onParsed={applyPdfImport}
+                  onActiveFile={handleActivePdf}
+                  onCleared={resetEntryForm}
                 />
-              </div>
             </details>
           )}
           <OrderFormFields
@@ -714,6 +824,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         </div>
 
         <OrderFormSidebar
+          pdfPreview={pdfPreview}
           isPO={isPO}
           shortLabel={shortLabel}
           form={form}
@@ -782,8 +893,11 @@ function SOEntryForm({
   onClearAll,
   showPdfImport,
   pdfUploadKey,
+  pdfUploadRef,
   onPdfParsed,
-  onBeforePdfApply,
+  onActivePdf,
+  onCleared,
+  pdfPreview,
   isEdit = false,
   editingOrder,
   sellFromLot,
@@ -804,8 +918,11 @@ function SOEntryForm({
   onClearAll: () => void
   showPdfImport: boolean
   pdfUploadKey: number
+  pdfUploadRef: RefObject<ContractPdfUploadHandle | null>
   onPdfParsed: (values: Record<string, string>, parsed?: import('../lib/parseContractPdf').ParsedContractPdf) => void
-  onBeforePdfApply: () => boolean
+  onActivePdf: (file: File | null) => void
+  onCleared: () => void
+  pdfPreview: { url: string; name: string } | null
   isEdit?: boolean
   editingOrder?: TradeOrder
   sellFromLot?: OrderEntryPageProps['sellFromLot']
@@ -986,22 +1103,22 @@ function SOEntryForm({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-3">
           {showPdfImport && (
-            <details className="rounded-md bg-card shadow-[var(--shadow-card)] group">
+            <details className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)] group">
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold flex items-center gap-2 [&::-webkit-details-marker]:hidden">
                 <FileUp className="h-4 w-4 text-accent" />
                 Import from Contract PDF
                 <span className="ml-auto text-xs font-normal text-muted group-open:hidden">Show</span>
                 <span className="ml-auto text-xs font-normal text-muted hidden group-open:inline">Hide</span>
               </summary>
-              <div className="px-4 pb-4">
-                <ContractPdfUpload
-                  key={pdfUploadKey}
-                  embedded
-                  side="sale"
-                  onParsed={onPdfParsed}
-                  onBeforeApply={onBeforePdfApply}
+              <ContractPdfUpload
+                ref={pdfUploadRef}
+                key={pdfUploadKey}
+                embedded
+                side="sale"
+                onParsed={onPdfParsed}
+                  onActiveFile={onActivePdf}
+                  onCleared={onCleared}
                 />
-              </div>
             </details>
           )}
           <CaptionCard bodyClassName="p-8">
@@ -1042,6 +1159,7 @@ function SOEntryForm({
         </div>
 
         <OrderFormSidebar
+          pdfPreview={pdfPreview}
           isPO={false}
           shortLabel="SO"
           form={form}
@@ -1447,6 +1565,7 @@ function OrderFormFields({
 }
 
 function OrderFormSidebar({
+  pdfPreview,
   isPO,
   shortLabel,
   form,
@@ -1464,6 +1583,7 @@ function OrderFormSidebar({
   isEdit = false,
   editingOrder,
 }: {
+  pdfPreview?: { url: string; name: string } | null
   isPO: boolean
   shortLabel: string
   form: FormApi
@@ -1512,7 +1632,23 @@ function OrderFormSidebar({
   ]
 
   return (
-    <div className="space-y-3 w-full lg:sticky lg:top-4 lg:self-start lg:z-10">
+    <div className={cn(
+      'w-full space-y-3 lg:sticky lg:top-6 lg:z-10 lg:self-start',
+      pdfPreview && 'lg:flex lg:h-[calc(100dvh-12.5rem)] lg:max-h-[calc(100dvh-12.5rem)] lg:flex-col lg:gap-3 lg:space-y-0',
+    )}>
+      {pdfPreview && (
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)] lg:flex-1">
+          <p className="shrink-0 border-b border-gray-200 px-4 py-2 text-xs font-medium text-muted truncate dark:border-gray-700">
+            {pdfPreview.name}
+          </p>
+          <iframe
+            title={pdfPreview.name}
+            src={pdfPreview.url}
+            className="h-36 w-full border-0 bg-white sm:h-40 lg:h-full lg:min-h-0"
+          />
+        </div>
+      )}
+      <div className={cn('space-y-3', pdfPreview && 'min-h-0 shrink overflow-y-auto lg:max-h-[46%]')}>
       {previewNotes.length > 0 && (
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
           <div
@@ -1597,8 +1733,9 @@ function OrderFormSidebar({
           </div>
         </details>
       )}
+      </div>
 
-      <div className="hidden sm:flex flex-col gap-2 w-full">
+      <div className="sticky bottom-0 z-20 hidden shrink-0 bg-body pt-1 sm:flex flex-col gap-2 w-full">
         {saveError && <FormErrorBanner>{saveError}</FormErrorBanner>}
         {isEdit && editingOrder && (
           <ShareWhatsAppButton
