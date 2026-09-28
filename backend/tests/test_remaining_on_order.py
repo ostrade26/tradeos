@@ -211,6 +211,18 @@ class RemainingOnOrderTests(unittest.TestCase):
         self.assertEqual(saved["status"], "partial")
         self.assertIsNone(saved.get("completionType"))
 
+    def test_booked_so_does_not_fill_other_purchases(self) -> None:
+        po_booked = _po("1", 100)
+        po_other = _po("2", 50)
+        so = _so("9", 200, po_ref="1")
+        lifts = [
+            _lift(lift_id="L1", po_ref="1", so_ref="9", qty=40),
+            _lift(lift_id="L2", po_ref="2", so_ref="9", qty=15),
+        ]
+        orders = [po_booked, po_other, so]
+        self.assertEqual(get_remaining_sell_qty(orders, "1", lifts), 0.0)
+        self.assertEqual(get_remaining_sell_qty(orders, "2", lifts), 35.0)
+
     def test_booked_so_still_counts_in_full(self) -> None:
         po = _po("1", 50)
         so = _so("9", 10, po_ref="1")

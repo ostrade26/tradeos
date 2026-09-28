@@ -84,8 +84,9 @@ def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | 
     for order in get_sos_for_po(orders, po_ref, lifts):
         if order.get("status") == "cancelled" or order.get("deleteScheduledAt"):
             continue
-        # Booked on a purchase: the whole SO. Left unlinked: only this PO's lift.
-        if order.get("poRef"):
+        # Whole SO only on the purchase it is booked on. A lift against
+        # another purchase counts just the tonnes on that lift.
+        if order.get("poRef") and refs_match(order.get("poRef"), po_ref, "purchase"):
             sold += order.get("orderQty", 0)
         else:
             sold += qty_of_so_on_po(lifts or [], po_ref, order.get("ref"))

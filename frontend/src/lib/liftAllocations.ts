@@ -382,7 +382,7 @@ export function buildPoRegisterIndex(
     const lines: typeof EMPTY_PO_ROLLUP.lines = []
     for (const so of sos) {
       const soKey = attachOrderPrefix(so.ref, 'sale')
-      if (!so.poRef) {
+      if (!refsMatch(so.poRef, poKey, 'purchase')) {
         const slice = soSliceOnPo.get(`${poKey}|${soKey}`) ?? { delivered: 0, inTransit: 0 }
         const deliveredQty = roundQtyMt(slice.delivered)
         const transit = roundQtyMt(slice.inTransit)
@@ -560,7 +560,7 @@ export function linkedSoLiftRollup(
     toBeLift: number
   }[] = []
   for (const so of sos) {
-    if (!so.poRef) {
+    if (!refsMatch(so.poRef, poRef, 'purchase')) {
       const slice = qtySoSliceOnPo(lifts, poRef, so.ref)
       const alloc = roundQtyMt(slice.delivered + slice.inTransit)
       allocation += alloc

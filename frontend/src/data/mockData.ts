@@ -455,7 +455,9 @@ export function getAllocatedSellQty(orders: TradeOrder[], poRef: string, lifts: 
   return roundQtyMt(
     getSOsForPO(orders, poRef, lifts)
       .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
-      .reduce((sum, o) => sum + (o.poRef ? o.orderQty : unlinkedLiftQtyOnPo(lifts, poRef, o.ref)), 0),
+      .reduce((sum, o) => sum + (
+        refsMatch(o.poRef, poRef, 'purchase') ? o.orderQty : unlinkedLiftQtyOnPo(lifts, poRef, o.ref)
+      ), 0),
   )
 }
 
