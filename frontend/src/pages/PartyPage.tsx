@@ -324,7 +324,7 @@ export function PartyPage() {
               columns={[
                 { key: 'liftRef', header: 'Lift ref', render: r => formatLiftRef(r.liftRef) },
                 { key: 'date', header: 'Date', render: r => <span className="tabular-nums">{formatDate(r.date)}</span> },
-                { key: 'poRef', header: 'PO', render: r => formatLiftPoRefs(r) },
+                { key: 'poRef', header: 'PO', render: r => formatLiftPoRefs(r, store.tradeOrders) },
                 { key: 'soRef', header: 'SO', render: r => formatLiftSoRefs(r) },
                 { key: 'qty', header: 'Qty', render: r => <span className="tabular-nums">{formatMt(r.liftedQty)}</span>, className: 'text-right' },
               ]}

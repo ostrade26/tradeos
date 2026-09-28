@@ -63,7 +63,7 @@ export function buildOrderTimeline(store: TradeStoreValue, order: TradeOrder): T
         href: `/sales-orders/${encodeURIComponent(so.ref)}/edit`,
       })
     }
-    appendLifts(events, store.lifts.filter(l => liftTouchesRef(l, order.ref)))
+    appendLifts(events, store.lifts.filter(l => liftTouchesRef(l, order.ref, order.side)), store.tradeOrders)
   } else {
     if (order.poRef) {
       const po = store.getOrderByRef(order.poRef, 'purchase')
@@ -78,20 +78,20 @@ export function buildOrderTimeline(store: TradeStoreValue, order: TradeOrder): T
         })
       }
     }
-    appendLifts(events, store.lifts.filter(l => liftTouchesRef(l, order.ref)))
+    appendLifts(events, store.lifts.filter(l => liftTouchesRef(l, order.ref, order.side)), store.tradeOrders)
   }
 
   return events.sort((a, b) => a.date.localeCompare(b.date))
 }
 
-function appendLifts(events: TimelineEvent[], lifts: Lift[]) {
+function appendLifts(events: TimelineEvent[], lifts: Lift[], orders: TradeOrder[] = []) {
   for (const lift of lifts) {
     events.push({
       id: `lift-${lift.id}`,
       type: 'lift',
       date: lift.date,
       title: `${formatLiftRef(lift.liftRef)} — ${formatQty(lift.liftedQty)}`,
-      subtitle: `${formatLiftOrderSummary(lift)}${formatLiftTankerSummary(lift) !== '—' ? ` · ${formatLiftTankerSummary(lift)}` : ''}`,
+      subtitle: `${formatLiftOrderSummary(lift, orders)}${formatLiftTankerSummary(lift) !== '—' ? ` · ${formatLiftTankerSummary(lift)}` : ''}`,
       href: `/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`,
       meta: lift.salesInvoiceNo ? `Invoice ${lift.salesInvoiceNo}` : undefined,
     })

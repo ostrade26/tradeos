@@ -12,6 +12,7 @@ import {
   type OrderFilterState,
 } from '../../lib/orderFilters'
 import { AppliedFilterChips, DateFilterPicker } from './DateFilterPicker'
+import { RATE_COLUMN_HEADER } from '../../lib/orderRate'
 import { cn } from '../../lib/utils'
 
 interface OrderFiltersBarProps {
@@ -25,6 +26,7 @@ interface OrderFiltersBarProps {
   parties: string[]
   brokers: string[]
   spots: string[]
+  rates: string[]
   onExport: () => void
   /** Show Unlinked-only control (sales orders). */
   showUnlinkedFilter?: boolean
@@ -41,6 +43,7 @@ export function OrderFiltersBar({
   parties,
   brokers,
   spots,
+  rates,
   onExport,
   showUnlinkedFilter = false,
 }: OrderFiltersBarProps) {
@@ -97,7 +100,7 @@ export function OrderFiltersBar({
       )}>
         <div className={cn(
           'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3',
-          showUnlinkedFilter ? 'xl:grid-cols-7' : 'xl:grid-cols-6',
+          showUnlinkedFilter ? 'xl:grid-cols-8' : 'xl:grid-cols-7',
         )}>
           <DateFilterPicker
             label="Created date"
@@ -148,6 +151,15 @@ export function OrderFiltersBar({
             values={filters.spots}
             onChange={values => setFilter('spots', values)}
             emptyMessage="No spots in list"
+          />
+          <MultiSelect
+            label={RATE_COLUMN_HEADER}
+            placeholder="All rates"
+            searchPlaceholder="Search rates..."
+            options={rates.map(rate => ({ value: rate, label: rate }))}
+            values={filters.rates}
+            onChange={values => setFilter('rates', values)}
+            emptyMessage="No rates in list"
           />
           {showUnlinkedFilter ? (
             <Select

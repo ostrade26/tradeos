@@ -10,7 +10,7 @@ import { Modal } from '../components/ui/Drawer'
 import { BlockedDeleteModal, ConfirmDeleteModal, DeleteActionButton } from '../components/ui/DeleteActions'
 import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
-import type { Broker, Producer, Retailer } from '../data/mockData'
+import type { Broker, CatalogItem, Producer, Retailer } from '../data/mockData'
 import {
   BrokerBrokerageForm,
   emptyBrokerBrokerageForm,
@@ -34,18 +34,49 @@ import { normalizeCompanyName } from '../lib/companyResolution'
 import type { BrokerageTerms } from '../data/mockData'
 import { Badge } from '../components/ui/Badge'
 
-const tabs = ['parties', 'brokers'] as const
+const tabs = ['parties', 'brokers', 'items'] as const
 type DirectoryTab = typeof tabs[number]
 
 function normalizeTab(value: string | null): DirectoryTab {
   if (value === 'producers' || value === 'retailers') return 'parties'
   if (value === 'brokers') return 'brokers'
+  if (value === 'items') return 'items'
   return 'parties'
 }
 
 const tabLabels: Record<DirectoryTab, string> = {
   brokers: 'Broker',
   parties: 'Party',
+  items: 'Item',
+}
+
+type ItemFormState = {
+  name: string
+  hsn: string
+  gstRate: string
+  grade: string
+  packing: string
+  notes: string
+}
+
+const emptyItemForm = (): ItemFormState => ({
+  name: '',
+  hsn: '',
+  gstRate: '',
+  grade: '',
+  packing: '',
+  notes: '',
+})
+
+function itemToForm(item: CatalogItem): ItemFormState {
+  return {
+    name: item.name,
+    hsn: item.hsn ?? '',
+    gstRate: item.gstRate == null ? '' : String(item.gstRate),
+    grade: item.grade ?? '',
+    packing: item.packing ?? '',
+    notes: item.notes ?? '',
+  }
 }
 
 type PartyKind = 'producer' | 'retailer'
@@ -140,10 +171,11 @@ export function DirectoryPage() {
   const store = useTradeStore()
   const toast = useToast()
   const {
-    brokers, producers, retailers, items,
+    brokers, producers, retailers, items, itemCatalog,
     addBroker, updateBroker, deleteBroker, canDeleteBroker,
     addProducer, updateProducer, deleteProducer, canDeleteProducer,
     updateRetailer, deleteRetailer, canDeleteRetailer,
+    saveCatalogItem, deleteCatalogItem, canDeleteCatalogItem,
   } = store
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -167,6 +199,11 @@ export function DirectoryPage() {
   const [partyInitial, setPartyInitial] = useState<Partial<PartyFormValues> | null>(null)
   const [partySaving, setPartySaving] = useState(false)
 
+  const [itemFormOpen, setItemFormOpen] = useState(false)
+  const [itemEditId, setItemEditId] = useState<string | null>(null)
+  const [itemForm, setItemForm] = useState(emptyItemForm)
+  const [itemFormError, setItemFormError] = useState('')
+
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
     name: string
@@ -183,6 +220,13 @@ export function DirectoryPage() {
   }
 
   const openAdd = () => {
+    if (active === 'items') {
+      setItemEditId(null)
+      setItemForm(emptyItemForm())
+      setItemFormError('')
+      setItemFormOpen(true)
+      return
+    }
     if (active === 'brokers') {
       setBrokerEditId(null)
       setBrokerForm(emptyBrokerForm())
@@ -308,6 +352,8 @@ export function DirectoryPage() {
     try {
       if (active === 'brokers') {
         await deleteBroker(deleteTarget.id)
+      } else if (active === 'items') {
+        await deleteCatalogItem(deleteTarget.id)
       } else {
         if (deleteTarget.producerId) await deleteProducer(deleteTarget.producerId)
         else if (deleteTarget.kind === 'producer') await deleteProducer(deleteTarget.id)
@@ -456,6 +502,31 @@ export function DirectoryPage() {
     return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [producers, retailers, search])
 
+  const allDirectoryItems = useMemo(() => {
+    const byName = new Map<string, CatalogItem>()
+    for (const item of itemCatalog) {
+      const key = item.name.trim().toLowerCase()
+      if (key) byName.set(key, item)
+    }
+    for (const name of items) {
+      const key = name.trim().toLowerCase()
+      if (!key || byName.has(key)) continue
+      byName.set(key, { id: `name:${name.trim()}`, name: name.trim() })
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [itemCatalog, items])
+
+  const directoryItems = useMemo(() => {
+    const q = search.toLowerCase()
+    if (!q) return allDirectoryItems
+    return allDirectoryItems.filter(item =>
+      item.name.toLowerCase().includes(q)
+      || (item.hsn ?? '').toLowerCase().includes(q)
+      || (item.grade ?? '').toLowerCase().includes(q)
+      || (item.packing ?? '').toLowerCase().includes(q),
+    )
+  }, [allDirectoryItems, search])
+
   const partyCount = useMemo(() => {
     const keys = new Set<string>()
     for (const p of producers) {
@@ -477,7 +548,9 @@ export function DirectoryPage() {
       description={
         hasActiveSearch
           ? 'Try adjusting your search.'
-          : `Add a ${tabLabels[active].toLowerCase()} to get started.`
+          : active === 'items'
+            ? 'Add an item such as Palm or Soybean, with grade, packing, and GST.'
+            : `Add a ${tabLabels[active].toLowerCase()} to get started.`
       }
       action={
         hasActiveSearch ? (
@@ -495,7 +568,7 @@ export function DirectoryPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Directory"
-        subtitle="People you trade with — brokers and parties"
+        subtitle="Brokers, parties, and the items you trade"
         breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Directory' }]} />}
         actions={
           <Button size="sm" onClick={openAdd}>
@@ -509,6 +582,7 @@ export function DirectoryPage() {
         tabs={[
           { id: 'parties', label: 'Parties', count: partyCount },
           { id: 'brokers', label: 'Brokers', count: brokers.length },
+          { id: 'items', label: 'Items', count: allDirectoryItems.length },
         ]}
         active={active}
         onChange={setTab}
@@ -549,6 +623,54 @@ export function DirectoryPage() {
           ]}
         />
       )}
+      {active === 'items' && (
+        <DataTable<CatalogItem>
+          data={directoryItems}
+          emptyState={emptyState}
+          columns={[
+            { key: 'name', header: 'Item', render: r => <span className="font-medium text-heading">{r.name}</span> },
+            { key: 'grade', header: 'Grade', className: 'hidden md:table-cell', render: r => r.grade || '—' },
+            { key: 'packing', header: 'Packing', className: 'hidden md:table-cell', render: r => r.packing || '—' },
+            { key: 'hsn', header: 'HSN', className: 'hidden lg:table-cell', render: r => r.hsn || '—' },
+            { key: 'gstRate', header: 'GST', className: 'hidden lg:table-cell', render: r => r.gstRate == null ? '—' : `${r.gstRate}%` },
+            {
+              key: 'actions',
+              header: '',
+              className: 'text-center',
+              actionsWide: 'compact' as const,
+              render: (r) => (
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    type="button"
+                    title={`Edit ${r.name}`}
+                    aria-label={`Edit ${r.name}`}
+                    onClick={e => {
+                      e.stopPropagation()
+                      setItemEditId(r.id)
+                      setItemForm(itemToForm(r))
+                      setItemFormError('')
+                      setItemFormOpen(true)
+                    }}
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-muted hover:text-accent hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <DeleteActionButton
+                    label={r.name}
+                    check={canDeleteCatalogItem(r.name)}
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center"
+                    onDelete={() => {
+                      setDeleteError('')
+                      setDeleteTarget({ id: r.id, name: r.name })
+                    }}
+                    onBlocked={reason => setBlockedDelete({ name: r.name, reason })}
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
       {active === 'parties' && (
         <DataTable<PartyEntry>
           data={filteredParties}
@@ -573,6 +695,53 @@ export function DirectoryPage() {
           ]}
         />
       )}
+
+      <Modal
+        open={itemFormOpen}
+        onClose={() => setItemFormOpen(false)}
+        title={`${itemEditId ? 'Edit' : 'Add'} Item`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setItemFormOpen(false)}>Cancel</Button>
+            <Button onClick={() => {
+              void (async () => {
+                setItemFormError('')
+                const gst = itemForm.gstRate.trim() ? Number(itemForm.gstRate) : null
+                if (gst != null && !Number.isFinite(gst)) {
+                  setItemFormError('Enter a GST percent')
+                  return
+                }
+                try {
+                  await saveCatalogItem({
+                    name: itemForm.name,
+                    hsn: itemForm.hsn,
+                    gstRate: gst,
+                    grade: itemForm.grade,
+                    packing: itemForm.packing,
+                    notes: itemForm.notes,
+                  }, itemEditId ?? undefined)
+                  toast.success(itemEditId ? 'Item updated' : 'Item added', { description: itemForm.name.trim() })
+                  setItemFormOpen(false)
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : 'Failed to save'
+                  setItemFormError(message)
+                  toast.error('Could not save item', { description: message })
+                }
+              })()
+            }}>{itemEditId ? 'Update' : 'Save'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Name" placeholder="Palm, Soybean…" value={itemForm.name} onChange={e => setItemForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+          <Input label="Grade" placeholder="RBD, crude…" value={itemForm.grade} onChange={e => setItemForm(f => ({ ...f, grade: e.target.value }))} />
+          <Input label="Packing" placeholder="Loose, tin, drum…" value={itemForm.packing} onChange={e => setItemForm(f => ({ ...f, packing: e.target.value }))} />
+          <Input label="HSN" value={itemForm.hsn} onChange={e => setItemForm(f => ({ ...f, hsn: e.target.value }))} />
+          <Input label="GST %" value={itemForm.gstRate} onChange={e => setItemForm(f => ({ ...f, gstRate: e.target.value }))} />
+          <Input label="Notes" value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} />
+          {itemFormError && <p className="text-sm text-danger">{itemFormError}</p>}
+        </div>
+      </Modal>
 
       <Modal
         open={brokerFormOpen}

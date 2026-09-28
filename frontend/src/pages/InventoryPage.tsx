@@ -19,7 +19,7 @@ import { formatContractRate, formatRateCell, PURCHASE_RATE_COLUMN_HEADER } from 
 import { useTradeStore } from '../store/TradeStore'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import type { Lot } from '../data/mockData'
-import { getSOsForPO } from '../data/mockData'
+import { getOrdersDrawingLot } from '../data/mockData'
 import { DetailInlineStat, DetailInlineStatRow } from '../components/registers/DetailPanelSections'
 import { AllocationQtyWithTooltip } from '../components/registers/AllocationQtyWithTooltip'
 import { TruncatedTextWithTooltip } from '../components/ui/DelayedHoverTooltip'
@@ -227,10 +227,10 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
 
   const allocationLinesForLot = useCallback(
     (lot: Lot) =>
-      getSOsForPO(store.tradeOrders, poRefFromLotNumber(lot.lotNumber))
+      getOrdersDrawingLot(store.tradeOrders, poRefFromLotNumber(lot.lotNumber), store.lifts)
         .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
         .map(o => ({ soRef: o.ref, qtyMt: o.orderQty })),
-    [store.tradeOrders],
+    [store.tradeOrders, store.lifts],
   )
 
   const columns = useMemo(() => [

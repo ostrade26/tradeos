@@ -220,6 +220,7 @@ function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): Trade
     ref,
     side: 'sale',
     poRef: base?.poRef ?? (linkedPo ? firstRef(linkedPo) || undefined : undefined),
+    stockPoRef: (base?.poRef || linkedPo) ? undefined : base?.stockPoRef,
     date: parseDateCell(row, 'Sale Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     partyName: buyerName,
     itemName: str(row, 'Item', 'Item Name') || base?.itemName || '',
@@ -345,7 +346,11 @@ function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
     liftRef: liftRef ?? 0,
     poRef,
     soRef: soRef || base?.soRef || '',
-    allocations: base?.allocations,
+    allocations: base?.allocations?.length
+      ? base.allocations
+      : (poRef
+        ? [{ poRef, soRef: (soRef || base?.soRef) || undefined, qtyMt: liftedQty }]
+        : undefined),
     date: parseDateCell(row, 'Lift Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     status,
     deliveredAt: status === 'delivered' ? (deliveredAt || base?.deliveredAt || (liftedQty > 0 ? parseDateCell(row, 'Lift Date', 'Date') : undefined)) : base?.deliveredAt,
@@ -382,7 +387,7 @@ export function parseLiftRow(row: Record<string, unknown>): Lift | null {
 function dedupeOrders(orders: TradeOrder[]): TradeOrder[] {
   const byKey = new Map<string, TradeOrder>()
   for (const order of orders) {
-    byKey.set(`${order.side}:${order.ref}`, order)
+    byKey.set(`${order.side}:${refCore(order.ref)}`, order)
   }
   return [...byKey.values()]
 }

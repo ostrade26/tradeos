@@ -5,9 +5,10 @@ import { Select } from '../ui/Select'
 import { cn, formatQty } from '../../lib/utils'
 import { sanitizeQtyInput } from '../../lib/liftTankers'
 import { orderDropdownOption } from '../../lib/orderSelectOptions'
-import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
-import { remainingOnOrder, remainingOnPoForDispatch } from '../../lib/liftAllocations'
-import { poolPOsForSo, isCrossPoAllocation } from '../../lib/sellerLiftPool'
+import { formatLotRef, formatPoRef, formatSoRef, findTradeOrder, refsMatch } from '../../lib/tradeRefs'
+import { remainingOnPoForDispatch, soQtyLeftToLift } from '../../lib/liftAllocations'
+import { dispatchPoolForSo, dispatchPoRef, isCrossPoAllocation } from '../../lib/sellerLiftPool'
+import { inventoryStockRef, purchaseIsClosed, StockPoLink } from '../registers/StockPoLink'
 import { Badge } from '../ui/Badge'
 import type { Lift, TradeOrder } from '../../data/mockData'
 
@@ -41,26 +42,32 @@ export function newAllocationDraft(partial?: Partial<LiftAllocationDraft>): Lift
 
 function soMatchesSellerFilter(so: TradeOrder, sellerFilter: string | undefined, orders: TradeOrder[]): boolean {
   if (!sellerFilter) return true
-  const booked = orders.find(p => p.ref === so.poRef && p.side === 'purchase')
+  const booked = findTradeOrder(orders, 'purchase', dispatchPoRef(so))
   if (booked && (booked.sellerName || booked.partyName) === sellerFilter) return true
-  return poolPOsForSo(so, orders).some(po => (po.sellerName || po.partyName) === sellerFilter)
+  if (so.stockPoRef && !so.poRef) return false
+  return dispatchPoolForSo(so, orders).some(po => (po.sellerName || po.partyName) === sellerFilter)
 }
 
 function qtyOnOtherRows(rows: LiftAllocationDraft[], ref: string, key: 'soRef' | 'poRef', exceptId: string): number {
   return rows.reduce((sum, row) => {
-    if (row.id === exceptId || row[key] !== ref) return sum
+    if (row.id === exceptId || !refsMatch(row[key], ref, key === 'poRef' ? 'purchase' : 'sale')) return sum
     return sum + (parseFloat(row.qty) || 0)
   }, 0)
 }
 
-function AvailableQtyCaption({ available, requested }: { available: number; requested: number }) {
+function AvailableQtyCaption({ available, requested, warning }: { available: number; requested: number; warning?: string }) {
+  if (warning) {
+    return (
+      <p className="text-xs text-danger mt-1 leading-relaxed">{warning}</p>
+    )
+  }
   const enough = available > 0 && (requested <= 0 || available >= requested)
   return (
     <p className={cn(
       'text-xs tabular-nums mt-1',
       enough ? 'text-success' : 'text-danger',
     )}>
-      {formatQty(available)} available
+      {formatQty(available)} left to lift
     </p>
   )
 }
@@ -89,14 +96,14 @@ export function LiftAllocationsForm({
 
   const setSo = (row: LiftAllocationDraft, soRef: string) => {
     const so = orders.find(o => o.ref === soRef && o.side === 'sale')
-    const pool = so
-      ? poolPOsForSo(so, orders).filter(p => p.status !== 'completed' || p.ref === row.poRef)
-      : []
+    const pool = so ? dispatchPoolForSo(so, orders, row.poRef) : []
+    const source = so ? dispatchPoRef(so) : undefined
     const poRef = pool.some(p => p.ref === row.poRef)
       ? row.poRef
-      : (pool.find(p => p.ref === so?.poRef) ?? pool[0])?.ref ?? ''
+      : (pool.find(p => source && refsMatch(p.ref, source, 'purchase')) ?? pool[0])?.ref ?? ''
     const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
-    const soLeft = so ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, soRef, 'soRef', row.id) : 0
+    const soAvail = so ? soQtyLeftToLift(so, lifts, excludeLiftId) : { qty: 0 as number | null }
+    const soLeft = (soAvail.qty ?? 0) - qtyOnOtherRows(rows, soRef, 'soRef', row.id)
     const poLeft = po ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
     const qty = Math.max(0, Math.min(soLeft, poLeft || soLeft))
     updateRow(row.id, {
@@ -109,7 +116,8 @@ export function LiftAllocationsForm({
   const setPo = (row: LiftAllocationDraft, poRef: string) => {
     const so = orders.find(o => o.ref === row.soRef && o.side === 'sale')
     const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
-    const soLeft = so ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id) : 0
+    const soAvail = so ? soQtyLeftToLift(so, lifts, excludeLiftId) : { qty: 0 as number | null }
+    const soLeft = (soAvail.qty ?? 0) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id)
     const poLeft = po ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, poRef, 'poRef', row.id) : soLeft
     const qty = Math.max(0, Math.min(soLeft, poLeft || soLeft))
     updateRow(row.id, {
@@ -120,16 +128,20 @@ export function LiftAllocationsForm({
 
   const addRow = () => {
     const used = new Set(rows.map(r => r.soRef).filter(Boolean))
-    const next = eligibleSOs.find(s => !used.has(s.ref) && remainingOnOrder(s, lifts, excludeLiftId) > 0)
+    const next = eligibleSOs.find(s => {
+      const avail = soQtyLeftToLift(s, lifts, excludeLiftId)
+      return !used.has(s.ref) && (avail.qty ?? 0) > 0
+    })
     if (!next) {
       onChange([...rows, newAllocationDraft()])
       return
     }
-    const pool = poolPOsForSo(next, orders)
-      .filter(p => p.status !== 'completed')
-      .filter(p => remainingOnPoForDispatch(p, lifts, excludeLiftId) > 0)
-    const po = pool.find(p => p.ref === next.poRef) ?? pool[0]
-    const soLeft = remainingOnOrder(next, lifts, excludeLiftId)
+    const source = dispatchPoRef(next)
+    const pool = dispatchPoolForSo(next, orders)
+      .filter(p => p.status !== 'completed' || (source && refsMatch(p.ref, source, 'purchase')))
+      .filter(p => remainingOnPoForDispatch(p, lifts, excludeLiftId) > 0 || (source && refsMatch(p.ref, source, 'purchase')))
+    const po = pool.find(p => source && refsMatch(p.ref, source, 'purchase')) ?? pool[0]
+    const soLeft = soQtyLeftToLift(next, lifts, excludeLiftId).qty ?? 0
     const poLeft = po
       ? remainingOnPoForDispatch(po, lifts, excludeLiftId) - qtyOnOtherRows(rows, po.ref, 'poRef', '')
       : soLeft
@@ -170,20 +182,22 @@ export function LiftAllocationsForm({
             }
             return opts
           })()
+          const sourcePo = findTradeOrder(orders, 'purchase', so?.stockPoRef || so?.poRef || row.poRef)
+          const stockRef = inventoryStockRef(so, sourcePo)
+            ?? (!so && sourcePo && purchaseIsClosed(sourcePo) && refsMatch(sourcePo.ref, row.poRef, 'purchase')
+              ? row.poRef
+              : undefined)
           const poPool = (() => {
-            const pool = so
-              ? poolPOsForSo(so, orders).filter(p => p.status !== 'completed' || p.ref === row.poRef)
-              : []
+            const pool = so ? dispatchPoolForSo(so, orders, row.poRef) : []
             if (row.poRef && !pool.some(p => p.ref === row.poRef)) {
               const currentPo = orders.find(o => o.ref === row.poRef && o.side === 'purchase' && o.status !== 'cancelled')
               if (currentPo) pool.unshift(currentPo)
             }
             return pool
           })()
-          const soLeft = so
-            ? remainingOnOrder(so, lifts, excludeLiftId) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id)
-            : 0
-          const poLeft = row.poRef
+          const soAvail = so ? soQtyLeftToLift(so, lifts, excludeLiftId) : { qty: 0 as number | null }
+          const soLeft = (soAvail.qty ?? 0) - qtyOnOtherRows(rows, row.soRef, 'soRef', row.id)
+          const poLeft = row.poRef && !stockRef
             ? (() => {
               const po = orders.find(o => o.ref === row.poRef && o.side === 'purchase')
               return po
@@ -196,7 +210,7 @@ export function LiftAllocationsForm({
           const maxQtyMessage = rowQty > maxQty && rowQty > 0
             ? rowQty > soLeft && row.soRef
               ? `${formatSoRef(row.soRef)} only has ${formatQty(soLeft)} left to lift`
-              : rowQty > poLeft && row.poRef
+              : rowQty > poLeft && row.poRef && !stockRef
                 ? `${formatPoRef(row.poRef)} only has ${formatQty(poLeft)} left to lift`
                 : undefined
             : undefined
@@ -208,7 +222,7 @@ export function LiftAllocationsForm({
                   <p className="text-sm font-semibold text-heading">
                     SO {index + 1}
                   </p>
-                  {so && row.poRef && isCrossPoAllocation(so, row.poRef) && (
+                  {so && row.poRef && !stockRef && isCrossPoAllocation(so, row.poRef) && (
                     <Badge variant="warning">Cross lot</Badge>
                   )}
                 </div>
@@ -229,11 +243,23 @@ export function LiftAllocationsForm({
                   <Select
                     label="Sales Order"
                     options={soOptions.length > 0
-                      ? soOptions.map(s => orderDropdownOption(
-                        s,
-                        Math.max(0, remainingOnOrder(s, lifts, excludeLiftId) - qtyOnOtherRows(rows, s.ref, 'soRef', row.id)),
-                        [s.poRef ? `Lot ${formatPoRef(s.poRef)}` : 'No PO linked'],
-                      ))
+                      ? soOptions.map(s => {
+                        const avail = soQtyLeftToLift(s, lifts, excludeLiftId)
+                        const qty = avail.qty == null
+                          ? null
+                          : Math.max(0, avail.qty - qtyOnOtherRows(rows, s.ref, 'soRef', row.id))
+                        const bookedPo = findTradeOrder(orders, 'purchase', s.poRef || s.stockPoRef)
+                        const stock = inventoryStockRef(s, bookedPo)
+                        return orderDropdownOption(
+                          s,
+                          qty,
+                          [stock
+                            ? formatLotRef(stock)
+                            : s.poRef
+                              ? `Lot ${formatPoRef(s.poRef)}`
+                              : 'No PO linked'],
+                        )
+                      })
                       : [{ value: '', label: itemFilter ? `No SO for ${itemFilter}` : 'No SO available' }]}
                     value={row.soRef}
                     displayLabel={so ? undefined : (row.soRef || undefined)}
@@ -242,33 +268,42 @@ export function LiftAllocationsForm({
                     emptyMessage={itemFilter ? `No SO for ${itemFilter}` : 'No sales orders yet'}
                   />
                   {so && (
-                    <AvailableQtyCaption available={soLeft} requested={rowQty} />
+                    <AvailableQtyCaption available={soLeft} requested={rowQty} warning={soAvail.warning} />
                   )}
                 </div>
                 <div>
-                  <Select
-                    label="Purchase Order (Lot)"
-                    options={poPool.length > 0
-                      ? poPool.map(p => {
-                        const booked = so?.poRef === p.ref
-                        return orderDropdownOption(
-                          p,
-                          Math.max(0, remainingOnPoForDispatch(p, lifts, excludeLiftId) - qtyOnOtherRows(rows, p.ref, 'poRef', row.id)),
-                          booked || !so?.poRef ? [] : ['same seller'],
-                        )
-                      })
-                      : [{ value: '', label: 'Select an SO first' }]}
-                    value={row.poRef}
-                    onChange={e => setPo(row, e.target.value)}
-                    disabled={disabled || !row.soRef}
-                  />
-                  {row.poRef && (
-                    <AvailableQtyCaption available={poLeft} requested={rowQty} />
-                  )}
-                  {so && row.poRef && isCrossPoAllocation(so, row.poRef) && (
-                    <p className="text-xs text-warning mt-1.5 leading-relaxed">
-                      Booked on {formatPoRef(so.poRef ?? '')} · dispatching from {formatPoRef(row.poRef)} (buyer-first delivery)
-                    </p>
+                  {stockRef ? (
+                    <>
+                      <p className="text-xs font-medium text-muted mb-1.5">Lot</p>
+                      <StockPoLink poRef={stockRef} />
+                    </>
+                  ) : (
+                    <>
+                      <Select
+                        label="Purchase Order (Lot)"
+                        options={poPool.length > 0
+                          ? poPool.map(p => {
+                            const booked = so?.poRef === p.ref
+                            return orderDropdownOption(
+                              p,
+                              Math.max(0, remainingOnPoForDispatch(p, lifts, excludeLiftId) - qtyOnOtherRows(rows, p.ref, 'poRef', row.id)),
+                              booked || !so?.poRef ? [] : ['same seller'],
+                            )
+                          })
+                          : [{ value: '', label: 'Select an SO first' }]}
+                        value={row.poRef}
+                        onChange={e => setPo(row, e.target.value)}
+                        disabled={disabled || !row.soRef}
+                      />
+                      {row.poRef && (
+                        <AvailableQtyCaption available={poLeft} requested={rowQty} />
+                      )}
+                      {so && row.poRef && !stockRef && isCrossPoAllocation(so, row.poRef) && (
+                        <p className="text-xs text-warning mt-1.5 leading-relaxed">
+                          Booked on {formatPoRef(so.poRef ?? '')} · dispatching from {formatPoRef(row.poRef)} (buyer-first delivery)
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 <QtyInput

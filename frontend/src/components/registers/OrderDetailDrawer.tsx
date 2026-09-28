@@ -22,15 +22,16 @@ import { Badge, StatusBadge } from '../ui/Badge'
 import { VerifiedPeriod } from '../ui/GroupedDataTable'
 import { formatDate, formatQty } from '../../lib/utils'
 import { formatContractRate } from '../../lib/orderRate'
-import { formatOrderRef, refCore } from '../../lib/tradeRefs'
+import { formatOrderRef, findTradeOrder } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
+import { linkedSoLiftRollup, orderHasPendingLift, pendingLiftKeys, remainingOnOrder } from '../../lib/liftAllocations'
 import {
+  toBeLifted,
   type TradeOrder,
   type OrderSide,
-  toBeLifted,
   unliftedQty,
 } from '../../data/mockData'
-import { canBuyBackPO, totalBuyBackQty } from '../../lib/buyBack'
+import { canBuyBackOrder, totalBuyBackQty } from '../../lib/buyBack'
 import { BuyBackModal } from '../orders/BuyBackModal'
 import { CloseOrderModal } from '../orders/CloseOrderModal'
 import { canCloseOrder, completionTypeLabel } from '../../lib/orderClosure'
@@ -83,10 +84,22 @@ export function OrderDetailDrawer({
     [order, store.lifts, store.balanceSettlements, store.tradeOrders],
   )
 
+  const canMarkComplete = Boolean(
+    order
+    && order.status !== 'completed'
+    && order.status !== 'cancelled'
+    && !order.deleteScheduledAt
+    && !closeCheck?.ok
+    && toBeLifted(order) <= 0
+    && !orderHasPendingLift(pendingLiftKeys(store.lifts), order),
+  )
+
   const buyBackCheck = useMemo(
-    () => (order?.side === 'purchase'
-      ? canBuyBackPO(order, store.lifts, store.getSOsForPO(order.ref))
-      : { ok: false }),
+    () => {
+      if (!order) return { ok: false as const }
+      const linked = order.side === 'purchase' ? store.getSOsForPO(order.ref) : []
+      return canBuyBackOrder(order, store.lifts, linked)
+    },
     [order, store.lifts, store.tradeOrders],
   )
 
@@ -132,7 +145,10 @@ export function OrderDetailDrawer({
               ...(closeCheck?.ok
                 ? [{ type: 'button' as const, label: 'Close order…', icon: CircleCheck, onClick: () => setCloseOpen(true) }]
                 : []),
-              ...(isPO && buyBackCheck.ok
+              ...(canMarkComplete
+                ? [{ type: 'button' as const, label: 'Mark complete', icon: CircleCheck, onClick: () => { void store.closeOrder(order.id, { method: 'delivered' }) } }]
+                : []),
+              ...(buyBackCheck.ok
                 ? [{ type: 'button' as const, label: 'Buy back', icon: RotateCcw, onClick: () => setBuyBackOpen(true) }]
                 : []),
             ],
@@ -164,7 +180,7 @@ export function OrderDetailDrawer({
         ],
       }] : []),
     ])
-  }, [canCreateOrders, canDeleteOrders, canEditOrders, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
+  }, [canCreateOrders, canDeleteOrders, canEditOrders, canMarkComplete, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
 
   if (!order) return null
 
@@ -172,11 +188,17 @@ export function OrderDetailDrawer({
 
   const isPO = order.side === 'purchase'
   const shortLabel = isPO ? 'PO' : 'SO'
-  const remaining = toBeLifted(order)
-  const pending = unliftedQty(order)
+  const soRollup = isPO ? linkedSoLiftRollup(order.ref, store.tradeOrders, store.lifts) : null
+  const remaining = isPO
+    ? (soRollup && soRollup.allocation > 0 ? soRollup.toBeLift : remainingOnOrder(order, store.lifts))
+    : remainingOnOrder(order, store.lifts)
+  const delivered = soRollup ? soRollup.delivered : order.liftedQty
+  const pending = soRollup
+    ? soRollup.inTransit + soRollup.toBeLift
+    : unliftedQty(order)
 
   const linkedSOs = isPO ? store.getSOsForPO(order.ref) : []
-  const buyBackTotal = isPO ? totalBuyBackQty(order) : 0
+  const buyBackTotal = totalBuyBackQty(order)
 
   const productLine = order.spot
     ? `${order.itemName} • ${order.spot}`
@@ -219,7 +241,7 @@ export function OrderDetailDrawer({
           <div className="flex items-start justify-between gap-3 mt-0.5">
             <p className="text-[14px] text-muted leading-snug min-w-0">{productLine}</p>
             <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
-              {isPO && <BuyBackTag order={order} />}
+              <BuyBackTag order={order} />
               <StatusBadge status={order.status} />
               {closureLabel && <Badge variant="default">{closureLabel}</Badge>}
               {order.deliveryType === 'ready' && <Badge variant="info">Ready</Badge>}
@@ -231,7 +253,7 @@ export function OrderDetailDrawer({
       <DetailMetricsSection>
         <DetailInlineStatRow>
           <DetailInlineStat label="Order" value={formatQty(order.orderQty)} />
-          <DetailInlineStat label="Delivered" value={formatQty(order.liftedQty)} valueClassName="text-success" />
+          <DetailInlineStat label="Delivered" value={formatQty(delivered)} valueClassName="text-success" />
           <DetailInlineStat label="Pending" value={formatQty(pending)} />
         </DetailInlineStatRow>
       </DetailMetricsSection>
@@ -257,11 +279,12 @@ export function OrderDetailDrawer({
 
       <DetailGroup title="Terms & broker" icon={FileText}>
         <DetailRow label="Broker" value={order.brokerName} />
+        <DetailRow label="Contract #" value={order.brokerContractRef} />
         <DetailRow label="Payment terms" value={order.paymentTerms} />
         {order.remarks && <DetailRow label="Remarks" value={order.remarks} />}
       </DetailGroup>
 
-      {isPO && (order.buyBacks?.length ?? 0) > 0 && (
+      {(order.buyBacks?.length ?? 0) > 0 && (
         <DetailGroup title="Buy backs" icon={RotateCcw}>
           {order.buyBacks!.map(bb => (
             <DetailRow
@@ -341,11 +364,5 @@ export function OrderDetailDrawer({
 }
 
 export function findOrderByRef(store: ReturnType<typeof useTradeStore>, ref: string, side: OrderSide): TradeOrder | undefined {
-  const needle = ref.trim()
-  if (!needle) return undefined
-  const exact = store.tradeOrders.find(o => o.side === side && o.ref === needle)
-  if (exact) return exact
-  const core = refCore(needle)
-  if (!core) return undefined
-  return store.tradeOrders.find(o => o.side === side && refCore(o.ref) === core)
+  return findTradeOrder(store.tradeOrders, side, ref.trim())
 }

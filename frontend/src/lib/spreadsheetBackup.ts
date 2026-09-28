@@ -15,12 +15,7 @@ import type {
 } from '../data/mockData'
 import { BACKUP_VERSION, parseTradeBackup, type TradeBackup } from './tradeBackupCore'
 import { downloadFile } from './export'
-import {
-  allocationTotal,
-  getLiftAllocations,
-  liftTouchesRef,
-  uniqueLiftRefs,
-} from './liftAllocations'
+import { allocationTotal, applyLiftTotals, getLiftAllocations, liftTouchesRef, uniqueLiftRefs } from './liftAllocations'
 import { formatTankerNo, getLiftTankers } from './liftTankers'
 import { STOCK_LIFT_LABEL } from './stockLift'
 import { refCore } from './tradeRefs'
@@ -34,7 +29,7 @@ import {
 } from './spreadsheetImport'
 import { isGroupedPoRawRows, tryParseGroupedPoRawRows } from './groupedPoImport'
 import { buildSeedData } from '../data/seedData'
-import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts, normalizeLiftOrderRefs } from './inferImportLinks'
+import { ensureOrdersReferencedByLifts, inferSoPoRefsFromLifts, normalizeLiftOrderRefs, normalizeLinkedPoRefs } from './inferImportLinks'
 import { ensureDirectoryFromOrders } from './ensureDirectoryFromOrders'
 import { normalizeDateToIso } from './utils'
 
@@ -165,7 +160,7 @@ function liftDeliveryPeriodLabel(lift: Pick<Lift, 'deliveryPeriod' | 'deliveryPe
 }
 
 function poDeliveryFields(order: TradeOrder, lifts: Lift[]) {
-  const related = lifts.filter(l => l.status === 'delivered' && liftTouchesRef(l, order.ref))
+  const related = lifts.filter(l => l.status === 'delivered' && liftTouchesRef(l, order.ref, order.side))
   const invoiceNos = [...new Set(related.map(l => l.salesInvoiceNo).filter(Boolean) as string[])]
   const invoiceDates = [...new Set(related.map(l => isoDate(l.deliveredAt)).filter(Boolean))]
   const tankerNos = [...new Set(
@@ -611,7 +606,8 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
   data.tradeOrders = ensureOrdersReferencedByLifts(data.tradeOrders, data.lifts)
   data.lifts = normalizeLiftOrderRefs(data.tradeOrders, data.lifts)
   data.tradeOrders = inferSoPoRefsFromLifts(data.tradeOrders, data.lifts)
-  return ensureDirectoryFromOrders(data)
+  data.tradeOrders = normalizeLinkedPoRefs(data.tradeOrders)
+  return applyLiftTotals(ensureDirectoryFromOrders(data))
 }
 
 async function loadXlsx() {

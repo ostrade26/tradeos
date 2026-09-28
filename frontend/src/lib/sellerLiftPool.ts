@@ -1,6 +1,6 @@
 import { type TradeOrder } from '../data/mockData'
 import { normalizeCompanyName } from './companyResolution'
-import { formatPoRef, formatSoRef } from './tradeRefs'
+import { findTradeOrder, formatPoRef, formatSoRef, refsMatch } from './tradeRefs'
 
 function sellerIdentity(po: TradeOrder): { id: string; name: string } {
   return {
@@ -20,15 +20,35 @@ export function sameSellerItemPool(a: TradeOrder, b: TradeOrder): boolean {
   return false
 }
 
+/** PO this SO dispatches from: the contract link, or stock received on a closed PO. */
+export function dispatchPoRef(so: Pick<TradeOrder, 'poRef' | 'stockPoRef'>): string | undefined {
+  return so.poRef || so.stockPoRef || undefined
+}
+
 function linkedPurchaseOrder(so: TradeOrder, orders: TradeOrder[]): TradeOrder | undefined {
-  if (!so.poRef) return undefined
-  return orders.find(o => o.ref === so.poRef && o.side === 'purchase')
+  const ref = dispatchPoRef(so)
+  if (!ref) return undefined
+  return findTradeOrder(orders, 'purchase', ref)
+}
+
+/** Keep a completed PO in the dispatch list when this SO is selling that stock. */
+export function dispatchPoolForSo(
+  so: TradeOrder,
+  orders: TradeOrder[],
+  currentPoRef?: string,
+): TradeOrder[] {
+  return poolPOsForSo(so, orders).filter(po => {
+    if (po.status !== 'completed') return true
+    if (currentPoRef && po.ref === currentPoRef) return true
+    const source = dispatchPoRef(so)
+    return Boolean(source && refsMatch(po.ref, source, 'purchase'))
+  })
 }
 
 /** SO is booked on one PO but dispatching stock from another (buyer-first delivery). */
 export function isCrossPoAllocation(so: TradeOrder | undefined, dispatchPoRef: string): boolean {
   if (!so?.poRef || !dispatchPoRef) return false
-  return so.poRef !== dispatchPoRef
+  return !refsMatch(so.poRef, dispatchPoRef, 'purchase')
 }
 
 export function crossPoAllocationMessage(so: TradeOrder, dispatchPoRef: string): string {
@@ -40,7 +60,7 @@ export function crossPoAllocationSummary(
   dispatchPoRef: string,
   orders: TradeOrder[],
 ): string | null {
-  const so = orders.find(o => o.ref === soRef && o.side === 'sale')
+  const so = findTradeOrder(orders, 'sale', soRef)
   if (!so || !isCrossPoAllocation(so, dispatchPoRef)) return null
   return crossPoAllocationMessage(so, dispatchPoRef)
 }
@@ -51,7 +71,7 @@ export function canLiftSoAgainstPo(so: TradeOrder, po: TradeOrder, orders: Trade
   // Cancelled only — completed allowed for delivered-lift relink / legacy cleanup.
   if (so.status === 'cancelled' || po.status === 'cancelled') return false
   if (so.itemName !== po.itemName) return false
-  if (!so.poRef || so.poRef === po.ref) return true
+  if (!so.poRef || refsMatch(so.poRef, po.ref, 'purchase')) return true
   const booked = linkedPurchaseOrder(so, orders)
   if (!booked) return true
   return sameSellerItemPool(booked, po)

@@ -10,7 +10,7 @@ export function BuyBackTag({
   order: Pick<TradeOrder, 'buyBacks' | 'side'>
   className?: string
 }) {
-  if (order.side !== 'purchase' || !hasBuyBacks(order)) return null
+  if (!hasBuyBacks(order)) return null
   return (
     <Badge variant="warning" className={cn('text-[10px] shrink-0', className)}>
       Buy back

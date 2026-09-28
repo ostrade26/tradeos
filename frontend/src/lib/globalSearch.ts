@@ -3,7 +3,7 @@ import type { TradeStoreValue } from '../store/TradeStore'
 import { getLiftTankers } from './liftTankers'
 import { formatLiftOrderSummary } from './liftAllocations'
 import { formatQty } from './utils'
-import { formatLiftRef, formatOrderRef, formatPoRef } from './tradeRefs'
+import { formatLiftRef, formatLotRef, formatOrderRef, formatPoRef } from './tradeRefs'
 import { appPath } from './appShellMode'
 
 export interface GlobalSearchItem {
@@ -31,7 +31,10 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
     items.push({
       id: `so-${o.id}`,
       label: formatOrderRef(o.ref, o.side),
-      description: `SO · ${o.partyName} · ${o.itemName}${o.poRef ? ` · ${formatPoRef(o.poRef)}` : ''}`,
+      description: `SO · ${o.partyName} · ${o.itemName}${(() => {
+        const stockRef = o.stockPoRef && !o.poRef ? o.stockPoRef : undefined
+        return stockRef ? ` · ${formatLotRef(stockRef)}` : o.poRef ? ` · ${formatPoRef(o.poRef)}` : ''
+      })()}`,
       group: 'Sales Orders',
       action: () => navigate(appPath(`/sales-orders?ref=${encodeURIComponent(o.ref)}`)),
     })
@@ -41,7 +44,7 @@ export function buildGlobalSearchItems(store: TradeStoreValue, navigate: Navigat
     items.push({
       id: `lift-${l.id}`,
       label: formatLiftRef(l.liftRef),
-      description: `${formatLiftOrderSummary(l)} · ${formatQty(l.liftedQty)}`,
+      description: `${formatLiftOrderSummary(l, store.tradeOrders)} · ${formatQty(l.liftedQty)}`,
       group: 'Lifts',
       action: () => navigate(appPath(`/lifts?party=${encodeURIComponent(l.buyerName)}`)),
     })

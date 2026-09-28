@@ -21,6 +21,7 @@ import { useToast } from '../hooks/useToast'
 import { OrderCreatedModal } from '../components/orders/OrderCreatedModal'
 import { ContractPdfUpload, type ContractPdfUploadHandle } from '../components/orders/ContractPdfUpload'
 import { CaptionCard } from '../components/ui/CaptionCard'
+import { purchaseIsClosed, StockPoLink } from '../components/registers/StockPoLink'
 import {
   PartyFormModal,
   partyFormToInput,
@@ -47,7 +48,7 @@ import {
   resolveBrokerageTerms,
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
-import { formatOrderRef, formatPoRef } from '../lib/tradeRefs'
+import { findTradeOrder, formatLotRef, formatOrderRef, formatPoRef } from '../lib/tradeRefs'
 import { uniqueSorted } from '../lib/orderFilters'
 import { collapseRepeatedPartyLocation } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
@@ -56,6 +57,11 @@ import { partyMatches } from '../lib/assistant/partyMatch'
 import { appPath } from '../lib/appShellMode'
 import { useTradeStore } from '../store/TradeStore'
 import { orderDropdownOption } from '../lib/orderSelectOptions'
+
+/** Contract PDF iframe on PO/SO entry. When turning on multiple PDFs, set this true too. */
+const SHOW_CONTRACT_PDF_PREVIEW = false
+/** Import from Contract PDF on PO/SO entry. Set false to hide the whole block. */
+const SHOW_CONTRACT_PDF_IMPORT = true
 
 function useStateForm(initial: Record<string, string>) {
   const [values, setValues] = useState(initial)
@@ -251,6 +257,10 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       setPdfPreview(null)
       return
     }
+    if (!SHOW_CONTRACT_PDF_PREVIEW) {
+      setPdfPreview(null)
+      return
+    }
     const url = URL.createObjectURL(file)
     previewUrlRef.current = url
     setPdfPreview({ url, name: file.name })
@@ -413,7 +423,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   }, [isEdit, prefill?.qty, prefill?.rate, prefill?.buyer, prefill?.broker, prefill?.party, prefill?.item])
 
   const selectedPO = useMemo(
-    () => store.tradeOrders.find(o => o.ref === form.poRef && o.side === 'purchase'),
+    () => findTradeOrder(store.tradeOrders, 'purchase', form.poRef),
     [store.tradeOrders, form.poRef],
   )
 
@@ -521,10 +531,21 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       }),
     )
 
+    const sellingClosedStock = !isPO
+      && !!selectedPO
+      && purchaseIsClosed(selectedPO)
+      && !editingOrder?.poRef
+      && (!!linkedPoRef || !!editingOrder?.stockPoRef)
+    const inventoryPo = sellFromLot
+      ? (form.poRef.trim() || sellFromLot.lotNumber.replace(/^LOT-/, ''))
+      : ''
+    const stockPo = inventoryPo || (sellingClosedStock ? (form.poRef.trim() || editingOrder?.stockPoRef || '') : '')
+
     const payload = {
       ref: form.ref,
       side,
-      poRef: isPO ? undefined : (form.poRef.trim() || undefined),
+      poRef: isPO ? undefined : (stockPo ? undefined : (form.poRef.trim() || undefined)),
+      stockPoRef: stockPo || undefined,
       brokerContractRef: form.brokerContractRef || undefined,
       date: form.date,
       partyName: form.partyName,
@@ -726,7 +747,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
     )
   }
 
-  const showPdfImport = !isEdit && (isPO || (!sellFromLot && !linkedPoRef))
+  const showPdfImport = SHOW_CONTRACT_PDF_IMPORT && !isEdit && (isPO || (!sellFromLot && !linkedPoRef))
 
   if (!isPO) {
     return (
@@ -942,6 +963,10 @@ function SOEntryForm({
       const linked = store.getOrderByRef(editingOrder.poRef, 'purchase')
       if (linked) base = [linked, ...base]
     }
+    if (sellFromLot && linkedPoRef && !base.some(p => p.ref === linkedPoRef)) {
+      const linked = store.getOrderByRef(linkedPoRef, 'purchase')
+      if (linked) base = [linked, ...base]
+    }
     if (!poLinkEditable) return base
 
     const itemQ = poLinkItem.trim().toLowerCase()
@@ -962,6 +987,8 @@ function SOEntryForm({
     poLinkItem,
     poLinkSeller,
     poLinkSpot,
+    sellFromLot?.lotId,
+    linkedPoRef,
   ])
 
   const poFilterOptions = useMemo(() => {
@@ -1122,17 +1149,43 @@ function SOEntryForm({
             </details>
           )}
           <CaptionCard bodyClassName="p-8">
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Package className="h-4 w-4 text-accent" /> {sellFromLot ? 'Purchase Order' : 'Link to Purchase Order'}
-            </h3>
-            {(sellFromLot || linkedPoRef) && (
-              <p className="text-xs text-gray-500 mb-2">
-                {sellFromLot
-                  ? `Selling from ${sellFromLot.lotNumber}. This PO is linked to the lot.`
-                  : `Linked to ${linkedPoRef}. Item follows this PO; other fields are editable.`}
-              </p>
+            {sellFromLot ? (
+              <>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-accent" /> Stock
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Selling quantity on hand from {sellFromLot.lotNumber}.
+                </p>
+                <StockPoLink
+                  poRef={form.poRef || sellFromLot.lotNumber.replace(/^LOT-/, '')}
+                  lotId={sellFromLot.lotId}
+                />
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-accent" /> Link to Purchase Order
+                </h3>
+                {linkedPoRef && purchaseIsClosed(selectedPO) && !editingOrder?.poRef ? (
+                  <>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Selling quantity on hand. This sales order does not book against the closed purchase.
+                    </p>
+                    <StockPoLink poRef={form.poRef || linkedPoRef} />
+                  </>
+                ) : (
+                  <>
+                    {linkedPoRef && (
+                      <p className="text-xs text-gray-500 mb-2">
+                        Linked to {linkedPoRef}. Item follows this PO; other fields are editable.
+                      </p>
+                    )}
+                    {linkPoSelect}
+                  </>
+                )}
+              </>
             )}
-            {linkPoSelect}
           </CaptionCard>
 
           <OrderFormFields
@@ -1149,11 +1202,13 @@ function SOEntryForm({
             onFieldEdit={onFieldEdit}
             maxQty={qtyCap > 0 ? qtyCap : undefined}
             maxQtyMessage={
-              selectedPO
-                ? `Cannot exceed ${formatQty(qtyCap)} available on ${formatPoRef(selectedPO.ref)}`
-                : sellFromLot
-                  ? `Cannot exceed ${formatQty(qtyCap)} available on ${sellFromLot.lotNumber}`
-                  : undefined
+              sellFromLot
+                ? `Cannot exceed ${formatQty(qtyCap)} available on ${sellFromLot.lotNumber}`
+                : selectedPO && purchaseIsClosed(selectedPO)
+                  ? `Cannot exceed ${formatQty(qtyCap)} available on ${formatLotRef(selectedPO.ref)}`
+                  : selectedPO
+                    ? `Cannot exceed ${formatQty(qtyCap)} available on ${formatPoRef(selectedPO.ref)}`
+                    : undefined
             }
           />
         </div>
@@ -1178,12 +1233,12 @@ function SOEntryForm({
             selectedPO || sellFromLot
               ? [
                   {
-                    label: 'Open to book before SO',
+                    label: 'Avail to sell before SO',
                     value: formatQty(availableBeforeSo),
                     valueClassName: cn('font-semibold', availableQtyClass(availableBeforeSo)),
                   },
                   {
-                    label: 'Open to book after SO',
+                    label: 'Avail to sell after SO',
                     value: formatQty(availableAfterSo),
                     valueClassName: soRemainingQtyClass(availableAfterSo),
                   },
@@ -1608,6 +1663,7 @@ function OrderFormSidebar({
 }) {
   const isSaving = saveLoading || saveDisabled
   const showParties = isPO || !!form.sellerName || !!form.buyerName
+  const showPdfPreview = SHOW_CONTRACT_PDF_PREVIEW && !!pdfPreview
   const sellerBalance = isPO && form.partyName.trim()
     ? store.getSellerOutstandingBalance(form.partyName)
     : { total: 0, lines: [] as { poRef: string; soRef: string; qtyMt: number }[] }
@@ -1634,9 +1690,9 @@ function OrderFormSidebar({
   return (
     <div className={cn(
       'w-full space-y-3 lg:sticky lg:top-6 lg:z-10 lg:self-start',
-      pdfPreview && 'lg:flex lg:h-[calc(100dvh-12.5rem)] lg:max-h-[calc(100dvh-12.5rem)] lg:flex-col lg:gap-3 lg:space-y-0',
+      showPdfPreview && 'lg:flex lg:h-[calc(100dvh-12.5rem)] lg:max-h-[calc(100dvh-12.5rem)] lg:flex-col lg:gap-3 lg:space-y-0',
     )}>
-      {pdfPreview && (
+      {showPdfPreview && pdfPreview && (
         <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)] lg:flex-1">
           <p className="shrink-0 border-b border-gray-200 px-4 py-2 text-xs font-medium text-muted truncate dark:border-gray-700">
             {pdfPreview.name}
@@ -1648,7 +1704,7 @@ function OrderFormSidebar({
           />
         </div>
       )}
-      <div className={cn('space-y-3', pdfPreview && 'min-h-0 shrink overflow-y-auto lg:max-h-[46%]')}>
+      <div className={cn('space-y-3', showPdfPreview && 'min-h-0 shrink overflow-y-auto lg:max-h-[46%]')}>
       {previewNotes.length > 0 && (
         <div className="rounded-md bg-card shadow-[var(--shadow-card)] overflow-hidden">
           <div
@@ -1727,6 +1783,7 @@ function OrderFormSidebar({
           </summary>
           <div className="px-4 pb-3 space-y-1.5 text-sm">
             {lastEntry.poRef && <div className="flex justify-between"><span className="text-muted">Against PO</span><span>{formatPoRef(lastEntry.poRef)}</span></div>}
+            {!lastEntry.poRef && lastEntry.stockPoRef && <div className="flex justify-between"><span className="text-muted">Lot</span><span>{formatLotRef(lastEntry.stockPoRef)}</span></div>}
             <div className="flex justify-between"><span className="text-muted">Date</span><span>{formatDate(lastEntry.date)}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">{isPO ? 'Seller' : 'Buyer'}</span><span className="font-medium text-right truncate">{lastEntry.partyName}</span></div>
             <div className="flex justify-between gap-3"><span className="text-muted shrink-0">Item</span><span className="font-medium text-right truncate">{lastEntry.itemName}</span></div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { FormErrorBanner, FieldValidationBanner } from '../ui/FieldError'
@@ -17,6 +17,7 @@ import {
   totalActualQtyFromForm,
   collectLiftTankerFieldErrors,
   type LiftTankerFieldErrorMap,
+  type LiftTankerFormValues,
 } from '../../lib/liftTankers'
 import { applyAllocationActuals, collectAllocationActualFieldErrors, formatLiftOrderSummary, getLiftAllocations } from '../../lib/liftAllocations'
 import { getLiftPlannedQty, getLiftBalanceQty } from '../../lib/liftBalance'
@@ -27,84 +28,146 @@ import { formatLiftRef } from '../../lib/tradeRefs'
 import { DeliveryQtySummary } from './DeliveryQtySummary'
 import { DeliveryFormSection } from './DeliveryFormSection'
 
+interface LiftDeliveryDraft {
+  tankers: LiftTankerFormValues[]
+  soActuals: Record<string, string>
+  tankerFieldErrors: LiftTankerFieldErrorMap
+  soFieldErrors: Record<string, string>
+}
+
+function draftFromLift(lift: Lift): LiftDeliveryDraft {
+  return {
+    tankers: getLiftTankers(lift).map(liftTankerToForm),
+    soActuals: actualQtyDraftFromAllocations(getLiftAllocations(lift)),
+    tankerFieldErrors: {},
+    soFieldErrors: {},
+  }
+}
+
+function draftsFromLifts(lifts: Lift[]): Record<string, LiftDeliveryDraft> {
+  return Object.fromEntries(lifts.map(lift => [lift.id, draftFromLift(lift)]))
+}
+
 interface MarkLiftDeliveredModalProps {
-  lift: Lift | null
+  lift?: Lift | null
+  lifts?: Lift[]
   open: boolean
   onClose: () => void
   onDelivered?: (lift: Lift) => void
+  onDeliveredAll?: (lifts: Lift[]) => void
 }
 
-export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: MarkLiftDeliveredModalProps) {
+export function MarkLiftDeliveredModal({
+  lift,
+  lifts,
+  open,
+  onClose,
+  onDelivered,
+  onDeliveredAll,
+}: MarkLiftDeliveredModalProps) {
   const store = useTradeStore()
   const toast = useToast()
-  const [tankers, setTankers] = useState(() => lift ? getLiftTankers(lift).map(liftTankerToForm) : [])
-  const [soActuals, setSoActuals] = useState<Record<string, string>>(() =>
-    lift ? actualQtyDraftFromAllocations(getLiftAllocations(lift)) : {},
-  )
+  const targets = useMemo(() => {
+    if (lifts && lifts.length > 0) return lifts
+    return lift ? [lift] : []
+  }, [lift, lifts])
+  const targetKey = targets.map(l => l.id).join('|')
+
+  const [drafts, setDrafts] = useState<Record<string, LiftDeliveryDraft>>(() => draftsFromLifts(targets))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [tankerFieldErrors, setTankerFieldErrors] = useState<LiftTankerFieldErrorMap>({})
-  const [soFieldErrors, setSoFieldErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (!open || !lift) return
-    setTankers(getLiftTankers(lift).map(liftTankerToForm))
-    setSoActuals(actualQtyDraftFromAllocations(getLiftAllocations(lift)))
+    if (!open || targets.length === 0) return
+    setDrafts(draftsFromLifts(targets))
     setError('')
-    setTankerFieldErrors({})
-    setSoFieldErrors({})
     setSaving(false)
-  }, [open, lift?.id])
+  }, [open, targetKey])
 
-  if (!lift) return null
+  if (targets.length === 0) return null
 
-  const allocations = getLiftAllocations(lift)
-  /** Per-SO actuals only when one tanker carries multiple orders. */
-  const hideTankerQty = tankers.length === 1 && allocations.length > 1
-  const plannedQty = getLiftPlannedQty(lift)
-  const actualPreview = hideTankerQty
-    ? totalActualFromDraft(soActuals)
-    : totalActualQtyFromForm(tankers)
-  const balancePreview = actualPreview > 0 ? Math.max(0, plannedQty - actualPreview) : 0
+  const hasFieldErrors = targets.some(l => {
+    const draft = drafts[l.id]
+    if (!draft) return false
+    return Object.keys(draft.tankerFieldErrors).length > 0 || Object.keys(draft.soFieldErrors).length > 0
+  })
+
+  const patchDraft = (liftId: string, patch: Partial<LiftDeliveryDraft>) => {
+    setDrafts(prev => {
+      const current = prev[liftId]
+      if (!current) return prev
+      return { ...prev, [liftId]: { ...current, ...patch } }
+    })
+  }
+
   const handleConfirm = async () => {
     if (saving) return
     setError('')
-    setTankerFieldErrors({})
-    setSoFieldErrors({})
-    const tankerValidation = collectLiftTankerFieldErrors(tankers, 'actual', {
-      qtyRequired: !hideTankerQty,
-      tankerNoRequired: true,
-      requireRow: false,
+    setDrafts(prev => {
+      const next = { ...prev }
+      for (const l of targets) {
+        const d = next[l.id]
+        if (d) next[l.id] = { ...d, tankerFieldErrors: {}, soFieldErrors: {} }
+      }
+      return next
     })
-    if (tankerValidation.message) {
-      setTankerFieldErrors(tankerValidation.fields)
-      return
-    }
-    try {
+
+    const payloads: { lift: Lift; payload: Parameters<typeof store.markLiftDelivered>[1]; actualPreview: number }[] = []
+
+    for (const current of targets) {
+      const draft = drafts[current.id] ?? draftFromLift(current)
+      const allocations = getLiftAllocations(current)
+      const hideTankerQty = draft.tankers.length === 1 && allocations.length > 1
+      const tankerValidation = collectLiftTankerFieldErrors(draft.tankers, 'actual', {
+        qtyRequired: !hideTankerQty,
+        tankerNoRequired: true,
+        requireRow: false,
+      })
+      if (tankerValidation.message) {
+        patchDraft(current.id, { tankerFieldErrors: tankerValidation.fields })
+        return
+      }
       const payload: Parameters<typeof store.markLiftDelivered>[1] = {
-        tankers: tankers.map(formToLiftTanker),
+        tankers: draft.tankers.map(formToLiftTanker),
         deliveredAt: new Date().toISOString(),
       }
+      const actualPreview = hideTankerQty
+        ? totalActualFromDraft(draft.soActuals)
+        : totalActualQtyFromForm(draft.tankers)
       if (hideTankerQty) {
-        const actualBySo = parsedActualQtyDraft(soActuals)
+        const actualBySo = parsedActualQtyDraft(draft.soActuals)
         const allocValidation = collectAllocationActualFieldErrors(allocations, actualBySo)
         if (allocValidation.message) {
-          setSoFieldErrors(allocValidation.fields)
+          patchDraft(current.id, { soFieldErrors: allocValidation.fields })
           return
         }
         payload.allocations = applyAllocationActuals(allocations, actualBySo)
       }
-      setSaving(true)
-      const updated = await store.markLiftDelivered(lift.id, payload)
-      const invoiceHint = updated.salesInvoiceNo?.trim()
-        ? updated.salesInvoiceNo.replace(/, /g, ' · ')
-        : null
-      toast.success(`${formatLiftRef(updated.liftRef)} marked delivered`, {
-        description: getLiftBalanceQty(updated) > 0
-          ? `${formatQty(actualPreview)} actual · ${formatQty(getLiftBalanceQty(updated))} balance owed${invoiceHint ? ` · ${invoiceHint}` : ''}`
-          : `${formatQty(actualPreview)} actual${invoiceHint ? ` · ${invoiceHint}` : ''}`,
-      })
-      onDelivered?.(updated)
+      payloads.push({ lift: current, payload, actualPreview })
+    }
+
+    setSaving(true)
+    const delivered: Lift[] = []
+    try {
+      for (const item of payloads) {
+        const updated = await store.markLiftDelivered(item.lift.id, item.payload)
+        delivered.push(updated)
+        onDelivered?.(updated)
+        if (payloads.length === 1) {
+          const invoiceHint = updated.salesInvoiceNo?.trim()
+            ? updated.salesInvoiceNo.replace(/, /g, ' · ')
+            : null
+          toast.success(`${formatLiftRef(updated.liftRef)} marked delivered`, {
+            description: getLiftBalanceQty(updated) > 0
+              ? `${formatQty(item.actualPreview)} actual · ${formatQty(getLiftBalanceQty(updated))} balance owed${invoiceHint ? ` · ${invoiceHint}` : ''}`
+              : `${formatQty(item.actualPreview)} actual${invoiceHint ? ` · ${invoiceHint}` : ''}`,
+          })
+        }
+      }
+      if (payloads.length > 1) {
+        toast.success(`${delivered.length} lifts marked delivered`)
+      }
+      onDeliveredAll?.(delivered)
       onClose()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not mark lift as delivered'
@@ -115,12 +178,19 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
     }
   }
 
+  const multi = targets.length > 1
+  const first = targets[0]
+  const title = 'Confirm delivery'
+  const subtitle = multi
+    ? `${targets.length} lifts`
+    : `${formatLiftRef(first.liftRef)} · ${first.itemName} · ${formatLiftOrderSummary(first, store.tradeOrders)}`
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Confirm delivery"
-      subtitle={`${formatLiftRef(lift.liftRef)} · ${lift.itemName} · ${formatLiftOrderSummary(lift)}`}
+      title={title}
+      subtitle={subtitle}
       size="lg"
       footer={
         <>
@@ -130,55 +200,75 @@ export function MarkLiftDeliveredModal({ lift, open, onClose, onDelivered }: Mar
       }
     >
       <div className="space-y-8">
-        {(Object.keys(tankerFieldErrors).length > 0 || Object.keys(soFieldErrors).length > 0) && (
-          <FieldValidationBanner />
-        )}
+        {hasFieldErrors && <FieldValidationBanner />}
 
-        <div className="pb-6 border-b border-gray-200 dark:border-gray-700">
-          <DeliveryQtySummary
-            planned={plannedQty}
-            actual={actualPreview}
-            balance={balancePreview}
-          />
-        </div>
+        {targets.map((current, index) => {
+          const draft = drafts[current.id] ?? draftFromLift(current)
+          const allocations = getLiftAllocations(current)
+          const hideTankerQty = draft.tankers.length === 1 && allocations.length > 1
+          const plannedQty = getLiftPlannedQty(current)
+          const actualPreview = hideTankerQty
+            ? totalActualFromDraft(draft.soActuals)
+            : totalActualQtyFromForm(draft.tankers)
+          const balancePreview = actualPreview > 0 ? Math.max(0, plannedQty - actualPreview) : 0
+          return (
+            <div
+              key={current.id}
+              className={multi && index < targets.length - 1 ? 'space-y-8 pb-8 border-b border-gray-200 dark:border-gray-700' : 'space-y-8'}
+            >
+              {multi && (
+                <p className="text-sm font-semibold text-heading">
+                  {formatLiftRef(current.liftRef)}
+                  <span className="font-normal text-muted"> · {current.itemName} · {formatLiftOrderSummary(current, store.tradeOrders)}</span>
+                </p>
+              )}
 
-        {hideTankerQty && (
-          <DeliveryFormSection
-            title="Weighed quantity"
-            description="Actual MT per sales order."
-          >
-            <div className="max-w-lg">
-              <LiftSoActualQtyForm
-                allocations={allocations}
-                orders={store.tradeOrders}
-                values={soActuals}
-                fieldErrors={soFieldErrors}
-                compact
-                hideTotals
-                onChange={values => {
-                  setSoFieldErrors({})
-                  setSoActuals(values)
+              <div className={multi ? '' : 'pb-6 border-b border-gray-200 dark:border-gray-700'}>
+                <DeliveryQtySummary
+                  planned={plannedQty}
+                  actual={actualPreview}
+                  balance={balancePreview}
+                />
+              </div>
+
+              {hideTankerQty && (
+                <DeliveryFormSection
+                  title="Weighed quantity"
+                  description="Actual MT per sales order."
+                >
+                  <div className="max-w-lg">
+                    <LiftSoActualQtyForm
+                      allocations={allocations}
+                      orders={store.tradeOrders}
+                      values={draft.soActuals}
+                      fieldErrors={draft.soFieldErrors}
+                      compact
+                      hideTotals
+                      onChange={values => {
+                        patchDraft(current.id, { soFieldErrors: {}, soActuals: values })
+                      }}
+                    />
+                  </div>
+                </DeliveryFormSection>
+              )}
+
+              <LiftTankersForm
+                tankers={draft.tankers}
+                qtyMode="actual"
+                hideQty={hideTankerQty}
+                hideTotal
+                allowAddTanker={false}
+                showSalesInvoicePerTanker
+                compactDelivery
+                deliverySectionPerTanker
+                fieldErrors={draft.tankerFieldErrors}
+                onChange={next => {
+                  patchDraft(current.id, { tankerFieldErrors: {}, tankers: next })
                 }}
               />
             </div>
-          </DeliveryFormSection>
-        )}
-
-        <LiftTankersForm
-          tankers={tankers}
-          qtyMode="actual"
-          hideQty={hideTankerQty}
-          hideTotal
-          allowAddTanker={false}
-          showSalesInvoicePerTanker
-          compactDelivery
-          deliverySectionPerTanker
-          fieldErrors={tankerFieldErrors}
-          onChange={next => {
-            setTankerFieldErrors({})
-            setTankers(next)
-          }}
-        />
+          )
+        })}
 
         {error && <FormErrorBanner>{error}</FormErrorBanner>}
       </div>

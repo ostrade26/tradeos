@@ -41,7 +41,7 @@ export function DashboardInTransitLifts({ className }: { className?: string }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-heading">{formatLiftRef(lift.liftRef)}</p>
                 <p className="text-xs text-caption mt-0.5 leading-relaxed">
-                  {formatQty(lift.liftedQty)} · {formatLiftOrderSummary(lift)}
+                  {formatQty(lift.liftedQty)} · {formatLiftOrderSummary(lift, store.tradeOrders)}
                 </p>
               </div>
             </Link>

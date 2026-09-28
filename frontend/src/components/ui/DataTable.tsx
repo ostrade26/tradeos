@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { attachShiftWheelHorizontalScroll } from '../../lib/horizontalScroll'
@@ -58,6 +58,8 @@ interface DataTableProps<T> {
   qtyNote?: boolean
   /** Stretch table to container width (default grows with column content). */
   fullWidth?: boolean
+  /** Show this row's page and scroll it into view (e.g. deep link from another register). */
+  focusRowId?: string
 }
 
 interface DataTablePaginationProps {
@@ -232,8 +234,10 @@ export function DataTable<T extends { id?: string | number }>({
   stickyLastColumn,
   qtyNote = false,
   fullWidth = false,
+  focusRowId,
 }: DataTableProps<T>) {
   const { classes: density } = useTableDensity()
+  const tableRootRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = scrollRef.current
@@ -264,9 +268,23 @@ export function DataTable<T extends { id?: string | number }>({
 
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize))
 
+  const rowIdOf = (row: T, i: number) =>
+    getRowId?.(row) || (row as { id?: string }).id || String(i)
+
+  const focusIndex = useMemo(() => {
+    if (!focusRowId) return -1
+    return data.findIndex((row, i) => rowIdOf(row, i) === focusRowId)
+  }, [data, focusRowId, getRowId])
+
   useEffect(() => {
+    if (!paginate) return
+    if (focusIndex >= 0) {
+      setPage(Math.floor(focusIndex / pageSize) + 1)
+      return
+    }
+    if (focusRowId) return
     setPage(1)
-  }, [data.length, pageSize])
+  }, [data.length, pageSize, paginate, focusIndex, focusRowId])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
@@ -285,6 +303,15 @@ export function DataTable<T extends { id?: string | number }>({
 
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedRows.includes(id))
   const someVisibleSelected = visibleIds.some(id => selectedRows.includes(id))
+
+  useLayoutEffect(() => {
+    if (!focusRowId) return
+    const root = tableRootRef.current
+    if (!root) return
+    const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(focusRowId) : focusRowId
+    const row = root.querySelector(`[data-row-id="${escaped}"]`)
+    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [focusRowId, page, visibleIds])
 
   const handleSelectAllVisible = () => {
     if (!onSelectAllVisible) return
@@ -306,7 +333,7 @@ export function DataTable<T extends { id?: string | number }>({
   }
 
   return (
-    <div className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)]">
+    <div ref={tableRootRef} className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)]">
       {mobileRender && (
         <div data-register-table className={cn('md:hidden divide-y divide-gray-200 dark:divide-gray-700', density.text)}>
           {visibleData.map((row, i) => {
@@ -317,6 +344,7 @@ export function DataTable<T extends { id?: string | number }>({
             return (
               <div
                 key={id}
+                data-row-id={id}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   density.mobileRow,
@@ -452,6 +480,7 @@ export function DataTable<T extends { id?: string | number }>({
               return (
                 <tr
                   key={id}
+                  data-row-id={id}
                   onClick={() => onRowClick?.(row)}
                   className={cn(
                     'group transition-colors duration-100',

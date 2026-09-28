@@ -14,7 +14,7 @@ export function brokerageTypeFromOrder(order: Pick<TradeOrder, 'brokeragePct' | 
 export function orderToFormValues(order: TradeOrder): Record<string, string> {
   return {
     ref: order.ref,
-    poRef: order.poRef ?? '',
+    poRef: order.poRef ?? order.stockPoRef ?? '',
     brokerContractRef: order.brokerContractRef ?? '',
     date: order.date,
     partyName: order.partyName,

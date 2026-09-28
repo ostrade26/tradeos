@@ -1,4 +1,5 @@
 import { formatDeliveryPeriodRange, roundQtyMt } from '../lib/utils'
+import { refsMatch } from '../lib/tradeRefs'
 
 export type OrderSide = 'purchase' | 'sale'
 export type OrderStatus = 'pending' | 'partial' | 'completed' | 'cancelled'
@@ -93,6 +94,11 @@ export interface TradeOrder {
   paymentTerms?: string
   remarks?: string
   status: OrderStatus
+  /**
+   * Lot this SO sells from after the purchase was closed.
+   * Not a contract link — the closed PO's avail / allocation stay unchanged.
+   */
+  stockPoRef?: string
   /** How the order was closed when liftedQty < orderQty. */
   completionType?: OrderCompletionType
   /** ISO timestamp when manually closed. */
@@ -330,6 +336,16 @@ export const activities: Activity[] = []
 export const revenueData: { month: string; purchase: number; sales: number }[] = []
 export const priceTrends: { date: string; palmOil: number; soybean: number; coconut: number }[] = []
 export const pipelineData: { stage: string; count: number; value: number }[] = []
+export interface CatalogItem {
+  id: string
+  name: string
+  hsn?: string
+  gstRate?: number | null
+  grade?: string
+  packing?: string
+  notes?: string
+}
+
 export const spots: string[] = []
 export const items: string[] = []
 
@@ -415,11 +431,31 @@ export function getLastOrder(orders: TradeOrder[], side: OrderSide): TradeOrder 
 }
 
 /** Linked SO qty allocated against a PO (excludes cancelled / delete-scheduled). */
-export function getAllocatedSellQty(orders: TradeOrder[], poRef: string): number {
+function unlinkedLiftQtyOnPo(lifts: Lift[], poRef: string, soRef: string): number {
+  let total = 0
+  for (const lift of lifts) {
+    if (lift.deletedAt) continue
+    const allocations = lift.allocations?.length
+      ? lift.allocations
+      : [{ poRef: lift.poRef, soRef: lift.soRef, qtyMt: lift.liftedQty }]
+    for (const a of allocations) {
+      if (
+        a.soRef
+        && refsMatch(a.soRef, soRef, 'sale')
+        && refsMatch(a.poRef, poRef, 'purchase')
+      ) {
+        total += a.qtyMt
+      }
+    }
+  }
+  return total
+}
+
+export function getAllocatedSellQty(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): number {
   return roundQtyMt(
-    orders
-      .filter(o => o.side === 'sale' && o.poRef === poRef && o.status !== 'cancelled' && !o.deleteScheduledAt)
-      .reduce((sum, o) => sum + o.orderQty, 0),
+    getSOsForPO(orders, poRef, lifts)
+      .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
+      .reduce((sum, o) => sum + (o.poRef ? o.orderQty : unlinkedLiftQtyOnPo(lifts, poRef, o.ref)), 0),
   )
 }
 
@@ -434,22 +470,53 @@ export function getStockLiftQtyOnPo(lifts: Lift[], poRef: string): number {
           : [{ poRef: l.poRef, soRef: l.soRef, qtyMt: l.liftedQty }]
         return allocations
       })
-      .filter(a => a.poRef === poRef && !a.soRef)
+      .filter(a => refsMatch(a.poRef, poRef, 'purchase') && !a.soRef)
       .reduce((sum, a) => sum + a.qtyMt, 0),
   )
 }
 
 /**
  * Qty on a PO still available to allocate to new SOs.
- * Own-stock lifts do not reduce this — stocked goods remain sellable against the PO.
+ * Own-stock lifts consume the same PO cap as booked SOs.
  */
-export function getRemainingSellQty(orders: TradeOrder[], poRef: string, _lifts: Lift[] = []): number {
-  const po = orders.find(o => o.ref === poRef && o.side === 'purchase')
-  if (!po) return 0
+const MANUAL_CLOSE = new Set<TradeOrder['completionType']>(['cash_settled', 'carried_forward', 'short_closed', 'delivered'])
+
+export function getRemainingSellQty(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): number {
+  const po = orders.find(o => o.side === 'purchase' && refsMatch(o.ref, poRef, 'purchase'))
+  if (!po || po.status === 'cancelled' || (po.completionType && MANUAL_CLOSE.has(po.completionType))) return 0
   const cap = orderQtyCap(po)
-  return roundQtyMt(Math.max(0, cap - getAllocatedSellQty(orders, poRef)))
+  return roundQtyMt(Math.max(0, cap - getAllocatedSellQty(orders, poRef, lifts) - getStockLiftQtyOnPo(lifts, poRef)))
 }
 
-export function getSOsForPO(orders: TradeOrder[], poRef: string): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && o.poRef === poRef)
+/** Sales made from this godown lot. Contract SOs booked on the PO stay on the purchase. */
+export function getOrdersDrawingLot(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): TradeOrder[] {
+  void lifts
+  return orders.filter(
+    o =>
+      o.side === 'sale'
+      && o.status !== 'cancelled'
+      && !o.deleteScheduledAt
+      && Boolean(o.stockPoRef)
+      && !o.poRef
+      && refsMatch(o.stockPoRef, poRef, 'purchase'),
+  )
+}
+
+export function getSOsForPO(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): TradeOrder[] {
+  return orders.filter(o => {
+    if (o.side !== 'sale' || o.status === 'cancelled') return false
+    if (o.stockPoRef && !o.poRef) return false
+    if (refsMatch(o.poRef, poRef, 'purchase')) return true
+    return lifts.some(l => {
+      if (l.deletedAt) return false
+      const allocations = l.allocations?.length
+        ? l.allocations
+        : [{ poRef: l.poRef, soRef: l.soRef, qtyMt: l.liftedQty }]
+      return allocations.some(a =>
+        Boolean(a.soRef)
+        && refsMatch(a.soRef, o.ref, 'sale')
+        && refsMatch(a.poRef, poRef, 'purchase'),
+      )
+    })
+  })
 }

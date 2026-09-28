@@ -74,7 +74,7 @@ export function buildActionInbox(store: TradeStoreValue): InboxAction[] {
     })
   }
 
-  for (const lot of store.lots.filter(l => l.available < 20 && l.available >= 0)) {
+  for (const lot of store.lots.filter(l => l.remaining > 0 && l.available < 20 && l.available >= 0)) {
     actions.push({
       id: `low-${lot.id}`,
       kind: 'low_stock',
@@ -104,7 +104,7 @@ export function buildActionInbox(store: TradeStoreValue): InboxAction[] {
       id: `lift-${lift.id}`,
       kind: 'delivery',
       title: `${formatLiftRef(lift.liftRef)} in transit`,
-      subtitle: `${formatLiftOrderSummary(lift)} · ${formatQty(lift.liftedQty)}`,
+      subtitle: `${formatLiftOrderSummary(lift, store.tradeOrders)} · ${formatQty(lift.liftedQty)}`,
       href: `/lifts?ref=${encodeURIComponent(String(lift.liftRef))}`,
       urgency: 'medium',
     })

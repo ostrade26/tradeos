@@ -78,6 +78,44 @@ export function getLiftBalanceQty(lift: Lift): number {
   return 0
 }
 
+/** One pass of shortfalls, keyed `poRef\\0soRef`, for register row actions. */
+export function buildOutstandingByPair(
+  lifts: Lift[],
+  settlements: BalanceSettlement[] = [],
+): Map<string, number> {
+  const acc = new Map<string, { balance: number; applied: number }>()
+  for (const lift of lifts) {
+    const allocs = getLiftAllocations(lift)
+    const total = allocs.reduce((sum, a) => sum + a.qtyMt, 0)
+    if (total <= 0) continue
+    const balance = getLiftBalanceQty(lift)
+    const applied = lift.balanceAppliedQtyMt ?? 0
+    if (balance === 0 && applied === 0) continue
+    const byPair = new Map<string, number>()
+    for (const a of allocs) {
+      if (!a.soRef) continue
+      const key = `${a.poRef}\0${a.soRef}`
+      byPair.set(key, (byPair.get(key) ?? 0) + a.qtyMt)
+    }
+    for (const [key, qty] of byPair) {
+      const share = qty / total
+      const cur = acc.get(key) ?? { balance: 0, applied: 0 }
+      cur.balance += balance * share
+      cur.applied += applied * share
+      acc.set(key, cur)
+    }
+  }
+  const out = new Map<string, number>()
+  for (const [key, cur] of acc) {
+    const split = key.indexOf('\0')
+    const poRef = key.slice(0, split)
+    const soRef = key.slice(split + 1)
+    const qty = roundQtyMt(Math.max(0, cur.balance - cur.applied - cashSettledQty(settlements, poRef, soRef)))
+    if (qty > 0) out.set(key, qty)
+  }
+  return out
+}
+
 /** Unapplied shortfall across prior delivered lifts on this PO/SO pair. */
 export function getOutstandingBalance(
   lifts: Lift[],

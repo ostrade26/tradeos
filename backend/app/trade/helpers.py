@@ -49,6 +49,69 @@ def round_qty_mt(qty: float) -> float:
     return round(qty * 1000) / 1000
 
 
+_REF_PREFIX = re.compile(r"^(PO|SO|LT)[-#\s]*", re.IGNORECASE)
+
+
+def ref_kind(ref: str | int | None) -> str | None:
+    """Which document a ref already names. Bare '24' has no kind."""
+    text = str(ref or "").strip()
+    long = _REF_PREFIX.match(text)
+    if long:
+        prefix = long.group(1).upper()
+        if prefix == "PO":
+            return "purchase"
+        if prefix == "SO":
+            return "sale"
+        return "lift"
+    short = re.match(r"^([PSL])(?=\d)", text, flags=re.IGNORECASE)
+    if not short:
+        return None
+    prefix = short.group(1).upper()
+    if prefix == "P":
+        return "purchase"
+    if prefix == "S":
+        return "sale"
+    return "lift"
+
+
+def ref_core(ref: str | int | None) -> str:
+    """Bare order number — PO24 / SO24 / 24 all become 24."""
+    text = str(ref or "").strip()
+    text = _REF_PREFIX.sub("", text)
+    text = re.sub(r"^[PSL](?=\d)", "", text, flags=re.IGNORECASE)
+    return text
+
+
+def attach_order_prefix(ref: str | int | None, side: str) -> str:
+    """Read a ref after PO/SO is attached. Never recast PO24 as SO24."""
+    core = ref_core(ref)
+    if not core:
+        return ""
+    kind = ref_kind(ref)
+    if kind == "purchase":
+        return f"PO{core}"
+    if kind == "sale":
+        return f"SO{core}"
+    if kind == "lift":
+        return f"LT{core}"
+    return f"PO{core}" if side == "purchase" else f"SO{core}"
+
+
+def refs_match(left: str | int | None, right: str | int | None, side: str | None = None) -> bool:
+    """Same order only after prefixes are applied. PO24 ≠ SO24."""
+    if side in ("purchase", "sale"):
+        a = attach_order_prefix(left, side)
+        b = attach_order_prefix(right, side)
+        return bool(a) and a == b
+    a_kind, b_kind = ref_kind(left), ref_kind(right)
+    a, b = ref_core(left), ref_core(right)
+    if not a or not b or a != b:
+        return False
+    if a_kind and b_kind and a_kind != b_kind:
+        return False
+    return True
+
+
 def format_mt(value: float) -> str:
     if not isinstance(value, (int, float)) or value != value:  # NaN check
         return "0.000"

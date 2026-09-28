@@ -102,7 +102,7 @@ export function downloadPartyReportPdf({ partyName, partyKind, pos, sos, lifts }
       String(l.liftRef),
       formatDate(l.date),
       l.status,
-      formatLiftPoRefs(l),
+      formatLiftPoRefs(l, [...pos, ...sos]),
       formatLiftSoRefs(l),
       l.itemName,
       formatQty(l.liftedQty),

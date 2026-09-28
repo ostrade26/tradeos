@@ -26,6 +26,10 @@ export function SalesOrdersPage() {
 
   useLayoutEffect(() => {
     if (restored.current || hasExplicitView) return
+    if (searchParams.has('ref')) {
+      restored.current = true
+      return
+    }
     restored.current = true
     const saved = loadRegisterViewMode(REGISTER_KEY)
     if (!saved || saved === 'pending') return
@@ -36,19 +40,19 @@ export function SalesOrdersPage() {
       if (view) params.set('view', view)
       return params
     }, { replace: true })
-  }, [hasExplicitView, setSearchParams])
+  }, [hasExplicitView, searchParams, setSearchParams])
 
   useLayoutEffect(() => {
     saveRegisterViewMode(REGISTER_KEY, mode)
   }, [mode])
 
-  const setMode = useCallback((next: OrderListMode) => {
+  const setMode = useCallback((next: OrderListMode, options?: { keepRef?: boolean }) => {
     saveRegisterViewMode(REGISTER_KEY, next)
     setSearchParams(prev => {
       const current = parseMode(prev.get('view'))
       if (current === next) return prev
       const params = new URLSearchParams(prev)
-      params.delete('ref')
+      if (!options?.keepRef) params.delete('ref')
       const view = viewParam(next)
       if (view) params.set('view', view)
       else params.delete('view')

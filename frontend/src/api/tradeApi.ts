@@ -3,6 +3,7 @@ import type {
   Activity,
   Broker,
   Company,
+  CatalogItem,
   Contract,
   Delivery,
   Lift,
@@ -36,6 +37,7 @@ export interface TradeData {
   balanceSettlements: BalanceSettlement[]
   spots: string[]
   items: string[]
+  itemCatalog: CatalogItem[]
   counters: TradeCounters
 }
 
@@ -176,6 +178,21 @@ export const tradeApi = {
 
   createItem: (name: string) =>
     apiFetch<MutationResponse<string>>('/items', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  saveCatalogItem: (input: Record<string, unknown>) =>
+    apiFetch<MutationResponse<CatalogItem>>('/item-catalog', { method: 'POST', body: JSON.stringify(input) }),
+
+  updateCatalogItem: (id: string, input: Record<string, unknown>) =>
+    apiFetch<MutationResponse<CatalogItem>>(`/item-catalog/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteCatalogItem: (id: string) =>
+    apiFetch<MutationResponse<{ deleted: boolean }>>(`/item-catalog/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  canDeleteCatalogItem: (id: string) =>
+    apiFetch<{ ok: boolean; reason?: string }>(`/item-catalog/${encodeURIComponent(id)}/can-delete`),
 
   createSpot: (name: string) =>
     apiFetch<MutationResponse<string>>('/spots', { method: 'POST', body: JSON.stringify({ name }) }),

@@ -5,7 +5,7 @@ import { formatDate, formatQty } from './utils'
 
 export function orderDropdownOption(
   order: TradeOrder,
-  availableMt: number,
+  availableMt: number | null,
   extras: string[] = [],
 ) {
   const refLabel = formatOrderRef(order.ref, order.side)
@@ -14,7 +14,9 @@ export function orderDropdownOption(
     value: order.ref,
     label: `${refLabel} — ${order.itemName} · ${order.partyName}`,
     description: [
-      `${formatQty(availableMt)} available`,
+      availableMt == null
+        ? 'Available unknown — lift not linked to this order'
+        : `${formatQty(availableMt)} left to lift`,
       formatContractRate(order.rate, order.rateBasis, order.ratePerBasis),
       formatDate(order.date),
       order.brokerName || undefined,

@@ -5,8 +5,10 @@ import { Input } from '../ui/Input'
 import { QtyInput } from '../ui/QtyInput'
 import type { TradeOrder } from '../../data/mockData'
 import {
-  canBuyBackPO,
+  canBuyBackOrder,
+  getAllocatedSoQty,
   maxBuyBackQty,
+  sosBookedOnPo,
   suggestedBuyBackRatePer10Kg,
   type BuyBackInput,
 } from '../../lib/buyBack'
@@ -42,12 +44,12 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
   const resetKeyRef = useRef<string | null>(null)
 
   const linkedSOs = useMemo(
-    () => (order ? getSOsForPO(order.ref) : []),
-    [order?.id, order?.ref, getSOsForPO, tradeOrders],
+    () => (order?.side === 'purchase' ? sosBookedOnPo(getSOsForPO(order.ref), order.ref) : []),
+    [order?.id, order?.ref, order?.side, getSOsForPO, tradeOrders],
   )
 
   const eligibility = useMemo(
-    () => (order ? canBuyBackPO(order, lifts, linkedSOs) : { ok: false }),
+    () => (order ? canBuyBackOrder(order, lifts, linkedSOs) : { ok: false }),
     [order, lifts, linkedSOs],
   )
 
@@ -63,7 +65,7 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
     if (resetKeyRef.current === resetKey) return
     resetKeyRef.current = resetKey
 
-    const sos = getSOsForPO(order.ref)
+    const sos = order.side === 'purchase' ? sosBookedOnPo(getSOsForPO(order.ref), order.ref) : []
     setQty(String(maxBuyBackQty(order, sos)))
     setRate(String(suggestedBuyBackRatePer10Kg(order)))
     setDate(new Date().toISOString().slice(0, 10))
@@ -187,7 +189,7 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
                 </div>
                 {premium > 0 && (
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted">Premium over PO</span>
+                    <span className="text-muted">{order.side === 'purchase' ? 'Premium over PO' : 'Premium over SO'}</span>
                     <span className="font-semibold tabular-nums text-success">+{formatCurrency(premium)}</span>
                   </div>
                 )}
@@ -200,8 +202,4 @@ export function BuyBackModal({ order, open, onClose, onComplete }: BuyBackModalP
       </div>
     </Modal>
   )
-}
-
-function getAllocatedSoQty(linkedSOs: TradeOrder[]) {
-  return linkedSOs.reduce((sum, o) => sum + o.orderQty, 0)
 }

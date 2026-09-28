@@ -1,7 +1,7 @@
 import { CURRENT_TRADER, type Lift, type TradeOrder } from '../data/mockData'
 import { getLiftAllocations } from './liftAllocations'
 import { randomUUID } from './randomId'
-import { refCore } from './tradeRefs'
+import { findTradeOrder, refCore } from './tradeRefs'
 import { roundQtyMt } from './utils'
 
 const STUB_REMARK = 'Imported from lift register — complete details when available'
@@ -11,9 +11,7 @@ function orderRefSet(orders: TradeOrder[], side: TradeOrder['side']): Set<string
 }
 
 function findOrderRef(orders: TradeOrder[], side: TradeOrder['side'], ref: string): string | undefined {
-  const core = refCore(ref)
-  if (!core) return undefined
-  return orders.find(o => o.side === side && refCore(o.ref) === core)?.ref
+  return findTradeOrder(orders, side, ref)?.ref
 }
 
 function qtyTotalsByRef(lifts: Lift[], key: 'poRef' | 'soRef'): Map<string, number> {
@@ -166,6 +164,16 @@ export function inferSoPoRefsFromLifts(orders: TradeOrder[], lifts: Lift[]): Tra
   })
 }
 
+/** Point SO.poRef at the stored PO.ref when Excel used PO24 vs 24. */
+export function normalizeLinkedPoRefs(orders: TradeOrder[]): TradeOrder[] {
+  return orders.map(order => {
+    if (order.side !== 'sale' || !order.poRef) return order
+    const resolved = findOrderRef(orders, 'purchase', order.poRef)
+    if (!resolved || resolved === order.poRef) return order
+    return { ...order, poRef: resolved }
+  })
+}
+
 /** Normalize lift PO/SO refs to match order.ref storage (no PO/SO prefix). */
 export function normalizeLiftOrderRefs(orders: TradeOrder[], lifts: Lift[]): Lift[] {
   return lifts.map(lift => {
@@ -173,7 +181,8 @@ export function normalizeLiftOrderRefs(orders: TradeOrder[], lifts: Lift[]): Lif
     const soRef = lift.soRef
       ? (findOrderRef(orders, 'sale', lift.soRef) ?? refCore(lift.soRef))
       : ''
-    const allocations = lift.allocations?.map(a => ({
+    const withRefs = { ...lift, poRef, soRef }
+    const allocations = getLiftAllocations(withRefs).map(a => ({
       ...a,
       poRef: findOrderRef(orders, 'purchase', a.poRef) ?? refCore(a.poRef),
       soRef: a.soRef
@@ -181,10 +190,44 @@ export function normalizeLiftOrderRefs(orders: TradeOrder[], lifts: Lift[]): Lif
         : undefined,
     }))
     return {
-      ...lift,
-      poRef,
-      soRef,
-      ...(allocations ? { allocations } : {}),
+      ...withRefs,
+      allocations,
     }
   })
+}
+
+/** Problems that would make remaining-to-lift lie if we guessed. */
+export function importIntegrityWarnings(orders: TradeOrder[], lifts: Lift[]): string[] {
+  const warnings: string[] = []
+  const stubs = orders.filter(o => (o.remarks ?? '').includes(STUB_REMARK)).length
+  if (stubs > 0) {
+    warnings.push(
+      `${stubs} order${stubs === 1 ? '' : 's'} were created from lift refs only. Complete party, rate, and qty before relying on remaining-to-lift.`,
+    )
+  }
+
+  let liftsWithoutPo = 0
+  let liftsUnknownPo = 0
+  let liftsUnknownSo = 0
+  for (const lift of lifts) {
+    if (lift.deletedAt) continue
+    for (const a of getLiftAllocations(lift)) {
+      if (!refCore(a.poRef)) {
+        liftsWithoutPo += 1
+        continue
+      }
+      if (!findOrderRef(orders, 'purchase', a.poRef)) liftsUnknownPo += 1
+      if (a.soRef && !findOrderRef(orders, 'sale', a.soRef)) liftsUnknownSo += 1
+    }
+  }
+  if (liftsWithoutPo > 0) {
+    warnings.push(`${liftsWithoutPo} lift line${liftsWithoutPo === 1 ? '' : 's'} have no PO ref. Remaining-to-lift cannot use them.`)
+  }
+  if (liftsUnknownPo > 0) {
+    warnings.push(`${liftsUnknownPo} lift line${liftsUnknownPo === 1 ? '' : 's'} point at a PO that is not in this file.`)
+  }
+  if (liftsUnknownSo > 0) {
+    warnings.push(`${liftsUnknownSo} lift line${liftsUnknownSo === 1 ? '' : 's'} point at an SO that is not in this file.`)
+  }
+  return warnings
 }

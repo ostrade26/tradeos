@@ -38,3 +38,15 @@ Contract PDF → PO/SO import is the app’s most important feature. Treat it as
 - “Harden,” refactor, or retune labeled-form / party heuristics casually.
 - Restore older parsers or rewrite mapping without saying it will change PDF import.
 - Bypass `pdfImportGuards` validation.
+
+## Gated UI (do not delete)
+
+Temporary flags — keep the code, flip the flags:
+
+- `SHOW_CONTRACT_PDF_IMPORT` in `OrderEntryPage.tsx` — whole import block
+- `SHOW_CONTRACT_PDF_PREVIEW` in `OrderEntryPage.tsx` — iframe preview beside the form
+- `ALLOW_MULTIPLE_CONTRACT_PDFS` in `ContractPdfUpload.tsx` — Add PDFs, queue rows, multi-file drop
+
+If the user asks to **turn on multiple PDFs**, enable **all** of the above (`true`). Do not turn on the queue without the preview and Add PDFs / PDF rows.
+
+Do **not** `git push` (or include in a push) the gated PDF UI changes until the user explicitly says those PDF changes can go to remote.

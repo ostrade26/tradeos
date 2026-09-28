@@ -5,6 +5,8 @@ import { formatDate, formatQty } from '../../lib/utils'
 import { formatLiftRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { formatTankerNo, getLiftTankers } from '../../lib/liftTankers'
 import { appPath } from '../../lib/appShellMode'
+import { orderRegisterHref, registerModeForOrder } from '../../lib/registerViewMode'
+import { inventoryStockRef, purchaseIsClosed, StockPoLink } from './StockPoLink'
 import { DetailGroup } from './DetailPanelSections'
 import {
   AllocationSoCard,
@@ -78,6 +80,7 @@ function SoAllocationCard({
   so,
   crossPo,
   bookedPoRef,
+  stockRef,
   onNavigate,
 }: {
   allocation: LiftAllocation
@@ -85,6 +88,7 @@ function SoAllocationCard({
   so: TradeOrder
   crossPo: boolean
   bookedPoRef?: string
+  stockRef?: string
   onNavigate?: () => void
 }) {
   const poRef = allocation.poRef
@@ -95,7 +99,7 @@ function SoAllocationCard({
     <AllocationSoCard
       title={(
         <Link
-          to={`/sales-orders?ref=${encodeURIComponent(soRef)}`}
+          to={orderRegisterHref('sale', soRef, registerModeForOrder(so))}
           onClick={onNavigate}
           className="text-[13px] font-medium text-accent hover:underline"
         >
@@ -107,7 +111,12 @@ function SoAllocationCard({
       deliveredQty={so.liftedQty}
       pendingQty={pendingQty}
     >
-      {crossPo && bookedPoRef && (
+      {stockRef && (
+        <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2">
+          <StockPoLink poRef={stockRef} onNavigate={onNavigate} />
+        </div>
+      )}
+      {crossPo && bookedPoRef && !stockRef && (
         <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/20">
           <p className="text-[13px] text-heading">
             {formatSoRef(soRef)} booked on {formatPoRef(bookedPoRef)} · dispatching from {formatPoRef(poRef)}
@@ -122,10 +131,12 @@ function SoAllocationCard({
 function StockAllocationCard({
   allocation,
   lift,
+  closed,
   onNavigate,
 }: {
   allocation: LiftAllocation
   lift: Lift
+  closed: boolean
   onNavigate?: () => void
 }) {
   return (
@@ -133,14 +144,20 @@ function StockAllocationCard({
       <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
         <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap min-w-0">
-            <Link
-              to={appPath(`/purchase-orders?ref=${encodeURIComponent(allocation.poRef)}`)}
-              onClick={onNavigate}
-              className="text-[13px] font-medium text-accent hover:underline shrink-0"
-            >
-              {formatPoRef(allocation.poRef)}
-            </Link>
-            <span className="text-[13px] text-muted">Stock lift · not linked to an SO</span>
+            {closed ? (
+              <StockPoLink poRef={allocation.poRef} onNavigate={onNavigate} />
+            ) : (
+              <Link
+                to={orderRegisterHref('purchase', allocation.poRef)}
+                onClick={onNavigate}
+                className="text-[13px] font-medium text-accent hover:underline shrink-0"
+              >
+                {formatPoRef(allocation.poRef)}
+              </Link>
+            )}
+            <span className="text-[13px] text-muted">
+              {closed ? 'Own stock in the godown' : 'Stock lift · not linked to an SO'}
+            </span>
           </div>
           <Link
             to={appPath(`/lifts/new?poRef=${encodeURIComponent(allocation.poRef)}`)}
@@ -203,7 +220,8 @@ export function LiftRelatedSection({
     if (a.soRef) {
       const so = getOrderByRef(a.soRef, 'sale')
       if (po && so) {
-        const crossPo = so.poRef != null && so.poRef !== a.poRef
+        const stockRef = inventoryStockRef(so, po)
+        const crossPo = !stockRef && so.poRef != null && so.poRef !== a.poRef
         return (
           <SoAllocationCard
             key={`${a.soRef}-${a.poRef}`}
@@ -212,6 +230,7 @@ export function LiftRelatedSection({
             so={so}
             crossPo={crossPo}
             bookedPoRef={crossPo ? so.poRef : undefined}
+            stockRef={stockRef}
             onNavigate={onNavigate}
           />
         )
@@ -266,6 +285,7 @@ export function LiftRelatedSection({
         key={`stock-${a.poRef}`}
         allocation={a}
         lift={lift}
+        closed={purchaseIsClosed(po)}
         onNavigate={onNavigate}
       />
     )

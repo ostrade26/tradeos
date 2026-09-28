@@ -6,7 +6,7 @@ import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { DataTable } from '../components/ui/DataTable'
 import { Badge } from '../components/ui/Badge'
-import { BulkMarkLiftsDeliveredModal } from '../components/lifts/BulkMarkLiftsDeliveredModal'
+import { MarkLiftDeliveredModal } from '../components/lifts/MarkLiftDeliveredModal'
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../components/ui/DeleteActions'
 import { LiftDetailDrawer } from '../components/registers/LiftDetailDrawer'
 import { LiftFiltersBar } from '../components/registers/LiftFiltersBar'
@@ -240,7 +240,7 @@ export function LiftRegisterPage() {
     return store.getLiftsDelivered()
   }, [mode, store])
 
-  const { items, parties, brokers, spots } = useMemo(
+  const { items, parties, brokers, spots, rates } = useMemo(
     () => liftFilterOptions(baseData, store.tradeOrders),
     [baseData, store.tradeOrders],
   )
@@ -274,7 +274,7 @@ export function LiftRegisterPage() {
       filtered.map(l => ({
         liftRef: l.liftRef,
         status: l.status,
-        poRef: formatLiftPoRefs(l),
+        poRef: formatLiftPoRefs(l, store.tradeOrders),
         soRef: formatLiftSoRefs(l),
         date: l.date,
         deliveredAt: l.deliveredAt ?? '',
@@ -315,6 +315,16 @@ export function LiftRegisterPage() {
     () => filtered.filter(l => checkedLiftIds.includes(l.id)),
     [filtered, checkedLiftIds],
   )
+
+  const deliverTargets = useMemo(() => {
+    const pending = (l: Lift) => l.status === 'pending' && !l.deletedAt
+    const byId = new Map<string, Lift>()
+    for (const lift of checkedLifts) {
+      if (pending(lift)) byId.set(lift.id, lift)
+    }
+    if (selected && pending(selected)) byId.set(selected.id, selected)
+    return [...byId.values()]
+  }, [checkedLifts, selected])
 
   const toggleCheckedLift = useCallback((id: string, meta?: RowSelectMeta) => {
     setCheckedLiftIds(prev => {
@@ -574,6 +584,7 @@ export function LiftRegisterPage() {
         parties={parties}
         brokers={brokers}
         spots={spots}
+        rates={rates}
         onExport={handleExport}
       />
 
@@ -757,11 +768,11 @@ export function LiftRegisterPage() {
       onDelivered={() => setMode('completed')}
     />
 
-    <BulkMarkLiftsDeliveredModal
-      lifts={checkedLifts}
+    <MarkLiftDeliveredModal
+      lifts={deliverTargets}
       open={bulkDeliverOpen}
       onClose={() => setBulkDeliverOpen(false)}
-      onDelivered={handleBulkDelivered}
+      onDeliveredAll={handleBulkDelivered}
     />
 
     <ConfirmDeleteModal

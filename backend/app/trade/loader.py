@@ -13,14 +13,20 @@ from .helpers import (
     is_deletion_due,
     normalize_company_name,
     round_qty_mt,
+    attach_order_prefix,
+    refs_match,
     uid,
 )
 from .lift_logic import (
     compute_balance_qty,
     get_lift_allocations,
-    lift_touches_ref,
+    link_unlinked_sales_orders_from_lifts,
     normalize_lift_tankers,
+    po_manually_closed,
+    qty_of_so_on_po,
+    qty_stock_on_po,
     resolve_lift_qty,
+    sales_order_on_po,
 )
 from .buy_back import effective_po_qty
 from .seed import build_seed_data
@@ -29,43 +35,62 @@ from .seed import build_seed_data
 def order_status(order: dict) -> str:
     if order.get("status") == "cancelled":
         return "cancelled"
-    if order.get("completionType") in ("cash_settled", "carried_forward", "short_closed"):
+    if order.get("completionType") in ("cash_settled", "carried_forward", "short_closed", "delivered"):
         return "completed"
-    qty_cap = (
-        effective_po_qty(order)
-        if order.get("side") == "purchase"
-        else float(order.get("orderQty", 0) or 0)
-    )
-    if order.get("liftedQty", 0) >= qty_cap:
-        return "completed"
+    # Fully lifted orders stay visible until the user marks them complete.
     if order.get("liftedQty", 0) > 0:
         return "partial"
     return "pending"
 
 
-def get_sos_for_po(orders: list[dict], po_ref: str) -> list[dict]:
+def get_sos_for_po(orders: list[dict], po_ref: str, lifts: list[dict] | None = None) -> list[dict]:
     return [
         o
         for o in orders
-        if o.get("side") == "sale" and o.get("poRef") == po_ref and o.get("status") != "cancelled"
+        if o.get("side") == "sale"
+        and sales_order_on_po(o, po_ref, lifts)
+        and o.get("status") != "cancelled"
+    ]
+
+
+def orders_drawing_lot(orders: list[dict], po_ref: str, lifts: list[dict] | None = None) -> list[dict]:
+    """Sales made from godown stock. Contract SOs booked on the PO stay on the purchase."""
+    _ = lifts
+    return [
+        o
+        for o in orders
+        if o.get("side") == "sale"
+        and o.get("status") != "cancelled"
+        and not o.get("deleteScheduledAt")
+        and o.get("stockPoRef")
+        and not o.get("poRef")
+        and refs_match(o.get("stockPoRef"), po_ref, "purchase")
     ]
 
 
 def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | None = None) -> float:
-    """Open PO qty still allocatable to new SOs. Own-stock lifts stay sellable against the PO."""
-    del lifts  # kept for call-site compatibility; stock does not reduce sellable qty
-    po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
-    if not po:
-        return 0
-    sold = sum(
-        o.get("orderQty", 0)
-        for o in orders
-        if o.get("side") == "sale"
-        and o.get("poRef") == po_ref
-        and o.get("status") != "cancelled"
-        and not o.get("deleteScheduledAt")
+    """Open PO qty still allocatable to new SOs. Own-stock lifts consume the same cap.
+
+    A manually closed PO has nothing left to book — a short delivery that was
+    written off or settled is not available to sell.
+    """
+    po = next(
+        (o for o in orders if o.get("side") == "purchase" and refs_match(o.get("ref"), po_ref, "purchase")),
+        None,
     )
-    return round_qty_mt(max(0, effective_po_qty(po) - sold))
+    if not po or po_manually_closed(po) or po.get("status") == "cancelled":
+        return 0
+    sold = 0.0
+    for order in get_sos_for_po(orders, po_ref, lifts):
+        if order.get("status") == "cancelled" or order.get("deleteScheduledAt"):
+            continue
+        # Booked on a purchase: the whole SO. Left unlinked: only this PO's lift.
+        if order.get("poRef"):
+            sold += order.get("orderQty", 0)
+        else:
+            sold += qty_of_so_on_po(lifts or [], po_ref, order.get("ref"))
+    stocked = qty_stock_on_po(lifts or [], po_ref)
+    return round_qty_mt(max(0, effective_po_qty(po) - sold - stocked))
 
 
 def _producer_to_company(producer: dict) -> dict:
@@ -136,8 +161,8 @@ def _migrate_counters(counters: dict, lifts: list[dict]) -> dict:
 def apply_lift_totals(data: dict) -> dict:
     """Sum lift allocations onto PO/SO orders.
 
-    Keys are side-prefixed (``purchase:`` / ``sale:``) so a PO and SO that share
-    the same bare ref (common after spreadsheet import) do not double-count.
+    Stock-in and SO-dispatch are tracked in separate maps keyed by
+    prefixed refs (``attach_order_prefix``), so PO24 and SO24 never share a bucket.
 
     For POs, own-stock lifts and later SO dispatches from that stock must not
     double-count against ``liftedQty`` (qty that left the seller):
@@ -156,9 +181,11 @@ def apply_lift_totals(data: dict) -> dict:
             continue
         delivered = (lift.get("status") or "delivered") == "delivered"
         for a in get_lift_allocations(lift):
-            po_ref = a["poRef"]
+            po_ref = attach_order_prefix(a.get("poRef"), "purchase")
             qty = float(a.get("qtyMt") or 0)
-            so_ref = a.get("soRef") or ""
+            so_ref = attach_order_prefix(a.get("soRef"), "sale") if a.get("soRef") else ""
+            if not po_ref or qty <= 0:
+                continue
             if so_ref:
                 po_so_committed[po_ref] = po_so_committed.get(po_ref, 0) + qty
                 so_committed[so_ref] = so_committed.get(so_ref, 0) + qty
@@ -171,9 +198,10 @@ def apply_lift_totals(data: dict) -> dict:
                     po_stock_delivered[po_ref] = po_stock_delivered.get(po_ref, 0) + qty
 
     trade_orders = []
-    for o in data.get("tradeOrders") or []:
+    source_orders = link_unlinked_sales_orders_from_lifts(data.get("tradeOrders") or [], data.get("lifts") or [])
+    for o in source_orders:
+        ref = attach_order_prefix(o.get("ref"), o.get("side") or "purchase")
         if o.get("side") == "purchase":
-            ref = o["ref"]
             stock_c = po_stock_committed.get(ref, 0)
             so_c = po_so_committed.get(ref, 0)
             stock_d = po_stock_delivered.get(ref, 0)
@@ -182,7 +210,6 @@ def apply_lift_totals(data: dict) -> dict:
             committed = round_qty_mt(max(stock_c, so_c))
             lifted = round_qty_mt(max(stock_d, so_d))
         else:
-            ref = o["ref"]
             committed = round_qty_mt(so_committed.get(ref, 0))
             lifted = round_qty_mt(so_delivered.get(ref, 0))
         updated = {**o, "committedLiftQty": committed, "liftedQty": lifted}
@@ -292,57 +319,83 @@ def build_lot_from_po(po: dict) -> dict:
 def sync_lot_quantities(data: dict) -> dict:
     orders = data.get("tradeOrders") or []
     lifts = data.get("lifts") or []
+    po_by_key: dict[str, dict] = {}
+    so_by_key: dict[str, dict] = {}
+    stock_sales_by_po: dict[str, list[dict]] = {}
+    for order in orders:
+        side = order.get("side")
+        key = attach_order_prefix(order.get("ref"), "purchase" if side != "sale" else "sale")
+        if side == "purchase":
+            if key:
+                po_by_key.setdefault(key, order)
+            continue
+        if side != "sale":
+            continue
+        if key:
+            so_by_key.setdefault(key, order)
+        if (
+            order.get("stockPoRef")
+            and not order.get("poRef")
+            and order.get("status") != "cancelled"
+            and not order.get("deleteScheduledAt")
+        ):
+            stock_key = attach_order_prefix(order.get("stockPoRef"), "purchase")
+            if stock_key:
+                stock_sales_by_po.setdefault(stock_key, []).append(order)
+
+    stock_in: dict[str, float] = {}
+    so_out: dict[str, float] = {}
+    for lift in lifts:
+        if lift.get("deletedAt"):
+            continue
+        if (lift.get("status") or "delivered") != "delivered":
+            continue
+        for allocation in get_lift_allocations(lift):
+            po_key = attach_order_prefix(allocation.get("poRef"), "purchase")
+            if not po_key:
+                continue
+            qty = float(allocation.get("qtyMt") or 0)
+            so_ref = allocation.get("soRef")
+            if not so_ref:
+                stock_in[po_key] = stock_in.get(po_key, 0.0) + qty
+                continue
+            so = so_by_key.get(attach_order_prefix(so_ref, "sale"))
+            if (
+                so
+                and so.get("stockPoRef")
+                and not so.get("poRef")
+                and attach_order_prefix(so.get("stockPoRef"), "purchase") == po_key
+            ):
+                so_out[po_key] = so_out.get(po_key, 0.0) + qty
+
     lots = []
     for lot in data.get("lots") or []:
         po_ref = lot["lotNumber"].replace("LOT-", "", 1)
-        po = next((o for o in orders if o.get("ref") == po_ref and o.get("side") == "purchase"), None)
+        po_key = attach_order_prefix(po_ref, "purchase")
+        po = po_by_key.get(po_key) if po_key else None
         if not po:
             lots.append(lot)
             continue
-        linked_sos = get_sos_for_po(orders, po_ref)
-        allocated = sum(
-            o.get("orderQty", 0)
-            for o in linked_sos
-            if o.get("status") != "cancelled" and not o.get("deleteScheduledAt")
-        )
-        # On hand = delivered own-stock minus delivered SO dispatches from this PO.
-        stock_in_delivered = 0.0
-        so_out_delivered = 0.0
-        for lift in lifts:
-            if lift.get("deletedAt"):
-                continue
-            if (lift.get("status") or "delivered") != "delivered":
-                continue
-            for a in get_lift_allocations(lift):
-                if a.get("poRef") != po_ref:
-                    continue
-                qty = float(a.get("qtyMt") or 0)
-                if a.get("soRef"):
-                    so_out_delivered += qty
-                else:
-                    stock_in_delivered += qty
-        stock_in_delivered = round_qty_mt(stock_in_delivered)
-        so_out_delivered = round_qty_mt(so_out_delivered)
+        linked_sos = stock_sales_by_po.get(po_key, [])
+        allocated = sum(o.get("orderQty", 0) for o in linked_sos)
+        # On hand = delivered own-stock minus delivered lot-sale dispatches.
+        stock_in_delivered = round_qty_mt(stock_in.get(po_key, 0.0))
+        so_out_delivered = round_qty_mt(so_out.get(po_key, 0.0))
         on_hand = round_qty_mt(max(0.0, stock_in_delivered - so_out_delivered))
 
-        effective = effective_po_qty(po)
         avg_so_rate = sum(o.get("rate", 0) for o in linked_sos) / len(linked_sos) if linked_sos else 0
         margin = lot.get("margin", 0)
         if avg_so_rate > po.get("rate", 0):
             margin = ((avg_so_rate - po["rate"]) / po["rate"]) * 100
 
-        # Avail to sell from godown = on hand − SO qty still left to lift.
-        # Before any stock-in, allow pre-selling the open PO qty (book against PO).
-        # Once stock has been received, do not fall back to PO open qty when on hand is 0.
-        if stock_in_delivered > 0:
-            so_unlifted = sum(
-                max(0.0, float(so.get("orderQty") or 0) - float(so.get("liftedQty") or 0))
-                for so in linked_sos
-                if so.get("status") != "cancelled" and not so.get("deleteScheduledAt")
-            )
-            available = max(0.0, on_hand - round_qty_mt(so_unlifted))
-        else:
-            available = max(0.0, effective - allocated)
+        # Godown avail = on hand − lot sales still to dispatch.
+        # A contract SO booked on the PO does not reduce this.
+        so_unlifted = sum(
+            max(0.0, float(so.get("orderQty") or 0) - float(so.get("liftedQty") or 0))
+            for so in linked_sos
+            if so.get("status") != "cancelled" and not so.get("deleteScheduledAt")
+        )
+        available = max(0.0, on_hand - round_qty_mt(so_unlifted)) if stock_in_delivered > 0 else 0.0
 
         lots.append(
             {
@@ -365,23 +418,21 @@ def sync_lot_quantities(data: dict) -> dict:
 def ensure_lots_for_pos(data: dict) -> dict:
     orders = data.get("tradeOrders") or []
     lots = list(data.get("lots") or [])
+    existing = {l.get("lotNumber") for l in lots}
     missing = [
         o
         for o in orders
         if o.get("side") == "purchase"
-        and not any(l.get("lotNumber") == lot_number_for_po(o["ref"]) for l in lots)
+        and lot_number_for_po(o["ref"]) not in existing
     ]
     if not missing:
         return data
     for po in missing:
-        linked_sos = get_sos_for_po(orders, po["ref"])
-        allocated = sum(o.get("orderQty", 0) for o in linked_sos)
-        effective = effective_po_qty(po)
         lots.append(
             {
                 **build_lot_from_po(po),
-                "allocated": allocated,
-                "available": round_qty_mt(effective - allocated),
+                "allocated": 0,
+                "available": 0,
                 # No own-stock received yet — on hand is 0 until a stock lift.
                 "remaining": 0,
             }
@@ -397,8 +448,8 @@ def apply_remove_order(data: dict, order_id: str) -> dict:
     lots = list(data.get("lots") or [])
     if order.get("side") == "purchase":
         lots = [l for l in lots if l.get("lotNumber") != lot_number_for_po(order["ref"])]
-    elif order.get("poRef"):
-        lot_no = lot_number_for_po(order["poRef"])
+    elif order.get("stockPoRef") and not order.get("poRef"):
+        lot_no = lot_number_for_po(order["stockPoRef"])
         updated_lots = []
         for l in lots:
             if l.get("lotNumber") == lot_no:

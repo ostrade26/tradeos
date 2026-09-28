@@ -1,7 +1,8 @@
 import { QtyInput } from '../ui/QtyInput'
 import { sanitizeQtyInput } from '../../lib/liftTankers'
 import { formatQty, roundQtyMt } from '../../lib/utils'
-import { formatPoRef, formatSoRef } from '../../lib/tradeRefs'
+import { inventoryStockRef } from '../../lib/stockPo'
+import { findTradeOrder, formatLotRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { allocationTotal } from '../../lib/liftAllocations'
 import { allocationActualKey, STOCK_LIFT_LABEL } from '../../lib/stockLift'
 import type { LiftAllocation, TradeOrder } from '../../data/mockData'
@@ -75,7 +76,9 @@ export function LiftSoActualQtyForm({
         const shortfall = actual > 0 ? roundQtyMt(Math.max(0, a.qtyMt - actual)) : 0
         const label = a.soRef ? formatSoRef(a.soRef) : STOCK_LIFT_LABEL
         const showPlanned = !compact || allocations.length > 1
-        const poLabel = formatPoRef(a.poRef)
+        const po = findTradeOrder(orders, 'purchase', a.poRef)
+        const stockRef = so ? inventoryStockRef(so, po) : a.poRef
+        const poLabel = stockRef ? formatLotRef(stockRef) : formatPoRef(a.poRef)
 
         if (compact && allocations.length === 1) {
           return (
@@ -102,7 +105,7 @@ export function LiftSoActualQtyForm({
               <div className="min-w-0 pb-1 sm:pb-0">
                 <p className="text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5 truncate">
-                  {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
+                  {so ? `${so.partyName} · ${poLabel}` : poLabel}
                   {showPlanned ? ` · planned ${formatQty(a.qtyMt)}` : ''}
                 </p>
                 {shortfall > 0 && a.soRef && (
@@ -133,7 +136,7 @@ export function LiftSoActualQtyForm({
               <div className="min-w-0">
                 <p className="text-sm font-medium text-heading">{label}</p>
                 <p className="text-xs text-muted mt-0.5">
-                  {so ? `${so.partyName} · ${poLabel}` : `Stock · ${poLabel}`}
+                  {so ? `${so.partyName} · ${poLabel}` : poLabel}
                 </p>
               </div>
               {showPlanned && (

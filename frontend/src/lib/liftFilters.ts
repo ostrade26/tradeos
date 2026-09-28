@@ -9,7 +9,8 @@ import {
 } from './orderFilters'
 import { getLiftTankers } from './liftTankers'
 import { getLiftAllocations } from './liftAllocations'
-import type { Lift, TradeOrder } from '../data/mockData'
+import { formatRateCell } from './orderRate'
+import { findTradeOrder, liftRefSearchText, orderRefSearchText } from './tradeRefs'
 
 export interface LiftFilterState {
   dateFrom: string
@@ -20,6 +21,7 @@ export interface LiftFilterState {
   parties: string[]
   brokers: string[]
   spots: string[]
+  rates: string[]
   selfLiftOnly: boolean
 }
 
@@ -32,6 +34,7 @@ export const emptyLiftFilters: LiftFilterState = {
   parties: [],
   brokers: [],
   spots: [],
+  rates: [],
   selfLiftOnly: false,
 }
 
@@ -46,6 +49,7 @@ export function hasActiveLiftFilters(filters: LiftFilterState, search = '') {
     || filters.parties.length
     || filters.brokers.length
     || filters.spots.length
+    || filters.rates.length
     || filters.selfLiftOnly,
   )
 }
@@ -53,8 +57,8 @@ export function hasActiveLiftFilters(filters: LiftFilterState, search = '') {
 function liftBrokerNames(lift: Lift, orders: TradeOrder[]): string[] {
   const names = new Set<string>()
   for (const alloc of getLiftAllocations(lift)) {
-    const so = orders.find(o => o.ref === alloc.soRef && o.side === 'sale')
-    const po = orders.find(o => o.ref === alloc.poRef && o.side === 'purchase')
+    const so = findTradeOrder(orders, 'sale', alloc.soRef)
+    const po = findTradeOrder(orders, 'purchase', alloc.poRef)
     if (so?.brokerName) names.add(so.brokerName)
     else if (po?.brokerName) names.add(po.brokerName)
   }
@@ -64,8 +68,8 @@ function liftBrokerNames(lift: Lift, orders: TradeOrder[]): string[] {
 function liftSpots(lift: Lift, orders: TradeOrder[]): string[] {
   const spots = new Set<string>()
   for (const alloc of getLiftAllocations(lift)) {
-    const so = orders.find(o => o.ref === alloc.soRef && o.side === 'sale')
-    const po = orders.find(o => o.ref === alloc.poRef && o.side === 'purchase')
+    const so = findTradeOrder(orders, 'sale', alloc.soRef)
+    const po = findTradeOrder(orders, 'purchase', alloc.poRef)
     if (so?.spot) spots.add(so.spot)
     else if (po?.spot) spots.add(po.spot)
   }
@@ -101,19 +105,23 @@ export function applyLiftFilters(
       liftSpots(l, tradeOrders).some(s => filters.spots.includes(s)),
     )
   }
+  if (filters.rates.length) {
+    result = result.filter(l => filters.rates.includes(formatRateCell(l.rate)))
+  }
   if (filters.selfLiftOnly) {
     result = result.filter(l => l.isSelfLift)
   }
 
   if (search.trim()) {
-    const q = search.toLowerCase()
+    const q = search.trim().toLowerCase()
     result = result.filter(l =>
-      String(l.liftRef).includes(q)
+      liftRefSearchText(l.liftRef).includes(q)
       || getLiftAllocations(l).some(a =>
-        a.poRef.toLowerCase().includes(q) || (a.soRef?.toLowerCase().includes(q) ?? false),
+        orderRefSearchText(a.poRef, 'purchase').includes(q)
+        || Boolean(a.soRef && orderRefSearchText(a.soRef, 'sale').includes(q)),
       )
-      || l.poRef.toLowerCase().includes(q)
-      || l.soRef.toLowerCase().includes(q)
+      || orderRefSearchText(l.poRef, 'purchase').includes(q)
+      || Boolean(l.soRef && orderRefSearchText(l.soRef, 'sale').includes(q))
       || l.buyerName.toLowerCase().includes(q)
       || l.sellerName.toLowerCase().includes(q)
       || l.itemName.toLowerCase().includes(q)
@@ -142,6 +150,7 @@ export function liftFilterOptions(lifts: Lift[], tradeOrders: TradeOrder[] = [])
     parties: uniqueSorted(lifts.flatMap(l => [l.buyerName, l.sellerName])),
     brokers: uniqueSorted([...brokers]),
     spots: uniqueSorted([...spots]),
+    rates: uniqueSorted(lifts.map(l => formatRateCell(l.rate)).filter(rate => rate !== '—')),
   }
 }
 
@@ -155,6 +164,7 @@ export function getLiftFilterChips(filters: LiftFilterState, search: string): Ap
   for (const party of filters.parties) chips.push({ id: `parties:${party}`, prefix: 'Party', value: party })
   for (const broker of filters.brokers) chips.push({ id: `brokers:${broker}`, prefix: 'Broker', value: broker })
   for (const spot of filters.spots) chips.push({ id: `spots:${spot}`, prefix: 'Spot', value: spot })
+  for (const rate of filters.rates) chips.push({ id: `rates:${rate}`, prefix: 'Rate', value: rate })
   if (filters.selfLiftOnly) chips.push({ id: 'selfLift', prefix: 'Lift type', value: 'Self lift' })
   if (search.trim()) chips.push({ id: 'search', prefix: 'Search', value: search.trim() })
   return chips
@@ -168,9 +178,9 @@ export function clearLiftFilterField(
   if (id === 'deliveryPeriod') return { ...filters, deliveryPeriodFrom: '', deliveryPeriodTo: '' }
   if (id === 'selfLift') return { ...filters, selfLiftOnly: false }
 
-  const multiMatch = id.match(/^(items|parties|brokers|spots):(.+)$/)
+  const multiMatch = id.match(/^(items|parties|brokers|spots|rates):(.+)$/)
   if (multiMatch) {
-    const field = multiMatch[1] as keyof Pick<LiftFilterState, 'items' | 'parties' | 'brokers' | 'spots'>
+    const field = multiMatch[1] as keyof Pick<LiftFilterState, 'items' | 'parties' | 'brokers' | 'spots' | 'rates'>
     const value = multiMatch[2]
     return { ...filters, [field]: filters[field].filter(v => v !== value) }
   }

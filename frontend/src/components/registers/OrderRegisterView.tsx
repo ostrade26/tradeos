@@ -12,13 +12,14 @@ import { Badge, StatusBadge } from '../ui/Badge'
 import { BuyBackTag } from '../orders/BuyBackTag'
 import { CloseOrderModal } from '../orders/CloseOrderModal'
 import { BuyBackModal } from '../orders/BuyBackModal'
-import { canBuyBackPO, totalBuyBackQty } from '../../lib/buyBack'
+import { canBuyBackOrder, sosBookedOnPo, totalBuyBackQty } from '../../lib/buyBack'
 import { BlockedDeleteModal, ConfirmDeleteModal } from '../ui/DeleteActions'
 import { OrderRowActions } from './OrderRowActions'
 import { OrderDetailDrawer, findOrderByRef } from './OrderDetailDrawer'
+import { StockPoLink } from './StockPoLink'
 import { DashboardQuickActions } from '../dashboard/DashboardQuickActions'
 import { formatDate, cn, formatMt, formatQty, tableRefCellClass, availableQtyClass } from '../../lib/utils'
-import { ORDER_DELETE_GRACE_DAYS } from '../../lib/orderDeletion'
+import { formatDeletionDate, ORDER_DELETE_GRACE_DAYS } from '../../lib/orderDeletion'
 import { contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER, weightedAverageRatePer10Kg } from '../../lib/orderRate'
 import { formatIndianAmount } from '../../lib/indianAmount'
 import { formatOrderRef, formatPoRef } from '../../lib/tradeRefs'
@@ -30,18 +31,18 @@ import {
   type OrderFilterState,
 } from '../../lib/orderFilters'
 import {
+  toBeLifted,
   type TradeOrder,
   type OrderSide,
-  toBeLifted,
   formatDeliveryPeriodLabel,
-  getAllocatedSellQty,
-  getSOsForPO,
 } from '../../data/mockData'
-import { inTransitQtyOnOrder } from '../../lib/liftAllocations'
+import { buildPoRegisterIndex, inTransitQtyOnOrder, liftTouchKeys, orderHasPendingLift, pendingLiftKeys, poRegisterFigures, remainingOnOrder, type PoRegisterFigures } from '../../lib/liftAllocations'
+import { buildOutstandingByPair } from '../../lib/liftBalance'
 import { useTradeStore } from '../../store/TradeStore'
-import { canCloseOrder, completionTypeLabel } from '../../lib/orderClosure'
+import { completionTypeLabel } from '../../lib/orderClosure'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
 import { loadRegisterDetailRef, saveRegisterDetailRef } from '../../lib/registerDetailRef'
+import { orderRegisterHref, registerModeForOrder } from '../../lib/registerViewMode'
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../../lib/registerSort'
 import { useToast } from '../../hooks/useToast'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
@@ -58,39 +59,137 @@ import { TruncatedTextWithTooltip } from '../ui/DelayedHoverTooltip'
 
 export type OrderListMode = 'pending' | 'completed' | 'deleted'
 
-function registerToBeLift(order: TradeOrder): number {
-  return toBeLifted(order)
+type PoIndex = Map<string, PoRegisterFigures>
+
+function registerDelivered(index: PoIndex, order: TradeOrder): number {
+  return order.side === 'purchase' ? poRegisterFigures(index, order.ref).rollup.delivered : order.liftedQty
 }
 
-function availableOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): number {
-  return store.getRemainingSellQty(poRef)
+function registerInTransit(index: PoIndex, lifts: ReturnType<typeof useTradeStore>['lifts'], order: TradeOrder): number {
+  return order.side === 'purchase'
+    ? poRegisterFigures(index, order.ref).rollup.inTransit
+    : inTransitQtyOnOrder(lifts, order)
 }
 
-function allocationOnPO(store: ReturnType<typeof useTradeStore>, poRef: string): number {
-  return getAllocatedSellQty(store.tradeOrders, poRef)
+function registerToBeLift(index: PoIndex, lifts: ReturnType<typeof useTradeStore>['lifts'], order: TradeOrder): number {
+  return order.side === 'purchase'
+    ? poRegisterFigures(index, order.ref).rollup.toBeLift
+    : remainingOnOrder(order, lifts)
 }
 
-function allocationLinesOnPO(
-  store: ReturnType<typeof useTradeStore>,
-  poRef: string,
-): AllocationTooltipLine[] {
-  return getSOsForPO(store.tradeOrders, poRef)
-    .filter(o => o.status !== 'cancelled' && !o.deleteScheduledAt)
-    .map(o => ({ soRef: o.ref, qtyMt: o.orderQty }))
+function availableOnPO(index: PoIndex, poRef: string): number {
+  return poRegisterFigures(index, poRef).available
 }
 
-function inTransitOnOrder(store: ReturnType<typeof useTradeStore>, order: TradeOrder): number {
-  return inTransitQtyOnOrder(store.lifts, order)
+function allocationOnPO(index: PoIndex, poRef: string): number {
+  return poRegisterFigures(index, poRef).rollup.allocation
+}
+
+function allocationLinesOnPO(index: PoIndex, poRef: string): AllocationTooltipLine[] {
+  return poRegisterFigures(index, poRef).rollup.lines
+    .filter(line => line.allocation > 0)
+    .map(line => ({ soRef: line.soRef, qtyMt: line.allocation }))
+}
+
+function deliveredLinesOnPO(index: PoIndex, poRef: string): AllocationTooltipLine[] {
+  return poRegisterFigures(index, poRef).rollup.lines
+    .filter(line => line.delivered > 0)
+    .map(line => ({ soRef: line.soRef, qtyMt: line.delivered }))
+}
+
+function inTransitLinesOnPO(index: PoIndex, poRef: string): AllocationTooltipLine[] {
+  return poRegisterFigures(index, poRef).rollup.lines
+    .filter(line => line.inTransit > 0)
+    .map(line => ({ soRef: line.soRef, qtyMt: line.inTransit }))
+}
+
+function listBalanceOwed(
+  order: TradeOrder,
+  outstanding: Map<string, number>,
+  index: PoIndex,
+): number {
+  if (order.side === 'sale' && order.poRef) {
+    return outstanding.get(`${order.poRef}\0${order.ref}`) ?? 0
+  }
+  if (order.side !== 'purchase') return 0
+  let hits = 0
+  let only = 0
+  for (const so of poRegisterFigures(index, order.ref).linkedSos) {
+    if (so.status === 'completed' || so.status === 'cancelled') continue
+    const balance = outstanding.get(`${order.ref}\0${so.ref}`) ?? 0
+    if (balance <= 0) continue
+    hits += 1
+    if (hits > 1) return 0
+    only = balance
+  }
+  return hits === 1 ? only : 0
+}
+
+function listCanClose(
+  order: TradeOrder,
+  pending: Set<string>,
+  outstanding: Map<string, number>,
+  index: PoIndex,
+): boolean {
+  if (order.status === 'completed' || order.status === 'cancelled') return false
+  if (orderHasPendingLift(pending, order)) return false
+  if (toBeLifted(order) > 0) return true
+  return listBalanceOwed(order, outstanding, index) > 0
+}
+
+function listCanMarkComplete(order: TradeOrder, pending: Set<string>): boolean {
+  if (order.status === 'completed' || order.status === 'cancelled' || order.deleteScheduledAt) return false
+  if (orderHasPendingLift(pending, order)) return false
+  return toBeLifted(order) <= 0
+}
+
+function listDeleteBlock(
+  order: TradeOrder,
+  touches: Set<string>,
+  index: PoIndex,
+): string | undefined {
+  if (order.deleteScheduledAt) {
+    return `Already in Deleted — restores until ${formatDeletionDate(order.deleteScheduledAt)}.`
+  }
+  if (order.liftedQty > 0) {
+    return `This order has ${formatQty(order.liftedQty)} lifted. Remove lift records first.`
+  }
+  if (orderHasPendingLift(touches, order)) {
+    return 'This order has lift records linked to it. Delete those lifts first.'
+  }
+  if (order.side === 'purchase') {
+    const linked = poRegisterFigures(index, order.ref).linkedSos.filter(so => !so.deleteScheduledAt)
+    if (linked.length > 0) {
+      return `This PO has linked SO(s): ${linked.map(so => so.ref).join(', ')}. Delete those first.`
+    }
+  }
+  return undefined
+}
+
+function toBeLiftLinesOnPO(index: PoIndex, poRef: string): AllocationTooltipLine[] {
+  return poRegisterFigures(index, poRef).rollup.lines
+    .filter(line => line.toBeLift > 0)
+    .map(line => ({ soRef: line.soRef, qtyMt: line.toBeLift }))
 }
 
 interface OrderRegisterViewProps {
   side: OrderSide
   mode: OrderListMode
-  onModeChange?: (mode: OrderListMode) => void
+  onModeChange?: (mode: OrderListMode, options?: { keepRef?: boolean }) => void
 }
 
 export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterViewProps) {
   const store = useTradeStore()
+  const poIndex = useMemo(
+    () => buildPoRegisterIndex(store.tradeOrders, store.lifts),
+    [store.tradeOrders, store.lifts],
+  )
+  const pendingLifts = useMemo(() => pendingLiftKeys(store.lifts), [store.lifts])
+  const liftTouches = useMemo(() => liftTouchKeys(store.lifts), [store.lifts])
+  const outstandingByPair = useMemo(
+    () => buildOutstandingByPair(store.lifts, store.balanceSettlements ?? []),
+    [store.lifts, store.balanceSettlements],
+  )
   const toast = useToast()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -192,6 +291,13 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     if (!detailRef) return null
     return findOrderByRef(store, detailRef, side) ?? null
   }, [detailRef, store.tradeOrders, side])
+
+  useLayoutEffect(() => {
+    if (!selectedOrder || !onModeChange) return
+    const needed = registerModeForOrder(selectedOrder)
+    if (needed === mode) return
+    onModeChange(needed, { keepRef: true })
+  }, [selectedOrder, mode, onModeChange])
 
   const undockedDetailOpen = !effectiveDocked && detailRef != null && selectedOrder != null
 
@@ -300,17 +406,17 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         case 'spot': return row.spot ?? ''
         case 'orderQty': return row.orderQty
         case 'buyBackQty': return totalBuyBackQty(row)
-        case 'allocation': return isPO ? allocationOnPO(store, row.ref) : 0
-        case 'available': return isPO ? availableOnPO(store, row.ref) : 0
-        case 'liftedQty': return row.liftedQty
-        case 'inTransit': return inTransitOnOrder(store, row)
-        case 'toBeLift': return registerToBeLift(row)
+        case 'allocation': return isPO ? allocationOnPO(poIndex, row.ref) : 0
+        case 'available': return isPO ? availableOnPO(poIndex, row.ref) : 0
+        case 'liftedQty': return registerDelivered(poIndex, row)
+        case 'inTransit': return registerInTransit(poIndex, store.lifts, row)
+        case 'toBeLift': return registerToBeLift(poIndex, store.lifts, row)
         case 'rate': return row.rate
         default: return ''
       }
     })
     return sorted
-  }, [filtered, sort, isPO, store])
+  }, [filtered, sort, isPO, store, poIndex])
 
   const hasActiveFilters = search.trim() !== '' || JSON.stringify(filters) !== JSON.stringify(emptyOrderFilters)
 
@@ -318,20 +424,28 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
   const parties = useMemo(() => uniqueSorted(baseData.map(o => o.partyName)), [baseData])
   const brokers = useMemo(() => uniqueSorted(baseData.map(o => o.brokerName)), [baseData])
   const spots = useMemo(() => uniqueSorted(baseData.map(o => o.spot)), [baseData])
+  const rates = useMemo(
+    () => uniqueSorted(
+      baseData
+        .map(o => formatRateCell(o.rate, o.rateBasis, o.ratePerBasis))
+        .filter(rate => rate !== '—'),
+    ),
+    [baseData],
+  )
 
   const totals = useMemo(() => {
     const orderQty = sortedFiltered.reduce((s, o) => s + o.orderQty, 0)
     return {
       orderQty,
       allocation: isPO
-        ? sortedFiltered.reduce((s, o) => s + allocationOnPO(store, o.ref), 0)
+        ? sortedFiltered.reduce((s, o) => s + allocationOnPO(poIndex, o.ref), 0)
         : 0,
-      liftedQty: sortedFiltered.reduce((s, o) => s + o.liftedQty, 0),
-      inTransit: sortedFiltered.reduce((s, o) => s + inTransitOnOrder(store, o), 0),
-      toBeLift: sortedFiltered.reduce((s, o) => s + registerToBeLift(o), 0),
+      liftedQty: sortedFiltered.reduce((s, o) => s + registerDelivered(poIndex, o), 0),
+      inTransit: sortedFiltered.reduce((s, o) => s + registerInTransit(poIndex, store.lifts, o), 0),
+      toBeLift: sortedFiltered.reduce((s, o) => s + registerToBeLift(poIndex, store.lifts, o), 0),
       avgRatePer10Kg: weightedAverageRatePer10Kg(sortedFiltered),
     }
-  }, [sortedFiltered, isPO, store])
+  }, [sortedFiltered, isPO, store, poIndex])
 
   const checkedOrders = useMemo(
     () => sortedFiltered.filter(o => checkedOrderIds.includes(o.id)),
@@ -342,10 +456,10 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     () =>
       mode !== 'deleted'
         ? checkedOrders.filter(
-            o => canCloseOrder(o, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok,
+            o => listCanClose(o, pendingLifts, outstandingByPair, poIndex),
           )
         : [],
-    [checkedOrders, mode, store.lifts, store.balanceSettlements, store.tradeOrders],
+    [checkedOrders, mode, pendingLifts, outstandingByPair, poIndex],
   )
 
   const selectionTotals = useMemo(() => {
@@ -392,6 +506,17 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     setDeleteTargets(deletable)
   }, [shortLabel, store])
 
+  const markOrderComplete = useCallback(async (order: TradeOrder) => {
+    try {
+      await store.closeOrder(order.id, { method: 'delivered' })
+      toast.success(`${formatOrderRef(order.ref, order.side)} marked complete`)
+    } catch (err) {
+      toast.error('Could not mark complete', {
+        description: err instanceof Error ? err.message : 'Try again',
+      })
+    }
+  }, [store, toast])
+
   const openPermanentDeleteForOrders = useCallback((orders: TradeOrder[]) => {
     if (orders.length === 0) return
     setPermanentDeleteError('')
@@ -424,7 +549,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           >
             {formatOrderRef(r.ref, r.side)}
           </Link>
-          {isPO && <BuyBackTag order={r} />}
+          <BuyBackTag order={r} />
           {mode === 'completed' && completionTypeLabel(r.completionType) && (
             <Badge variant="default" className="text-[10px]">{completionTypeLabel(r.completionType)}</Badge>
           )}
@@ -443,12 +568,20 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       header: 'PO Ref#',
       className: 'whitespace-nowrap',
       sortable: true,
-      sortValue: (r: TradeOrder) => r.poRef ?? '',
+      sortValue: (r: TradeOrder) => r.stockPoRef || r.poRef || '',
       render: (r: TradeOrder) => {
         const poRef = r.poRef
+        const linkedPo = poRef ? store.getOrderByRef(poRef, 'purchase') : undefined
+        const stockRef = r.stockPoRef && !poRef ? r.stockPoRef : undefined
+        if (stockRef) return <StockPoLink poRef={stockRef} />
         if (!poRef) return <span className="text-muted">Not linked</span>
+        const po = linkedPo
+        const poHref = orderRegisterHref(
+          'purchase',
+          poRef,
+          po ? registerModeForOrder(po) : undefined,
+        )
         const poRegister = appPath('/purchase-orders')
-        const poHref = `${poRegister}?ref=${encodeURIComponent(poRef)}`
         return (
           <Link
             to={poHref}
@@ -456,7 +589,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             onClick={e => {
               e.preventDefault()
               e.stopPropagation()
-              // Seed PO register detail before nav so a stale persisted ref cannot flash.
               saveRegisterDetailRef(poRegister, poRef)
               navigate(poHref)
             }}
@@ -521,34 +653,34 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       sortValue: (r: TradeOrder) => r.orderQty,
       render: (r: TradeOrder) => <span className="tabular-nums">{formatMt(r.orderQty)}</span>,
     },
+    {
+      key: 'buyBackQty',
+      header: 'Buy back',
+      className: 'text-right',
+      sortable: true,
+      sortValue: (r: TradeOrder) => totalBuyBackQty(r),
+      render: (r: TradeOrder) => {
+        const bb = totalBuyBackQty(r)
+        return (
+          <span className={cn('tabular-nums', bb > 0 ? 'text-heading font-medium' : 'text-muted')}>
+            {formatMt(bb)}
+          </span>
+        )
+      },
+    },
     ...(isPO
       ? [{
-          key: 'buyBackQty',
-          header: 'Buy back',
-          className: 'text-right',
-          sortable: true,
-          sortValue: (r: TradeOrder) => totalBuyBackQty(r),
-          render: (r: TradeOrder) => {
-            const bb = totalBuyBackQty(r)
-            return (
-              <span className={cn('tabular-nums', bb > 0 ? 'text-heading font-medium' : 'text-muted')}>
-                {formatMt(bb)}
-              </span>
-            )
-          },
-        },
-        {
           key: 'allocation',
           header: 'Allocation',
           className: 'text-right',
           sortable: true,
-          sortValue: (r: TradeOrder) => allocationOnPO(store, r.ref),
+          sortValue: (r: TradeOrder) => allocationOnPO(poIndex, r.ref),
           render: (r: TradeOrder) => {
-            const allocated = allocationOnPO(store, r.ref)
+            const allocated = allocationOnPO(poIndex, r.ref)
             return (
               <AllocationQtyWithTooltip
                 allocated={allocated}
-                lines={allocationLinesOnPO(store, r.ref)}
+                lines={allocationLinesOnPO(poIndex, r.ref)}
                 className={allocated > 0 ? 'text-heading font-medium' : 'text-muted'}
               />
             )
@@ -556,12 +688,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         },
         {
           key: 'available',
-          header: 'Open to book',
+          header: 'Avail to sell',
           className: 'text-right',
           sortable: true,
-          sortValue: (r: TradeOrder) => availableOnPO(store, r.ref),
+          sortValue: (r: TradeOrder) => availableOnPO(poIndex, r.ref),
           render: (r: TradeOrder) => {
-            const available = availableOnPO(store, r.ref)
+            const available = availableOnPO(poIndex, r.ref)
             return (
               <span className={cn('tabular-nums', availableQtyClass(available))}>
                 {formatMt(available)}
@@ -575,21 +707,41 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       header: 'Delivered',
       className: 'text-right',
       sortable: true,
-      sortValue: (r: TradeOrder) => r.liftedQty,
-      render: (r: TradeOrder) => <span className="tabular-nums">{formatMt(r.liftedQty)}</span>,
+      sortValue: (r: TradeOrder) => registerDelivered(poIndex, r),
+      render: (r: TradeOrder) => {
+        const qty = registerDelivered(poIndex, r)
+        if (!isPO) return <span className="tabular-nums">{formatMt(qty)}</span>
+        return (
+          <AllocationQtyWithTooltip
+            allocated={qty}
+            title="Delivered on"
+            lines={deliveredLinesOnPO(poIndex, r.ref)}
+          />
+        )
+      },
     },
     {
       key: 'inTransit',
       header: 'In transit',
       className: 'text-right',
       sortable: true,
-      sortValue: (r: TradeOrder) => inTransitOnOrder(store, r),
+      sortValue: (r: TradeOrder) => registerInTransit(poIndex, store.lifts, r),
       render: (r: TradeOrder) => {
-        const qty = inTransitOnOrder(store, r)
+        const qty = registerInTransit(poIndex, store.lifts, r)
+        if (!isPO) {
+          return (
+            <span className={cn('tabular-nums', qty > 0 ? 'text-heading font-medium' : 'text-muted')}>
+              {formatMt(qty)}
+            </span>
+          )
+        }
         return (
-          <span className={cn('tabular-nums', qty > 0 ? 'text-heading font-medium' : 'text-muted')}>
-            {formatMt(qty)}
-          </span>
+          <AllocationQtyWithTooltip
+            allocated={qty}
+            title="In transit on"
+            lines={inTransitLinesOnPO(poIndex, r.ref)}
+            className={qty > 0 ? 'text-heading font-medium' : 'text-muted'}
+          />
         )
       },
     },
@@ -598,22 +750,28 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       header: 'To Be Lift',
       className: 'text-right',
       sortable: true,
-      sortValue: (r: TradeOrder) => registerToBeLift(r),
+      sortValue: (r: TradeOrder) => registerToBeLift(poIndex, store.lifts, r),
       render: (r: TradeOrder) => {
-        const remaining = registerToBeLift(r)
+        const remaining = registerToBeLift(poIndex, store.lifts, r)
+        const qtyClass = remaining <= 0
+          ? 'text-muted'
+          : remaining < 1
+            ? 'text-warning'
+            : 'text-heading'
+        if (!isPO) {
+          return (
+            <span className={cn('tabular-nums font-medium', qtyClass)}>
+              {formatMt(remaining)}
+            </span>
+          )
+        }
         return (
-          <span
-            className={cn(
-              'tabular-nums font-medium',
-              remaining <= 0
-                ? 'text-muted'
-                : remaining < 1
-                  ? 'text-warning'
-                  : 'text-heading',
-            )}
-          >
-            {formatMt(remaining)}
-          </span>
+          <AllocationQtyWithTooltip
+            allocated={remaining}
+            title="To be lift on"
+            lines={toBeLiftLinesOnPO(poIndex, r.ref)}
+            className={cn('font-medium', qtyClass)}
+          />
         )
       },
     },
@@ -629,15 +787,18 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       key: 'actions',
       header: '',
       render: (r: TradeOrder) => {
-        const closable = canCloseOrder(r, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok
+        const closable = listCanClose(r, pendingLifts, outstandingByPair, poIndex)
+        const deleteBlock = listDeleteBlock(r, liftTouches, poIndex)
         return (
         <OrderRowActions
           order={r}
           editHref={`${pathPrefix}/${encodeURIComponent(r.ref)}/edit`}
-          canDelete={store.canDeleteOrder(r.id)}
+          canDelete={deleteBlock ? { ok: false, reason: deleteBlock } : { ok: true }}
           canClose={closable}
-          canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
-          sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
+          canMarkComplete={listCanMarkComplete(r, pendingLifts)}
+          onMarkComplete={() => { void markOrderComplete(r) }}
+          canBuyBack={canBuyBackOrder(r, store.lifts, r.side === 'purchase' ? sosBookedOnPo(poRegisterFigures(poIndex, r.ref).linkedSos, r.ref) : [], orderHasPendingLift(pendingLifts, r)).ok}
+          sellAvailableQty={isPO ? availableOnPO(poIndex, r.ref) : undefined}
           deletedTab={mode === 'deleted'}
           onCloseOrder={() => setCloseTargets([r])}
           onBuyBack={() => setBuyBackTarget(r)}
@@ -750,11 +911,11 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       { key: 'spot', header: 'Spot' },
       { key: 'rate', header: RATE_COLUMN_HEADER },
       { key: 'orderQty', header: `${shortLabel} Qty` },
+      { key: 'buyBackQty' as const, header: 'Buy back' },
       ...(isPO
         ? [
-            { key: 'buyBackQty' as const, header: 'Buy back' },
             { key: 'allocation' as const, header: 'Allocation' },
-            { key: 'available' as const, header: 'Open to book' },
+            { key: 'available' as const, header: 'Avail to sell' },
           ]
         : []),
       { key: 'liftedQty', header: 'Delivered' },
@@ -772,16 +933,16 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         spot: o.spot,
         rate: contractRateFromOrder(o.rate, o.rateBasis, o.ratePerBasis),
         orderQty: o.orderQty,
+        buyBackQty: totalBuyBackQty(o),
         ...(isPO
           ? {
-              buyBackQty: totalBuyBackQty(o),
-              allocation: allocationOnPO(store, o.ref),
-              available: availableOnPO(store, o.ref),
+              allocation: allocationOnPO(poIndex, o.ref),
+              available: availableOnPO(poIndex, o.ref),
             }
           : {}),
-        liftedQty: o.liftedQty,
-        inTransit: inTransitOnOrder(store, o),
-        toBeLift: registerToBeLift(o),
+        liftedQty: registerDelivered(poIndex, o),
+        inTransit: registerInTransit(poIndex, store.lifts, o),
+        toBeLift: registerToBeLift(poIndex, store.lifts, o),
         broker: o.brokerName,
       })),
       exportColumns,
@@ -883,6 +1044,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         parties={parties}
         brokers={brokers}
         spots={spots}
+        rates={rates}
         onExport={handleExport}
         showUnlinkedFilter={!isPO}
       />
@@ -1021,6 +1183,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             sortDirection={sort.direction}
             onSortChange={handleSortChange}
             stickyFirstColumn
+            focusRowId={selectedOrder?.id}
             onRowClick={handleSelectOrder}
             emptyState={
               <EmptyState
@@ -1031,16 +1194,18 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
               />
             }
             mobileRender={(r) => {
-              const remaining = registerToBeLift(r)
-              const available = isPO ? availableOnPO(store, r.ref) : null
-              const allocated = isPO ? allocationOnPO(store, r.ref) : null
-              const inTransit = inTransitOnOrder(store, r)
+              const remaining = registerToBeLift(poIndex, store.lifts, r)
+              const available = isPO ? availableOnPO(poIndex, r.ref) : null
+              const allocated = isPO ? allocationOnPO(poIndex, r.ref) : null
+              const inTransit = registerInTransit(poIndex, store.lifts, r)
+              const delivered = registerDelivered(poIndex, r)
+              const deleteBlock = listDeleteBlock(r, liftTouches, poIndex)
               return (
                 <div className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex flex-nowrap items-center gap-2 min-w-0">
                       <span className={tableRefCellClass}>{formatOrderRef(r.ref, r.side)}</span>
-                      {isPO && <BuyBackTag order={r} />}
+                      <BuyBackTag order={r} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <StatusBadge status={r.status} />
@@ -1048,10 +1213,12 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                         <OrderRowActions
                           order={r}
                           editHref={`${pathPrefix}/${encodeURIComponent(r.ref)}/edit`}
-                          canDelete={store.canDeleteOrder(r.id)}
-                          canClose={canCloseOrder(r, store.lifts, store.balanceSettlements ?? [], store.tradeOrders).ok}
-                          canBuyBack={isPO && canBuyBackPO(r, store.lifts, store.getSOsForPO(r.ref)).ok}
-                          sellAvailableQty={isPO ? availableOnPO(store, r.ref) : undefined}
+                          canDelete={deleteBlock ? { ok: false, reason: deleteBlock } : { ok: true }}
+                          canClose={listCanClose(r, pendingLifts, outstandingByPair, poIndex)}
+                          canMarkComplete={listCanMarkComplete(r, pendingLifts)}
+                          onMarkComplete={() => { void markOrderComplete(r) }}
+                          canBuyBack={canBuyBackOrder(r, store.lifts, r.side === 'purchase' ? sosBookedOnPo(poRegisterFigures(poIndex, r.ref).linkedSos, r.ref) : [], orderHasPendingLift(pendingLifts, r)).ok}
+                          sellAvailableQty={isPO ? availableOnPO(poIndex, r.ref) : undefined}
                           deletedTab={mode === 'deleted'}
                           onCloseOrder={() => setCloseTargets([r])}
                           onBuyBack={() => setBuyBackTarget(r)}
@@ -1068,7 +1235,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                   <p className="text-heading truncate">{r.partyName} · {r.itemName}</p>
                   <div className="flex items-center justify-between text-muted">
                     <span className="tabular-nums">
-                      {formatMt(r.liftedQty)} delivered · {formatMt(inTransit)} in transit · {formatMt(remaining)} to lift
+                      {formatMt(delivered)} delivered · {formatMt(inTransit)} in transit · {formatMt(remaining)} to lift
                     </span>
                     <span className="tabular-nums">{formatDate(r.date)}</span>
                   </div>
@@ -1079,7 +1246,7 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                   )}
                   {available != null && (
                     <p className={cn('text-sm tabular-nums', availableQtyClass(available))}>
-                      Open to book: {formatMt(available)}
+                      Avail to sell: {formatMt(available)}
                     </p>
                   )}
                 </div>

@@ -780,6 +780,45 @@ def can_delete_retailer(retailer_id: str, request: Request) -> dict:
     return _trade_service(request).can_delete_retailer(retailer_id)
 
 
+@app.post("/api/v1/item-catalog", tags=["catalog"], summary="Save item details")
+def save_item_catalog(body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
+    def run():
+        item, state = _trade_service(request).save_catalog_item(body.model_dump())
+        return _mutation(item, state)
+
+    return _handle(run)
+
+
+@app.patch("/api/v1/item-catalog/{item_id}", tags=["catalog"], summary="Update item details")
+def update_item_catalog(item_id: str, body: DictBody, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
+    def run():
+        item, state = _trade_service(request).save_catalog_item(body.model_dump(), item_id)
+        return _mutation(item, state)
+
+    return _handle(run)
+
+
+@app.delete("/api/v1/item-catalog/{item_id}", tags=["catalog"], summary="Delete item")
+def delete_item_catalog(item_id: str, request: Request) -> dict:
+    auth.require_permission(_session(request), "organisation.edit")
+
+    def run():
+        _, state = _trade_service(request).delete_catalog_item(item_id)
+        return _mutation({"deleted": True}, state)
+
+    return _handle(run)
+
+
+@app.get("/api/v1/item-catalog/{item_id}/can-delete", tags=["catalog"], summary="Check if item can be deleted")
+def can_delete_item_catalog(item_id: str, request: Request) -> dict:
+    _session(request)
+    return _trade_service(request).can_delete_catalog_item(item_id)
+
+
 @app.post("/api/v1/items", tags=["catalog"], summary="Add item")
 def create_item(body: NameBody, request: Request) -> dict:
     auth.require_permission(_session(request), "organisation.edit")

@@ -14,7 +14,6 @@ import { useTableDensity } from '../hooks/useTableDensity'
 import { useToast } from '../hooks/useToast'
 import { useTradeStore } from '../store/TradeStore'
 import {
-  describeTradeBackup,
   describeImportResult,
   exportAllTradeData,
   exportImportTemplate,
@@ -22,6 +21,7 @@ import {
   readMultipleSpreadsheetFiles,
   type TradeBackup,
 } from '../lib/dataExport'
+import type { TradeData } from '../api/tradeApi'
 import { cn } from '../lib/utils'
 import { ChangePasswordModal } from '../components/settings/ChangePasswordForm'
 import { organisationApi } from '../api/organisationApi'
@@ -39,6 +39,18 @@ import {
 } from '../components/settings/SettingsSectionContent'
 import { SettingsTeamPanel } from '../components/settings/SettingsTeamPanel'
 import { SettingsSubscriptionPanelContent } from '../components/settings/SettingsSubscriptionSidePanel'
+
+function ImportConfirmDetails({ data }: { data: TradeData }) {
+  const preview = describeImportResult(data)
+  return (
+    <>
+      <p className="text-sm font-medium text-heading mt-2">{preview.summary}</p>
+      {preview.hint ? (
+        <p className="text-sm text-danger mt-2 leading-relaxed">{preview.hint}</p>
+      ) : null}
+    </>
+  )
+}
 
 function useSettingsBilling(canViewSubscription: boolean) {
   const [billing, setBilling] = useState<OrganisationDetailResponse | null>(null)
@@ -280,7 +292,7 @@ export function SettingsLayout() {
             : ''}.
         </p>
         {pendingImport && (
-          <p className="text-sm font-medium text-heading mt-2">{describeTradeBackup(pendingImport.data)}</p>
+          <ImportConfirmDetails data={pendingImport.data} />
         )}
       </ConfirmDialog>
       <ConfirmDialog

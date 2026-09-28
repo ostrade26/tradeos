@@ -35,11 +35,12 @@ import {
   type LiftTankerFieldErrorMap,
   collectLiftTankerFieldErrors,
 } from '../lib/liftTankers'
-import { allocationTotal, formatLiftOrderSummary, getLiftAllocations, remainingOnOrder, remainingOnPoForDispatch } from '../lib/liftAllocations'
-import { formatLiftRef, formatPoRef } from '../lib/tradeRefs'
+import { allocationTotal, formatLiftOrderSummary, getLiftAllocations, remainingOnPoForDispatch, soQtyLeftToLift } from '../lib/liftAllocations'
+import { purchaseIsClosed } from '../lib/stockPo'
+import { findTradeOrder, formatLiftRef, formatLotRef, formatPoRef, refsMatch } from '../lib/tradeRefs'
 import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
 import { uniqueSorted } from '../lib/orderFilters'
-import { crossPoAllocationSummary, poolPOsForSo } from '../lib/sellerLiftPool'
+import { crossPoAllocationSummary, dispatchPoRef, dispatchPoolForSo, poolPOsForSo } from '../lib/sellerLiftPool'
 import { CrossPoNotice } from '../components/lifts/CrossPoNotice'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { StickyFormActions } from '../components/ui/StickyFormActions'
@@ -54,8 +55,9 @@ function purchaseSellerName(order: TradeOrder): string {
 
 function soMatchesSeller(so: TradeOrder, seller: string, orders: TradeOrder[]): boolean {
   if (!seller) return true
-  const booked = orders.find(o => o.ref === so.poRef && o.side === 'purchase')
+  const booked = findTradeOrder(orders, 'purchase', dispatchPoRef(so))
   if (booked && purchaseSellerName(booked) === seller) return true
+  if (so.stockPoRef && !so.poRef) return false
   return poolPOsForSo(so, orders).some(po => purchaseSellerName(po) === seller)
 }
 
@@ -134,6 +136,7 @@ function FormFieldGroup({
 
 function LiftFormSidebar({
   lastLift,
+  orders = [],
   isStockMode,
   allocTotal,
   totalPlanned,
@@ -150,6 +153,7 @@ function LiftFormSidebar({
   saveDisabled,
 }: {
   lastLift?: Lift
+  orders?: TradeOrder[]
   isStockMode: boolean
   allocTotal: number
   totalPlanned: number
@@ -197,7 +201,7 @@ function LiftFormSidebar({
             <SidebarMetaRow label="Date" value={formatDate(lastLift.date)} />
             <SidebarMetaRow label="Item" value={lastLift.itemName} />
             <SidebarMetaRow label="Quantity" value={formatQty(lastLift.liftedQty)} tabular />
-            <SidebarMetaRow label="Orders" value={formatLiftOrderSummary(lastLift)} />
+            <SidebarMetaRow label="Orders" value={formatLiftOrderSummary(lastLift, orders)} />
           </div>
         </Card>
       )}
@@ -354,8 +358,9 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     if (urlSoRef) {
       const so = store.tradeOrders.find(s => s.ref === urlSoRef && s.side === 'sale')
       if (so?.itemName) setItemFilter(so.itemName)
-      const po = so?.poRef
-        ? store.tradeOrders.find(p => p.ref === so.poRef && p.side === 'purchase')
+      const sourceRef = so ? dispatchPoRef(so) : ''
+      const po = sourceRef
+        ? store.tradeOrders.find(p => p.ref === sourceRef && p.side === 'purchase')
         : store.tradeOrders.find(p => p.ref === urlPoRef && p.side === 'purchase')
       if (po) setSellerFilter(purchaseSellerName(po))
     } else if (urlPoRef) {
@@ -372,12 +377,13 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
       if (!row.soRef || row.qty) return row
       const so = store.tradeOrders.find(o => o.ref === row.soRef && o.side === 'sale')
       if (!so) return row
-      const pool = poolPOsForSo(so, store.tradeOrders)
+      const pool = dispatchPoolForSo(so, store.tradeOrders, row.poRef)
+      const source = dispatchPoRef(so)
       const poRef = row.poRef && pool.some(p => p.ref === row.poRef)
         ? row.poRef
-        : (pool.find(p => p.ref === so.poRef) ?? pool[0])?.ref ?? row.poRef
+        : (pool.find(p => source && refsMatch(p.ref, source, 'purchase')) ?? pool[0])?.ref ?? row.poRef
       const po = store.tradeOrders.find(o => o.ref === poRef && o.side === 'purchase')
-      const soLeft = remainingOnOrder(so, store.lifts)
+      const soLeft = soQtyLeftToLift(so, store.lifts).qty ?? 0
       const poLeft = po ? remainingOnPoForDispatch(po, store.lifts) : soLeft
       const qty = Math.max(0, Math.min(soLeft, poLeft))
       return { ...row, poRef, qty: qty > 0 ? String(qty) : '' }
@@ -513,7 +519,10 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
     )
   }
 
-  if (!isEdit && poPending.length === 0) {
+  const hasPurchase = store.tradeOrders.some(
+    o => o.side === 'purchase' && o.status !== 'cancelled' && !o.deleteScheduledAt,
+  )
+  if (!isEdit && !hasPurchase) {
     return (
       <>
         <div className="animate-fade-in w-full mx-auto max-w-3xl">
@@ -531,7 +540,12 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
             icon={<Scale className="h-10 w-10" />}
             title="Cannot record a lift yet"
             description="Create a purchase order first — then you can stock goods or dispatch to a sales order."
-            action={<Button onClick={() => navigate('/purchase-orders/new')}>New PO</Button>}
+            action={(
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => navigate('/purchase-orders/new')}>Create PO</Button>
+                <Button variant="outline" onClick={() => navigate('/sales-orders/new')}>Create SO</Button>
+              </div>
+            )}
           />
         </div>
         {unsavedDialog}
@@ -631,6 +645,12 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
           { label: 'Lift Register', href: '/lifts' },
           { label: isEdit ? formatLiftRef(editLiftRef!) : 'New Lift' },
         ]} />}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" to="/purchase-orders/new">Create PO</Button>
+            <Button size="sm" variant="outline" to="/sales-orders/new">Create SO</Button>
+          </div>
+        )}
       />
 
       {Object.keys(tankerFieldErrors).length > 0 && (
@@ -780,9 +800,22 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
 
                 {!isEdit && !isStockMode && firstPoRef && parsedAllocations.length === 0 && (
                   <div className="mt-4">
-                    <Button to={`/sales-orders/new?poRef=${encodeURIComponent(firstPoRef)}`} variant="outline" size="sm">
-                      Create SO for {formatPoRef(firstPoRef)}
-                    </Button>
+                    {purchaseIsClosed(findTradeOrder(store.tradeOrders, 'purchase', firstPoRef)) ? (
+                      <Button
+                        to={(() => {
+                          const lot = store.lots.find(l => refsMatch(l.lotNumber.replace(/^LOT-/, ''), firstPoRef, 'purchase'))
+                          return lot ? `/inventory/${lot.id}/sell` : '/inventory'
+                        })()}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Sell from {formatLotRef(firstPoRef)}
+                      </Button>
+                    ) : (
+                      <Button to={`/sales-orders/new?poRef=${encodeURIComponent(firstPoRef)}`} variant="outline" size="sm">
+                        Create SO for {formatPoRef(firstPoRef)}
+                      </Button>
+                    )}
                   </div>
                 )}
               </section>
@@ -818,6 +851,7 @@ function LiftFormPage({ editLiftRef }: { editLiftRef?: number }) {
 
         <LiftFormSidebar
           lastLift={lastLift}
+          orders={store.tradeOrders}
           isStockMode={isStockMode}
           allocTotal={allocTotal}
           totalPlanned={totalPlanned}

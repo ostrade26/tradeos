@@ -30,6 +30,7 @@ DEFAULT_STATE: dict[str, Any] = {
     "balanceSettlements": [],
     "spots": [],
     "items": [],
+    "itemCatalog": [],
     "counters": {"po": 0, "so": 0, "lift": 0, "invoice": 0},
 }
 

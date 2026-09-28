@@ -23,6 +23,7 @@ from .helpers import (
     organisation_trader_name,
     parse_products,
     party_details_from_input,
+    refs_match,
     round_qty_mt,
     uid,
     upsert_string,
@@ -61,6 +62,41 @@ from .loader import (
     lot_number_for_po,
     order_status,
 )
+
+
+def _blank_catalog_item(name: str, item_id: str | None = None) -> dict:
+    return {
+        "id": item_id or uid(),
+        "name": name,
+        "hsn": "",
+        "gstRate": None,
+        "grade": "",
+        "packing": "",
+        "notes": "",
+    }
+
+
+def _optional_number(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _stock_po_ref(input_data: dict, existing: dict | None) -> str | None:
+    """Lot a stock sale draws from. Cleared once the SO is booked on a PO."""
+    if input_data.get("side") != "sale":
+        return None
+    if (input_data.get("poRef") or "").strip():
+        return None
+    incoming = (input_data.get("stockPoRef") or "").strip()
+    if incoming:
+        return incoming
+    if existing and not (existing.get("poRef") or "").strip():
+        return (existing.get("stockPoRef") or "").strip() or None
+    return None
 
 
 class TradeService:
@@ -232,6 +268,7 @@ class TradeService:
             "ref": existing["ref"] if existing else (input_data.get("ref") or "").strip(),
             "side": input_data["side"],
             "poRef": input_data.get("poRef", "").strip() or None if input_data.get("side") == "sale" else None,
+            "stockPoRef": _stock_po_ref(input_data, existing),
             "brokerContractRef": input_data.get("brokerContractRef"),
             "date": input_data["date"],
             "partyName": resolved_party_name,
@@ -591,6 +628,8 @@ class TradeService:
         updated = self._build_order_from_input(input_data, data, existing)
         updated["ref"] = existing["ref"]
         updated["poRef"] = resolved_po_ref
+        if resolved_po_ref:
+            updated["stockPoRef"] = None
         updated["id"] = existing["id"]
         # Contract qty is immutable after create — always keep the stored value.
         updated["orderQty"] = existing["orderQty"]
@@ -674,17 +713,17 @@ class TradeService:
 
     def buy_back_po(self, order_id: str, input_data: dict) -> tuple[dict, dict]:
         data = self._read()
-        po = next((o for o in data["tradeOrders"] if o.get("id") == order_id), None)
-        if not po or po.get("side") != "purchase":
-            raise ValueError("Purchase order not found")
+        order = next((o for o in data["tradeOrders"] if o.get("id") == order_id), None)
+        if not order or order.get("side") not in ("purchase", "sale"):
+            raise ValueError("Order not found")
 
         from .buy_back import effective_po_qty, max_buy_back_qty
 
-        linked_sos = get_sos_for_po(data["tradeOrders"], po["ref"])
+        linked_sos = get_sos_for_po(data["tradeOrders"], order["ref"]) if order.get("side") == "purchase" else []
         allocated = sum(o.get("orderQty", 0) for o in linked_sos)
-        lifted = po.get("liftedQty", 0) or 0
-        max_buy_back = max_buy_back_qty(po, linked_sos)
-        if any(lift_touches_ref(l, po["ref"]) for l in data.get("lifts") or [] if l.get("status") == "pending"):
+        lifted = order.get("liftedQty", 0) or 0
+        max_buy_back = max_buy_back_qty(order, linked_sos)
+        if any(lift_touches_ref(l, order["ref"], order.get("side") or "purchase") for l in data.get("lifts") or [] if l.get("status") == "pending"):
             raise ValueError("Remove or complete scheduled lifts before recording a buy back")
 
         qty = round_qty_mt(float(input_data.get("qtyMt") or 0))
@@ -694,7 +733,7 @@ class TradeService:
         if rate <= 0:
             raise ValueError("Enter a valid buy-back rate")
         if qty > max_buy_back:
-            if allocated > 0 or lifted > 0:
+            if order.get("side") == "purchase" and (allocated > 0 or lifted > 0):
                 raise ValueError(
                     f"Cannot buy back more than {format_qty(max_buy_back)} — "
                     f"{format_qty(allocated)} allocated to sales orders"
@@ -707,32 +746,32 @@ class TradeService:
             "date": (input_data.get("date") or datetime.utcnow().date().isoformat()),
             "qtyMt": qty,
             "rate": rate,
-            "rateBasis": input_data.get("rateBasis") or po.get("rateBasis"),
-            "ratePerBasis": input_data.get("ratePerBasis") or po.get("ratePerBasis"),
+            "rateBasis": input_data.get("rateBasis") or order.get("rateBasis"),
+            "ratePerBasis": input_data.get("ratePerBasis") or order.get("ratePerBasis"),
             "remarks": (input_data.get("remarks") or "").strip() or None,
         }
 
-        buy_backs = list(po.get("buyBacks") or [])
+        buy_backs = list(order.get("buyBacks") or [])
         buy_backs.append(buy_back)
-        effective_after = round_qty_mt(effective_po_qty(po) - qty)
-        status_po = {**po, "buyBacks": buy_backs, "liftedQty": lifted}
-        updated_po = {
-            **po,
+        effective_after = round_qty_mt(effective_po_qty(order) - qty)
+        status_order = {**order, "buyBacks": buy_backs, "liftedQty": lifted}
+        updated_order = {
+            **order,
             "buyBacks": buy_backs,
-            "status": "cancelled" if effective_after <= 0 else order_status(status_po),
+            "status": "cancelled" if effective_after <= 0 else order_status(status_order),
         }
 
-        orders = [updated_po if o.get("id") == order_id else o for o in data["tradeOrders"]]
+        orders = [updated_order if o.get("id") == order_id else o for o in data["tradeOrders"]]
         next_data = load_and_normalize({**data, "tradeOrders": orders})
         desc = (
-            f"{po['ref']} — {format_qty(qty)} bought back by {po['partyName']} "
+            f"{order['ref']} — {format_qty(qty)} bought back by {order['partyName']} "
             f"@ {format_contract_rate(rate)}"
         )
         next_data["activities"] = [
-            self._activity("po_buy_back", "Buy back", desc, po["ref"]),
+            self._activity("po_buy_back", "Buy back", desc, order["ref"]),
             *(next_data.get("activities") or []),
         ]
-        return updated_po, self._write(next_data)
+        return updated_order, self._write(next_data)
 
     def close_order(self, order_id: str, input_data: dict) -> tuple[dict, dict]:
         data = self._read()
@@ -743,14 +782,14 @@ class TradeService:
             raise ValueError("Order is already closed")
 
         if any(
-            lift_touches_ref(l, order["ref"])
+            lift_touches_ref(l, order["ref"], order.get("side") or "purchase")
             for l in data.get("lifts") or []
             if l.get("status") == "pending"
         ):
             raise ValueError("Complete or remove pending lifts before closing")
 
         method = (input_data.get("method") or "").strip()
-        if method not in ("cash", "carried_forward", "short_closed"):
+        if method not in ("cash", "carried_forward", "short_closed", "delivered"):
             raise ValueError("Choose how to close this order")
 
         settlements = list(data.get("balanceSettlements") or [])
@@ -758,11 +797,7 @@ class TradeService:
 
         lifted = order.get("liftedQty", 0) or 0
         committed = order.get("committedLiftQty", lifted) or lifted
-        qty_cap = (
-            effective_po_qty(order)
-            if order.get("side") == "purchase"
-            else float(order.get("orderQty", 0) or 0)
-        )
+        qty_cap = effective_po_qty(order)
         to_be_lifted = round_qty_mt(max(0, qty_cap - committed))
 
         po_ref = None
@@ -791,7 +826,10 @@ class TradeService:
 
         carry_pair = remaining_carry_pair(order, data["tradeOrders"], po_ref, so_ref)
 
-        if method == "cash":
+        if method == "delivered":
+            if to_be_lifted > 0:
+                raise ValueError("Quantity is still open. Finish the lifts, or close the remainder first.")
+        elif method == "cash":
             if balance_owed <= 0 and to_be_lifted <= 0:
                 raise ValueError("Nothing to settle in cash")
         elif method == "carried_forward":
@@ -811,13 +849,34 @@ class TradeService:
         settled_at = (input_data.get("settledAt") or datetime.utcnow().date().isoformat()).strip()
         now_iso = datetime.utcnow().isoformat() + "Z"
 
+        if method == "delivered":
+            updated = {
+                **order,
+                "status": "completed",
+                "completionType": "delivered",
+                "closedAt": now_iso,
+                "closedNotes": notes,
+            }
+            desc = f"{order['ref']} marked complete"
+            next_data = {
+                **data,
+                "tradeOrders": [updated if o.get("id") == order_id else o for o in data["tradeOrders"]],
+                "activities": [
+                    self._activity("delivery_completed", "Order completed", desc, order["ref"]),
+                    *(data.get("activities") or []),
+                ],
+            }
+            written = self._write(next_data)
+            saved = next((o for o in written["tradeOrders"] if o.get("id") == order_id), updated)
+            return saved, written
+
         updated = {**order}
         activities: list[dict] = []
 
         if method == "short_closed":
             if balance_owed > 0 and po_ref and so_ref:
                 po = next(
-                    (o for o in data["tradeOrders"] if o.get("ref") == po_ref and o.get("side") == "purchase"),
+                    (o for o in data["tradeOrders"] if o.get("side") == "purchase" and refs_match(o.get("ref"), po_ref, "purchase")),
                     None,
                 )
                 rate = order.get("rate") or (po.get("rate") if po else 0) or 0
@@ -851,7 +910,7 @@ class TradeService:
         else:
             po_lookup = po_ref or (carry_pair[0] if carry_pair else None)
             po = next(
-                (o for o in data["tradeOrders"] if o.get("ref") == po_lookup and o.get("side") == "purchase"),
+                (o for o in data["tradeOrders"] if o.get("side") == "purchase" and refs_match(o.get("ref"), po_lookup, "purchase")),
                 None,
             )
             rate = order.get("rate") or (po.get("rate") if po else 0) or 0
@@ -914,9 +973,24 @@ class TradeService:
                 activities.append(self._activity("order_closed_carried", "Adjust in next delivery", desc, order["ref"]))
 
         orders = [updated if o.get("id") == order_id else o for o in data["tradeOrders"]]
+        lifts = data.get("lifts") or []
+        # Cash or write-off settles the weighment short on own-stock lifts.
+        # Carry-forward keeps that shortfall on the seller for the next delivery.
+        if order.get("side") == "purchase" and method in ("cash", "short_closed"):
+            settled_lifts = []
+            for lift in lifts:
+                allocs = get_lift_allocations(lift)
+                own_stock = bool(allocs) and all(not a.get("soRef") for a in allocs)
+                on_po = any(refs_match(a.get("poRef"), order["ref"], "purchase") for a in allocs)
+                if own_stock and on_po and (lift.get("balanceQtyMt") or 0) > 0:
+                    settled_lifts.append({**lift, "balanceQtyMt": None})
+                else:
+                    settled_lifts.append(lift)
+            lifts = settled_lifts
         next_data = {
             **data,
             "tradeOrders": orders,
+            "lifts": lifts,
             "balanceSettlements": settlements,
             "activities": [*activities, *(data.get("activities") or [])],
         }
@@ -1457,7 +1531,7 @@ class TradeService:
         if order.get("liftedQty", 0) > 0:
             return f"This order has {format_qty(order['liftedQty'])} lifted. Remove lift records first."
         active_lifts = [l for l in lifts if not l.get("deletedAt")]
-        if any(lift_touches_ref(l, order["ref"]) for l in active_lifts):
+        if any(lift_touches_ref(l, order["ref"], order.get("side") or "purchase") for l in active_lifts):
             return "This order has lift records linked to it. Delete those lifts first."
         if order.get("side") == "purchase":
             linked = [
@@ -1881,11 +1955,76 @@ class TradeService:
             raise ValueError("Item name is required")
         candidates = collect_item_names(data)
         canonical = canonical_item_name(trimmed, candidates)
+        catalog = list(data.get("itemCatalog") or [])
+        if not any(item_matches(row.get("name") or "", canonical) for row in catalog):
+            catalog.append(_blank_catalog_item(canonical))
         for existing in data.get("items") or []:
             if item_matches(existing, canonical):
+                if catalog != list(data.get("itemCatalog") or []):
+                    return existing, self._write({**data, "itemCatalog": catalog})
                 return existing, data
-        next_data = {**data, "items": upsert_string(data.get("items") or [], canonical)}
+        next_data = {
+            **data,
+            "items": upsert_string(data.get("items") or [], canonical),
+            "itemCatalog": catalog,
+        }
         return canonical, self._write(next_data)
+
+    def save_catalog_item(self, input_data: dict, item_id: str | None = None) -> tuple[dict, dict]:
+        data = self._read()
+        name = (input_data.get("name") or "").strip()
+        if not name:
+            raise ValueError("Item name is required")
+        catalog = list(data.get("itemCatalog") or [])
+        current = next((row for row in catalog if row.get("id") == item_id), None) if item_id else None
+        previous_name = (current.get("name") if current else "") or ""
+        if item_id and item_id.startswith("name:") and not current:
+            previous_name = item_id.removeprefix("name:")
+        for row in catalog:
+            if row.get("id") == (current or {}).get("id"):
+                continue
+            if item_matches(row.get("name") or "", name):
+                raise ValueError("This item already exists")
+        saved = {
+            **_blank_catalog_item(name, current.get("id") if current else None),
+            "name": name,
+            "hsn": (input_data.get("hsn") or "").strip(),
+            "gstRate": _optional_number(input_data.get("gstRate")),
+            "grade": (input_data.get("grade") or "").strip(),
+            "packing": (input_data.get("packing") or "").strip(),
+            "notes": (input_data.get("notes") or "").strip(),
+        }
+        if current:
+            catalog = [saved if row.get("id") == current.get("id") else row for row in catalog]
+        else:
+            catalog.append(saved)
+        names = [n for n in (data.get("items") or []) if not previous_name or not item_matches(n, previous_name)]
+        next_data = {**data, "items": upsert_string(names, name), "itemCatalog": catalog}
+        return saved, self._write(next_data)
+
+    def can_delete_catalog_item(self, item_id: str) -> dict:
+        data = self._read()
+        row = next((r for r in data.get("itemCatalog") or [] if r.get("id") == item_id), None)
+        name = row.get("name") if row else item_id.removeprefix("name:")
+        if not name:
+            return {"ok": False, "reason": "Item not found"}
+        if any(item_matches(o.get("itemName") or "", name) for o in data.get("tradeOrders") or []):
+            return {"ok": False, "reason": "Used on one or more orders"}
+        return {"ok": True}
+
+    def delete_catalog_item(self, item_id: str) -> tuple[None, dict]:
+        check = self.can_delete_catalog_item(item_id)
+        if not check.get("ok"):
+            raise ValueError(check.get("reason") or "Cannot delete item")
+        data = self._read()
+        row = next((r for r in data.get("itemCatalog") or [] if r.get("id") == item_id), None)
+        name = row.get("name") if row else item_id.removeprefix("name:")
+        next_data = {
+            **data,
+            "itemCatalog": [r for r in data.get("itemCatalog") or [] if r.get("id") != item_id],
+            "items": [n for n in (data.get("items") or []) if not item_matches(n, name)],
+        }
+        return None, self._write(next_data)
 
     def add_spot(self, name: str) -> tuple[str, dict]:
         data = self._read()

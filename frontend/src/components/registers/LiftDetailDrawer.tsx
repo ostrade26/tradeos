@@ -74,7 +74,7 @@ export function LiftDetailDrawer({ lift, open, onClose, docked = false, onDockCh
   }).filter((message): message is string => message != null)
 
   const partyName = lift.stockLift ? lift.sellerName : (lift.buyerName || lift.sellerName)
-  const orderSummary = formatLiftOrderSummary(lift)
+  const orderSummary = formatLiftOrderSummary(lift, store.tradeOrders)
   const primaryPoRef = allocations[0]?.poRef ?? lift.poRef
   const showDispatchFromStock = isStockLift(lift) && Boolean(primaryPoRef)
 

@@ -3,6 +3,7 @@ import type { TradeStoreValue } from '../store/TradeStore'
 import { exportTradeDataToCsv, exportTradeDataToExcel } from './spreadsheetBackup'
 import { downloadFile } from './export'
 import { BACKUP_VERSION, parseTradeBackup, type TradeBackup } from './tradeBackupCore'
+import { importIntegrityWarnings } from './inferImportLinks'
 
 export { BACKUP_VERSION, parseTradeBackup, type TradeBackup } from './tradeBackupCore'
 export { readBackupFile, readMultipleSpreadsheetFiles, exportImportTemplate } from './spreadsheetBackup'
@@ -79,11 +80,15 @@ export function describeImportResult(data: TradeData): { summary: string; hint?:
   const completedSos = sos.filter(o => o.status === 'completed').length
   const summary = describeTradeBackup(data)
   const allCompleted = orders.length > 0 && orders.every(o => o.status === 'completed' || o.status === 'cancelled')
-  const hint = allCompleted
-    ? 'Imported orders are fully lifted — open Register (completed) on PO, SO, or Lift pages to view them.'
-    : (completedPos + completedSos > 0
-      ? 'Some imported orders are fully lifted — use the Register tab on PO/SO pages for completed history.'
-      : undefined)
+  const hintParts = [
+    allCompleted
+      ? 'Imported orders are fully lifted — open Register (completed) on PO, SO, or Lift pages to view them.'
+      : (completedPos + completedSos > 0
+        ? 'Some imported orders are fully lifted — use the Register tab on PO/SO pages for completed history.'
+        : undefined),
+    ...importIntegrityWarnings(data.tradeOrders ?? [], data.lifts ?? []),
+  ].filter(Boolean)
+  const hint = hintParts.length > 0 ? hintParts.join(' ') : undefined
   if (orders.length === 0 && lifts === 0) {
     return { summary: 'No rows recognized', hint: 'Check column headers against the Template, or name files PO.xlsx, SO.xlsx, Lift.xlsx.' }
   }

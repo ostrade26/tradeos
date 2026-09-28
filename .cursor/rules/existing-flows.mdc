@@ -1,0 +1,21 @@
+---
+description: New use cases must not disturb processes that already work
+alwaysApply: true
+---
+
+# Build on existing flows
+
+When adding a use case to a process that already works, keep that process intact.
+
+## Do
+
+- Add the new path beside the current one. Purchase booking, sales booking, lifts, and godown stock stay separate unless the user asks to change one of them.
+- Reuse the existing document for the job it already does. A new quantity pool, label, or screen must not rewrite an open purchase, a booked sales order, or a lift that was already correct.
+- Check the neighboring registers after the change: purchase order, sales order, lift, and inventory. Numbers and links that were right before must stay right.
+- If the change is drastic, stop and say so before building. Name which working path it would change, and wait for the user to confirm.
+
+## Do not
+
+- Fold a new case into an old calculation so both cases share one balance, one ref, or one link.
+- Relabel or rebook an existing order because a later step looks similar (a closed purchase, a lot number, a stock lift).
+- “Simplify” by changing a working path the user did not ask to change.

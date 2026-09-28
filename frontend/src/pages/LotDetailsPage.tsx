@@ -10,8 +10,10 @@ import { DataTable } from '../components/ui/DataTable'
 import { ProgressBar } from '../components/ui/CommandPalette'
 import { formatCurrency, formatDate, formatMt, formatQty, cn, availableQtyClass } from '../lib/utils'
 import { formatContractRate, formatRateCell, SALE_RATE_COLUMN_HEADER } from '../lib/orderRate'
-import { formatLiftRef, formatPoRef, formatSoRef } from '../lib/tradeRefs'
+import { formatLiftRef, formatPoRef, formatSoRef, refsMatch } from '../lib/tradeRefs'
 import { useTradeStore } from '../store/TradeStore'
+import { getOrdersDrawingLot } from '../data/mockData'
+import { purchaseIsClosed } from '../components/registers/StockPoLink'
 import { getLiftAllocations, liftTouchesRef } from '../lib/liftAllocations'
 
 function poRefFromLot(lotNumber: string) {
@@ -27,8 +29,8 @@ export function LotDetailsPage() {
   const poRef = lot ? poRefFromLot(lot.lotNumber) : ''
 
   const linkedSOs = useMemo(
-    () => (poRef ? store.getSOsForPO(poRef) : []),
-    [store, poRef],
+    () => (poRef ? getOrdersDrawingLot(store.tradeOrders, poRef, store.lifts) : []),
+    [store.tradeOrders, store.lifts, poRef],
   )
 
   const allocations = useMemo(
@@ -51,7 +53,7 @@ export function LotDetailsPage() {
     if (!lot) return []
 
     const poLifts = lifts
-      .filter(l => !l.deletedAt && liftTouchesRef(l, poRef))
+      .filter(l => !l.deletedAt && liftTouchesRef(l, poRef, 'purchase'))
       .sort((a, b) => a.date.localeCompare(b.date) || a.liftRef - b.liftRef)
 
     let onHand = 0
@@ -72,12 +74,19 @@ export function LotDetailsPage() {
     }]
 
     for (const lift of poLifts) {
-      const allocs = getLiftAllocations(lift).filter(a => a.poRef === poRef)
-      const qty = allocs.reduce((s, a) => s + a.qtyMt, 0)
-      if (qty <= 0) continue
+      const allocs = getLiftAllocations(lift).filter(a => refsMatch(a.poRef, poRef, 'purchase'))
+      const stockInAllocs = allocs.filter(a => !a.soRef)
+      const lotSaleAllocs = allocs.filter(a => {
+        if (!a.soRef) return false
+        const so = store.tradeOrders.find(o => o.side === 'sale' && refsMatch(o.ref, a.soRef, 'sale'))
+        return Boolean(so?.stockPoRef && !so.poRef && refsMatch(so.stockPoRef, poRef, 'purchase'))
+      })
+      const stockInQty = stockInAllocs.reduce((s, a) => s + a.qtyMt, 0)
+      const lotSaleQty = lotSaleAllocs.reduce((s, a) => s + a.qtyMt, 0)
+      if (stockInQty <= 0 && lotSaleQty <= 0) continue
 
-      // Own-stock lifts bring goods into the godown; SO lifts dispatch them out.
-      const isStockIn = lift.stockLift === true || (allocs.length > 0 && allocs.every(a => !a.soRef))
+      const isStockIn = stockInQty > 0 && lotSaleQty <= 0
+      const qty = isStockIn ? stockInQty : lotSaleQty
 
       if (isStockIn) {
         onHand += qty
@@ -103,7 +112,7 @@ export function LotDetailsPage() {
     }
 
     return rows.reverse()
-  }, [lot, lifts, poRef])
+  }, [lot, lifts, poRef, store.tradeOrders])
 
   if (!lot) {
     return (
@@ -150,9 +159,11 @@ export function LotDetailsPage() {
                 Dispatch from stock
               </Button>
             )}
-            <Button to={`/inventory/${lot.id}/sell`} size="sm">
-              Sell from this lot
-            </Button>
+            {lot.available > 0 && (
+              <Button to={`/inventory/${lot.id}/sell`} size="sm">
+                Sell from this lot
+              </Button>
+            )}
           </div>
         }
       />
@@ -170,7 +181,7 @@ export function LotDetailsPage() {
             <div className="px-5 pt-5">
               <CardHeader
                 title="Allocations"
-                subtitle="Sales orders linked to this lot"
+                subtitle="Sales orders sold from this lot"
               />
             </div>
             {allocations.length === 0 ? (
@@ -178,8 +189,14 @@ export function LotDetailsPage() {
                 <EmptyState
                   icon={<Package className="h-10 w-10" />}
                   title="No allocations yet"
-                  description={`Stock from ${poRef} is not linked to any sales orders.`}
-                  action={<Button to={`/sales-orders/new?poRef=${encodeURIComponent(poRef)}`} size="sm">Create SO against {formatPoRef(poRef)}</Button>}
+                  description={lot.available > 0
+                    ? 'Sell quantity on hand. Sales booked on the purchase stay on the purchase order.'
+                    : lot.remaining > 0
+                      ? 'Quantity on hand is already sold from this lot.'
+                      : 'Nothing has been received into this lot yet.'}
+                  action={lot.available > 0
+                    ? <Button to={`/inventory/${lot.id}/sell`} size="sm">Sell from this lot</Button>
+                    : undefined}
                 />
               </div>
             ) : (
@@ -262,7 +279,12 @@ export function LotDetailsPage() {
                   { label: 'Seller', value: lot.producer },
                   { label: 'Broker', value: lot.broker },
                   { label: 'Purchase Date', value: formatDate(lot.purchaseDate) },
-                  { label: 'PO Reference', value: poRef },
+                  {
+                    label: 'PO Reference',
+                    value: purchaseIsClosed(store.getOrderByRef(poRef, 'purchase'))
+                      ? lot.lotNumber
+                      : formatPoRef(poRef),
+                  },
                   { label: 'PO Quantity', value: formatQty(lot.quantityPurchased, lot.unit) },
                   { label: 'Allocated', value: formatQty(lot.allocated, lot.unit) },
                   {

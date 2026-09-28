@@ -41,7 +41,7 @@ export function getOrderBalanceOwed(
   }
 
   if (order.side === 'purchase') {
-    const linked = getSOsForPO(orders, order.ref).filter(
+    const linked = getSOsForPO(orders, order.ref, lifts).filter(
       o => o.status !== 'completed' && o.status !== 'cancelled',
     )
     const withBalance = linked
@@ -72,7 +72,7 @@ export function canCloseOrder(
     return { ok: false, reason: 'Order is already closed.', balanceOwed: 0, toBeLifted: 0, availableMethods: [] }
   }
 
-  if (lifts.some(l => l.status === 'pending' && liftTouchesRef(l, order.ref))) {
+  if (lifts.some(l => l.status === 'pending' && liftTouchesRef(l, order.ref, order.side))) {
     return {
       ok: false,
       reason: 'Complete or remove pending lifts before closing.',
@@ -84,7 +84,7 @@ export function canCloseOrder(
 
   const remaining = toBeLifted(order)
   const { balanceOwed, poRef, soRef } = getOrderBalanceOwed(order, lifts, settlements, orders)
-  const carryPair = remainingCarryPair(order, orders, poRef, soRef)
+  const carryPair = remainingCarryPair(order, orders, poRef, soRef, lifts)
 
   if (balanceOwed <= 0 && remaining <= 0) {
     return {
@@ -114,13 +114,14 @@ export function remainingCarryPair(
   orders: TradeOrder[],
   balancePoRef?: string,
   balanceSoRef?: string,
+  lifts: Lift[] = [],
 ): { poRef: string; soRef: string } | null {
   if (balancePoRef && balanceSoRef) return { poRef: balancePoRef, soRef: balanceSoRef }
   if (order.side === 'sale' && order.poRef) {
     return { poRef: order.poRef, soRef: order.ref }
   }
   if (order.side === 'purchase') {
-    const linked = getSOsForPO(orders, order.ref).filter(
+    const linked = getSOsForPO(orders, order.ref, lifts).filter(
       o => o.status !== 'completed' && o.status !== 'cancelled',
     )
     return { poRef: order.ref, soRef: linked[0]?.ref ?? '' }
@@ -133,6 +134,7 @@ export function completionTypeLabel(type: TradeOrder['completionType']): string 
     case 'cash_settled': return 'Closed · cash'
     case 'carried_forward': return 'Closed · next delivery'
     case 'short_closed': return 'Closed · write-off'
+    case 'delivered': return 'Marked complete'
     default: return null
   }
 }

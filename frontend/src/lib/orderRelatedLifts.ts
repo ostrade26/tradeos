@@ -1,5 +1,6 @@
 import type { Lift, TradeOrder } from '../data/mockData'
 import { getLiftAllocations } from './liftAllocations'
+import { refsMatch } from './tradeRefs'
 import { roundQtyMt } from './utils'
 
 export type SoLiftEntry = {
@@ -30,16 +31,16 @@ function liftsMatching(
 }
 
 export function liftsForSoOnPo(lifts: Lift[], poRef: string, soRef: string): SoLiftEntry[] {
-  return liftsMatching(lifts, (p, s) => p === poRef && s === soRef)
+  return liftsMatching(lifts, (p, s) => refsMatch(p, poRef, 'purchase') && Boolean(s) && refsMatch(s, soRef, 'sale'))
 }
 
 /** All lift allocations for an SO (any PO). */
 export function liftsForSo(lifts: Lift[], soRef: string): SoLiftEntry[] {
-  return liftsMatching(lifts, (_p, s) => s === soRef)
+  return liftsMatching(lifts, (_p, s) => Boolean(s) && refsMatch(s, soRef, 'sale'))
 }
 
 export function stockLiftsForPo(lifts: Lift[], poRef: string): SoLiftEntry[] {
-  return liftsMatching(lifts, (p, s) => p === poRef && !s)
+  return liftsMatching(lifts, (p, s) => refsMatch(p, poRef, 'purchase') && !s)
 }
 
 export function groupLiftsBySoForPo(
@@ -47,10 +48,22 @@ export function groupLiftsBySoForPo(
   linkedSOs: TradeOrder[],
   lifts: Lift[],
 ): SoLiftGroup[] {
-  return linkedSOs.map(so => ({
-    so,
-    deliveredQty: so.liftedQty,
-    pendingQty: roundQtyMt(Math.max(0, so.orderQty - so.liftedQty)),
-    lifts: liftsForSoOnPo(lifts, poRef, so.ref),
-  }))
+  return linkedSOs.map(so => {
+    const entries = liftsForSoOnPo(lifts, poRef, so.ref)
+    if (!so.poRef) {
+      const deliveredQty = roundQtyMt(
+        entries.filter(e => e.lift.status !== 'pending').reduce((sum, e) => sum + e.qtyMt, 0),
+      )
+      const pendingQty = roundQtyMt(
+        entries.filter(e => e.lift.status === 'pending').reduce((sum, e) => sum + e.qtyMt, 0),
+      )
+      return { so, deliveredQty, pendingQty, lifts: entries }
+    }
+    return {
+      so,
+      deliveredQty: so.liftedQty,
+      pendingQty: roundQtyMt(Math.max(0, so.orderQty - so.liftedQty)),
+      lifts: entries,
+    }
+  })
 }

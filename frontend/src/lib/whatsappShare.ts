@@ -12,7 +12,7 @@ import { getLiftTankers } from './liftTankers'
 import { getLiftAllocations } from './liftAllocations'
 import { LOAD_ON_RISK_WHATSAPP_LINES } from './loadOnRisk'
 import { formatCurrency, formatDate, formatQty } from './utils'
-import { formatLiftRef, formatOrderRef, formatPoRef, formatSoRef } from './tradeRefs'
+import { formatLiftRef, formatLotRef, formatOrderRef, formatPoRef, formatSoRef } from './tradeRefs'
 
 const DIVIDER = '─────────────────'
 
@@ -115,7 +115,7 @@ export function formatLiftWhatsAppMessage(lift: Lift): string {
 
   const dealLines = allocations.flatMap(a => [
     bullet(
-      a.soRef ? `${formatSoRef(a.soRef)} / ${formatPoRef(a.poRef)}` : `${formatPoRef(a.poRef)} (stock)`,
+      a.soRef ? `${formatSoRef(a.soRef)} / ${formatPoRef(a.poRef)}` : formatLotRef(a.poRef),
       formatQty(a.qtyMt),
     ),
   ]).concat([

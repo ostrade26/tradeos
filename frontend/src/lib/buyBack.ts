@@ -1,6 +1,7 @@
 import type { BuyBack, Lift, TradeOrder } from '../data/mockData'
 import { liftTouchesRef } from './liftAllocations'
 import { contractRateFromOrder } from './orderRate'
+import { refsMatch } from './tradeRefs'
 
 export type { BuyBack }
 
@@ -17,56 +18,65 @@ export function getAllocatedSoQty(linkedSOs: TradeOrder[]): number {
   return linkedSOs.reduce((sum, o) => sum + o.orderQty, 0)
 }
 
+/** Sales orders the user booked on this purchase. Lift-only SOs stay out of buy-back. */
+export function sosBookedOnPo(linkedSOs: TradeOrder[], poRef: string): TradeOrder[] {
+  return linkedSOs.filter(so => refsMatch(so.poRef, poRef, 'purchase'))
+}
+
 /** PO qty still active after buy backs (contract minus bought back). */
 export function effectivePoQty(po: Pick<TradeOrder, 'orderQty' | 'buyBacks'>): number {
   return Math.max(0, po.orderQty - totalBuyBackQty(po))
 }
 
 /** Unlifted qty not allocated to linked SOs — available for buy back. */
-export function maxBuyBackQty(po: TradeOrder, linkedSOs: TradeOrder[]): number {
-  return Math.max(
-    0,
-    po.orderQty - totalBuyBackQty(po) - getAllocatedSoQty(linkedSOs) - po.liftedQty,
-  )
+export function maxBuyBackQty(order: TradeOrder, linkedSOs: TradeOrder[] = []): number {
+  const leftover = order.orderQty - totalBuyBackQty(order) - order.liftedQty
+  if (order.side === 'sale') {
+    return Math.max(0, leftover)
+  }
+  return Math.max(0, leftover - getAllocatedSoQty(linkedSOs))
 }
 
-export function totalBuyBackQty(po: Pick<TradeOrder, 'buyBacks'>): number {
-  return (po.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
+export function totalBuyBackQty(order: Pick<TradeOrder, 'buyBacks'>): number {
+  return (order.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
 }
 
 export function hasBuyBacks(order: Pick<TradeOrder, 'buyBacks'>): boolean {
   return (order.buyBacks?.length ?? 0) > 0
 }
 
-export function canBuyBackPO(
-  po: TradeOrder,
+export function canBuyBackOrder(
+  order: TradeOrder,
   lifts: Lift[],
-  linkedSOs: TradeOrder[],
+  linkedSOs: TradeOrder[] = [],
+  hasPendingLift?: boolean,
 ): { ok: boolean; reason?: string } {
-  if (po.side !== 'purchase') {
-    return { ok: false, reason: 'Only purchase orders support buy back.' }
-  }
-  if (po.status === 'cancelled') {
+  if (order.status === 'cancelled') {
     return { ok: false, reason: 'This order is already closed.' }
   }
-  if (lifts.some(l => liftTouchesRef(l, po.ref) && l.status === 'pending')) {
+  const side = order.side === 'sale' ? 'sale' : 'purchase'
+  const pending = hasPendingLift ?? lifts.some(l => liftTouchesRef(l, order.ref, side) && l.status === 'pending')
+  if (pending) {
     return { ok: false, reason: 'Remove or complete scheduled lifts before recording a buy back.' }
   }
-  const maxQty = maxBuyBackQty(po, linkedSOs)
+  const maxQty = maxBuyBackQty(order, linkedSOs)
   if (maxQty <= 0) {
-    if (linkedSOs.length > 0 && po.liftedQty > 0) {
+    if (order.side === 'purchase' && linkedSOs.length > 0 && order.liftedQty > 0) {
       return { ok: false, reason: 'No unlifted quantity left to buy back. Reduce SO qty or wait for pending lifts.' }
     }
-    if (linkedSOs.length > 0) {
+    if (order.side === 'purchase' && linkedSOs.length > 0) {
       return { ok: false, reason: 'All quantity is allocated to sales orders. Reduce SO qty first.' }
     }
-    if (po.liftedQty > 0) {
+    if (order.liftedQty > 0) {
       return { ok: false, reason: 'All remaining quantity has already been lifted.' }
     }
     return { ok: false, reason: 'No quantity available for buy back.' }
   }
   return { ok: true }
 }
+
+/** @deprecated Use canBuyBackOrder */
+export const canBuyBackPO = canBuyBackOrder
 
 /** Suggested buy-back rate in ₹/10 KG — nudged slightly above PO rate when known. */
 export function suggestedBuyBackRatePer10Kg(po: TradeOrder): number {

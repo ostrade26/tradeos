@@ -9,10 +9,11 @@ import {
   type SoLiftEntry,
   type SoLiftGroup,
 } from '../../lib/orderRelatedLifts'
-import { formatDate, formatQty, cn } from '../../lib/utils'
+import { formatDate, formatQty, cn, roundQtyMt } from '../../lib/utils'
 import { formatLiftRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
 import { formatTankerNo, getLiftTankers } from '../../lib/liftTankers'
-import { appPath } from '../../lib/appShellMode'
+import { orderRegisterHref, registerModeForOrder } from '../../lib/registerViewMode'
+import { StockPoLink } from './StockPoLink'
 import { DetailGroup } from './DetailPanelSections'
 import {
   AllocationSoCard,
@@ -113,7 +114,7 @@ function SoLiftGroupBlock({
     <AllocationSoCard
       title={(
         <Link
-          to={`/sales-orders?ref=${encodeURIComponent(so.ref)}`}
+          to={orderRegisterHref('sale', so.ref, registerModeForOrder(so))}
           onClick={onNavigate}
           className="text-[13px] font-medium text-accent hover:underline"
         >
@@ -121,7 +122,8 @@ function SoLiftGroupBlock({
         </Link>
       )}
       subtitle={so.partyName}
-      totalQty={so.orderQty}
+      totalLabel={so.poRef ? 'Total SO' : 'On this PO'}
+      totalQty={so.poRef ? so.orderQty : roundQtyMt(deliveredQty + pendingQty)}
       deliveredQty={deliveredQty}
       pendingQty={pendingQty}
     >
@@ -185,26 +187,36 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
   }
 
   const poRef = order.poRef
-  const soLifts = poRef
-    ? liftsForSoOnPo(lifts, poRef, order.ref)
+  const stockPoRef = order.stockPoRef && !poRef ? order.stockPoRef : undefined
+  const contractPoRef = stockPoRef ? undefined : poRef
+  const soLifts = contractPoRef
+    ? liftsForSoOnPo(lifts, contractPoRef, order.ref)
     : liftsForSo(lifts, order.ref)
 
-  if (!poRef && soLifts.length === 0) return null
+  if (!contractPoRef && !stockPoRef && soLifts.length === 0) return null
 
   return (
     <DetailGroup title="Allocations" icon={Layers}>
       <RelatedCard>
-        {poRef && (
+        {contractPoRef && (
           <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
             <div className="flex items-baseline gap-2 flex-wrap min-w-0">
               <Link
-                to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
+                to={orderRegisterHref('purchase', contractPoRef)}
                 onClick={onNavigate}
                 className="text-[13px] font-medium text-accent hover:underline shrink-0"
               >
-                {formatPoRef(poRef)}
+                {formatPoRef(contractPoRef)}
               </Link>
               <span className="text-[13px] text-muted">Linked purchase order</span>
+            </div>
+          </div>
+        )}
+        {stockPoRef && (
+          <div className="bg-gray-50/90 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 p-3">
+            <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+              <StockPoLink poRef={stockPoRef} onNavigate={onNavigate} className="text-[13px] font-medium text-accent" />
+              <span className="text-[13px] text-muted">Selling stock on hand</span>
             </div>
           </div>
         )}

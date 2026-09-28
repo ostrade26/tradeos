@@ -16,10 +16,13 @@ def effective_po_qty(po: dict[str, Any]) -> float:
     return round_qty_mt(max(0.0, float(po.get("orderQty", 0) or 0) - total_buy_back_qty(po)))
 
 
-def max_buy_back_qty(po: dict[str, Any], linked_sos: list[dict]) -> float:
-    """Unlifted quantity not allocated to SOs — available for another buy back."""
-    allocated = sum(float(o.get("orderQty", 0) or 0) for o in linked_sos)
-    lifted = float(po.get("liftedQty", 0) or 0)
-    contract = float(po.get("orderQty", 0) or 0)
-    already = total_buy_back_qty(po)
-    return round_qty_mt(max(0.0, contract - already - allocated - lifted))
+def max_buy_back_qty(order: dict[str, Any], linked_sos: list[dict] | None = None) -> float:
+    """Unlifted quantity still available for another buy back."""
+    lifted = float(order.get("liftedQty", 0) or 0)
+    contract = float(order.get("orderQty", 0) or 0)
+    already = total_buy_back_qty(order)
+    leftover = contract - already - lifted
+    if order.get("side") == "sale":
+        return round_qty_mt(max(0.0, leftover))
+    allocated = sum(float(o.get("orderQty", 0) or 0) for o in (linked_sos or []))
+    return round_qty_mt(max(0.0, leftover - allocated))

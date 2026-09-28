@@ -24,17 +24,15 @@ import {
   type OrderSide,
   type DeliveryType,
   toBeLifted,
-  getRemainingSellQty,
-  getSOsForPO,
 } from '../data/mockData'
 import { getOutstandingBalance as calcOutstandingBalance, getSellerOutstandingBalance } from '../lib/liftBalance'
 import { dedupeDirectory, refreshPartyLocationsFromOrders } from '../lib/ensureDirectoryFromOrders'
-import { liftTouchesRef } from '../lib/liftAllocations'
+import { applyLiftTotals, buildPoRegisterIndex, liftTouchesRef, poRegisterFigures, type PoRegisterFigures } from '../lib/liftAllocations'
 import type { BuyBackInput } from '../lib/buyBack'
 import type { CloseOrderMethod } from '../lib/orderClosure'
 import { formatDeletionDate } from '../lib/orderDeletion'
 import { formatQty, normalizeDateToIso, repairAmbiguousTradeDates } from '../lib/utils'
-import { formatPoRef, formatSoRef, refCore } from '../lib/tradeRefs'
+import { formatPoRef, formatSoRef, refsMatch } from '../lib/tradeRefs'
 import type { CompanyResolutionResult } from '../lib/companyResolution'
 import { tradeApi, type TradeData } from '../api/tradeApi'
 import { useAuth } from '../hooks/useAuth'
@@ -46,6 +44,7 @@ export interface CreateOrderInput {
   ref?: string
   side: OrderSide
   poRef?: string
+  stockPoRef?: string
   brokerContractRef?: string
   date: string
   partyName: string
@@ -178,7 +177,7 @@ export interface TradeStoreValue extends TradeData {
   addOrder: (input: CreateOrderInput) => Promise<TradeOrder>
   updateOrder: (id: string, input: CreateOrderInput) => Promise<TradeOrder>
   buyBackPo: (id: string, input: BuyBackInput) => Promise<TradeOrder>
-  closeOrder: (id: string, input: { method: CloseOrderMethod; notes?: string; settledAt?: string }) => Promise<TradeOrder>
+  closeOrder: (id: string, input: { method: CloseOrderMethod | 'delivered'; notes?: string; settledAt?: string }) => Promise<TradeOrder>
   addLift: (input: CreateLiftInput) => Promise<Lift>
   updateLift: (id: string, input: UpdateLiftInput) => Promise<Lift>
   markLiftDelivered: (id: string, input: MarkLiftDeliveredInput) => Promise<Lift>
@@ -211,6 +210,9 @@ export interface TradeStoreValue extends TradeData {
   deleteRetailer: (id: string) => Promise<void>
   canDeleteRetailer: (id: string) => { ok: boolean; reason?: string }
   addItem: (name: string) => Promise<string>
+  saveCatalogItem: (input: { name: string; hsn?: string; gstRate?: number | null; grade?: string; packing?: string; notes?: string }, id?: string) => Promise<import('../data/mockData').CatalogItem>
+  deleteCatalogItem: (id: string) => Promise<void>
+  canDeleteCatalogItem: (name: string) => { ok: boolean; reason?: string }
   addSpot: (name: string) => Promise<string>
   getNextRef: (side: OrderSide) => string
   getPOPending: () => TradeOrder[]
@@ -244,6 +246,7 @@ const defaultData: TradeData = {
   balanceSettlements: [],
   spots: [],
   items: [],
+  itemCatalog: [],
   counters: { po: 0, so: 0, lift: 0, invoice: 0 },
 }
 
@@ -300,9 +303,10 @@ function normalizeTradeState(state: Partial<TradeData> | null | undefined): Trad
     balanceSettlements: Array.isArray(state.balanceSettlements) ? state.balanceSettlements : [],
     spots: Array.isArray(state.spots) ? state.spots : [],
     items: Array.isArray(state.items) ? state.items : [],
+    itemCatalog: Array.isArray(state.itemCatalog) ? state.itemCatalog : [],
     counters: { ...defaultData.counters, ...(state.counters ?? {}) },
   }
-  return dedupeDirectory(refreshPartyLocationsFromOrders(next))
+  return applyLiftTotals(dedupeDirectory(refreshPartyLocationsFromOrders(next)))
 }
 
 const TradeContext = createContext<TradeStoreValue | null>(null)
@@ -311,18 +315,22 @@ function monthKey(date: string) {
   return new Date(date).toLocaleString('en-US', { month: 'short' })
 }
 
-function getDeleteBlockReason(order: TradeOrder, orders: TradeOrder[], lifts: Lift[]): string | undefined {
+function getDeleteBlockReason(
+  order: TradeOrder,
+  lifts: Lift[],
+  poIndex: Map<string, PoRegisterFigures>,
+): string | undefined {
   if (order.deleteScheduledAt) {
     return `Already in Deleted — restores until ${formatDeletionDate(order.deleteScheduledAt)}.`
   }
   if (order.liftedQty > 0) {
     return `This order has ${formatQty(order.liftedQty)} lifted. Remove lift records first.`
   }
-  if (lifts.some(l => !l.deletedAt && liftTouchesRef(l, order.ref))) {
+  if (lifts.some(l => !l.deletedAt && liftTouchesRef(l, order.ref, order.side))) {
     return 'This order has lift records linked to it. Delete those lifts first.'
   }
   if (order.side === 'purchase') {
-    const linkedSOs = getSOsForPO(orders, order.ref).filter(s => !s.deleteScheduledAt)
+    const linkedSOs = poRegisterFigures(poIndex, order.ref).linkedSos.filter(s => !s.deleteScheduledAt)
     if (linkedSOs.length > 0) {
       return `This PO has linked SO(s): ${linkedSOs.map(s => s.ref).join(', ')}. Delete those first.`
     }
@@ -682,17 +690,47 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     [applyMutation],
   )
 
+  const saveCatalogItem = useCallback(
+    (input: { name: string; hsn?: string; gstRate?: number | null; grade?: string; packing?: string; notes?: string }, id?: string) =>
+      applyMutation(() => (
+        id
+          ? tradeApi.updateCatalogItem(id, input)
+          : tradeApi.saveCatalogItem(input)
+      )),
+    [applyMutation],
+  )
+
+  const deleteCatalogItem = useCallback(
+    async (id: string) => {
+      await applyMutation(() => tradeApi.deleteCatalogItem(id))
+    },
+    [applyMutation],
+  )
+
+  const canDeleteCatalogItem = useCallback((name: string) => {
+    const key = name.trim().toLowerCase()
+    if (data.tradeOrders.some(o => o.itemName.trim().toLowerCase() === key)) {
+      return { ok: false, reason: 'Used on one or more orders' }
+    }
+    return { ok: true }
+  }, [data.tradeOrders])
+
   const addSpot = useCallback(
     (name: string) => applyMutation(() => tradeApi.createSpot(name)),
     [applyMutation],
   )
 
+  const poIndex = useMemo(
+    () => buildPoRegisterIndex(data.tradeOrders, data.lifts),
+    [data.tradeOrders, data.lifts],
+  )
+
   const canDeleteOrder = useCallback((id: string) => {
     const order = data.tradeOrders.find(o => o.id === id)
     if (!order) return { ok: false, reason: 'Order not found' }
-    const reason = getDeleteBlockReason(order, data.tradeOrders, data.lifts)
+    const reason = getDeleteBlockReason(order, data.lifts, poIndex)
     return reason ? { ok: false, reason } : { ok: true }
-  }, [data.tradeOrders, data.lifts])
+  }, [data.tradeOrders, data.lifts, poIndex])
 
   const canDeleteLift = useCallback((id: string) => {
     const lift = data.lifts.find(l => l.id === id)
@@ -741,11 +779,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     (ref: string, side: OrderSide) => {
       const needle = ref.trim()
       if (!needle) return undefined
-      const exact = data.tradeOrders.find(o => o.side === side && o.ref === needle)
-      if (exact) return exact
-      const core = refCore(needle)
-      if (!core) return undefined
-      return data.tradeOrders.find(o => o.side === side && refCore(o.ref) === core)
+      return data.tradeOrders.find(o => o.side === side && refsMatch(o.ref, needle, side))
     },
     [data.tradeOrders],
   )
@@ -843,23 +877,23 @@ export function TradeProvider({ children }: { children: ReactNode }) {
       )
       const withAvail = open.filter(o => {
         if (includeRef && o.ref === includeRef) return true
-        return getRemainingSellQty(data.tradeOrders, o.ref, data.lifts) > 0
+        return poRegisterFigures(poIndex, o.ref).available > 0
       })
       if (!itemName) return withAvail
       const sameItem = withAvail.filter(o => o.itemName.trim().toLowerCase() === itemName)
       return sameItem.length > 0 ? sameItem : withAvail
     },
-    [data.tradeOrders, data.lifts],
+    [data.tradeOrders, poIndex],
   )
 
   const getRemainingSellQtyForPO = useCallback(
-    (poRef: string) => getRemainingSellQty(data.tradeOrders, poRef, data.lifts),
-    [data.tradeOrders, data.lifts],
+    (poRef: string) => poRegisterFigures(poIndex, poRef).available,
+    [poIndex],
   )
 
   const getSOsForPORef = useCallback(
-    (poRef: string) => getSOsForPO(data.tradeOrders, poRef),
-    [data.tradeOrders],
+    (poRef: string) => poRegisterFigures(poIndex, poRef).linkedSos,
+    [poIndex],
   )
 
   const revenueData = useMemo(() => {
@@ -931,6 +965,9 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     deleteRetailer,
     canDeleteRetailer,
     addItem,
+    saveCatalogItem,
+    deleteCatalogItem,
+    canDeleteCatalogItem,
     addSpot,
     getNextRef,
     getPOPending,

@@ -4,7 +4,7 @@ import { getLiftAllocations, liftTouchesRef } from './liftAllocations'
 import { liftsForSoOnPo, stockLiftsForPo, type SoLiftEntry } from './orderRelatedLifts'
 import { STOCK_LIFT_LABEL } from './stockLift'
 import type { TradeStoreValue } from '../store/TradeStore'
-import { formatLiftRef, formatPoRef, formatSoRef } from './tradeRefs'
+import { formatLiftRef, formatLotRef, formatPoRef, formatSoRef, refsMatch } from './tradeRefs'
 import { formatQty } from './utils'
 
 export type FlowNodeKind = 'po' | 'so' | 'lift' | 'stock'
@@ -68,18 +68,18 @@ function soNode(so: TradeOrder): FlowNodeData {
   }
 }
 
-function stockNode(poRef: string): FlowNodeData {
+function stockNode(poRef: string, href?: string): FlowNodeData {
   return {
     id: `stock-${poRef}`,
     kind: 'stock',
     ref: STOCK_LIFT_LABEL,
     label: 'Stock lift',
     party: 'Not linked to an SO',
-    detail: `Inventory from ${formatPoRef(poRef)}`,
+    detail: formatLotRef(poRef),
     qtyLabel: '—',
     statusLabel: 'stock',
     statusTone: 'default',
-    href: `/purchase-orders?ref=${encodeURIComponent(poRef)}`,
+    href: href ?? `/inventory`,
   }
 }
 
@@ -124,8 +124,9 @@ function buildPoFlowTree(store: TradeStoreValue, po: TradeOrder): FlowTree {
 
   const stockEntries = stockLiftsForPo(store.lifts, po.ref)
   if (stockEntries.length > 0) {
+    const lot = store.lots.find(l => refsMatch(l.lotNumber.replace(/^LOT-/, ''), po.ref, 'purchase'))
     children.push({
-      node: stockNode(po.ref),
+      node: stockNode(po.ref, lot ? `/inventory/${lot.id}` : '/inventory'),
       children: liftBranches(stockEntries),
     })
   }
@@ -135,10 +136,10 @@ function buildPoFlowTree(store: TradeStoreValue, po: TradeOrder): FlowTree {
 
 function buildOrphanSoFlowTree(store: TradeStoreValue, so: TradeOrder): FlowTree {
   const liftEntries = store.lifts
-    .filter(l => liftTouchesRef(l, so.ref))
+    .filter(l => liftTouchesRef(l, so.ref, 'sale'))
     .flatMap(lift =>
       getLiftAllocations(lift)
-        .filter(a => a.soRef === so.ref)
+        .filter(a => a.soRef && refsMatch(a.soRef, so.ref, 'sale'))
         .map(a => ({ lift, qtyMt: a.qtyMt })),
     )
 
