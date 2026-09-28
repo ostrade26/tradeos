@@ -487,7 +487,7 @@ export function getRemainingSellQty(orders: TradeOrder[], poRef: string, lifts: 
   const po = orders.find(o => o.side === 'purchase' && refsMatch(o.ref, poRef, 'purchase'))
   if (!po || po.status === 'cancelled' || (po.completionType && MANUAL_CLOSE.has(po.completionType))) return 0
   const cap = orderQtyCap(po)
-  return roundQtyMt(Math.max(0, cap - getAllocatedSellQty(orders, poRef, lifts) - getStockLiftQtyOnPo(lifts, poRef)))
+  return roundQtyMt(cap - getAllocatedSellQty(orders, poRef, lifts) - getStockLiftQtyOnPo(lifts, poRef))
 }
 
 /** Sales made from this godown lot. Contract SOs booked on the PO stay on the purchase. */

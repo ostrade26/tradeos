@@ -220,8 +220,14 @@ class RemainingOnOrderTests(unittest.TestCase):
             _lift(lift_id="L2", po_ref="2", so_ref="9", qty=15),
         ]
         orders = [po_booked, po_other, so]
-        self.assertEqual(get_remaining_sell_qty(orders, "1", lifts), 0.0)
+        self.assertEqual(get_remaining_sell_qty(orders, "1", lifts), -100.0)
         self.assertEqual(get_remaining_sell_qty(orders, "2", lifts), 35.0)
+
+    def test_over_delivery_avail_to_sell_is_negative(self) -> None:
+        po = _po("1", 12)
+        so = _so("2", 12.09, po_ref="1")
+        lifts = [_lift(lift_id="L1", po_ref="1", so_ref="2", qty=12.09)]
+        self.assertEqual(get_remaining_sell_qty([po, so], "1", lifts), -0.09)
 
     def test_booked_so_still_counts_in_full(self) -> None:
         po = _po("1", 50)

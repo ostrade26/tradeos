@@ -450,7 +450,7 @@ export function buildPoRegisterIndex(
     const stockQty = roundQtyMt(stock.delivered + stock.inTransit)
     const available = !po || closed
       ? 0
-      : roundQtyMt(Math.max(0, sellCap - roundQtyMt(soldQty) - stockQty))
+      : roundQtyMt(sellCap - roundQtyMt(soldQty) - stockQty)
 
     index.set(poKey, {
       rollup: {

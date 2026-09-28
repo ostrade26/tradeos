@@ -91,7 +91,7 @@ def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | 
         else:
             sold += qty_of_so_on_po(lifts or [], po_ref, order.get("ref"))
     stocked = qty_stock_on_po(lifts or [], po_ref)
-    return round_qty_mt(max(0, effective_po_qty(po) - sold - stocked))
+    return round_qty_mt(effective_po_qty(po) - sold - stocked)
 
 
 def _producer_to_company(producer: dict) -> dict:
