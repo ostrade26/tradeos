@@ -232,11 +232,11 @@ export function remainingOnOrder(
     const cap = Math.max(0, order.orderQty - boughtBack)
     const stock = qtyStockOnPo(lifts, order.ref, excludeLiftId)
     const soDispatch = qtySoDispatchOnPo(lifts, order.ref, excludeLiftId)
-    return roundQtyMt(Math.max(0, cap - Math.max(stock, soDispatch)))
+    return roundQtyMt(cap - Math.max(stock, soDispatch))
   }
     const boughtBack = (order.buyBacks ?? []).reduce((s, b) => s + b.qtyMt, 0)
     const cap = Math.max(0, order.orderQty - boughtBack)
-    return roundQtyMt(Math.max(0, cap - qtyCommittedOnSo(lifts, order.ref, excludeLiftId)))
+    return roundQtyMt(cap - qtyCommittedOnSo(lifts, order.ref, excludeLiftId))
 }
 
 /**
@@ -404,7 +404,7 @@ export function buildPoRegisterIndex(
       }
       const boughtBack = (so.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
       const cap = Math.max(0, so.orderQty - boughtBack)
-      const left = roundQtyMt(Math.max(0, cap - (soCommitted.get(soKey) ?? 0)))
+      const left = roundQtyMt(cap - (soCommitted.get(soKey) ?? 0))
       const transit = roundQtyMt(soTransit.get(soKey) ?? 0)
       const deliveredQty = roundQtyMt(Math.max(0, so.orderQty - left - transit))
       allocation += so.orderQty

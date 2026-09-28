@@ -190,11 +190,11 @@ def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | No
                     so_dispatch += qty
                 else:
                     stock += qty
-        return round_qty_mt(max(0, cap - max(stock, so_dispatch)))
+        return round_qty_mt(cap - max(stock, so_dispatch))
 
     cap = effective_po_qty(order)
     remaining = cap - qty_committed_on_so(lifts, order["ref"], exclude_lift_id)
-    return round_qty_mt(max(0, remaining))
+    return round_qty_mt(remaining)
 
 
 def qty_stock_on_po(lifts: list[dict], po_ref: str, exclude_lift_id: str | None = None) -> float:

@@ -52,6 +52,11 @@ class RemainingOnOrderTests(unittest.TestCase):
         lifts = [_lift(lift_id="L1", po_ref="1", so_ref="SO24", qty=10)]
         self.assertEqual(remaining_on_order(so, lifts), 90.0)
 
+    def test_over_delivery_balance_is_negative(self) -> None:
+        so = _so("24", 30)
+        lifts = [_lift(lift_id="L1", po_ref="1", so_ref="24", qty=31.09)]
+        self.assertEqual(remaining_on_order(so, lifts), -1.09)
+
     def test_so_subtracts_its_own_lifts(self) -> None:
         so = _so("24", 100)
         lifts = [_lift(lift_id="L1", po_ref="1", so_ref="24", qty=10)]

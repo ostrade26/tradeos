@@ -168,7 +168,7 @@ function listDeleteBlock(
 
 function toBeLiftLinesOnPO(index: PoIndex, poRef: string): AllocationTooltipLine[] {
   return poRegisterFigures(index, poRef).rollup.lines
-    .filter(line => line.toBeLift > 0)
+    .filter(line => line.toBeLift !== 0)
     .map(line => ({ soRef: line.soRef, qtyMt: line.toBeLift }))
 }
 
@@ -753,11 +753,13 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       sortValue: (r: TradeOrder) => registerToBeLift(poIndex, store.lifts, r),
       render: (r: TradeOrder) => {
         const remaining = registerToBeLift(poIndex, store.lifts, r)
-        const qtyClass = remaining <= 0
-          ? 'text-muted'
-          : remaining < 1
-            ? 'text-warning'
-            : 'text-heading'
+        const qtyClass = remaining < 0
+          ? 'text-danger'
+          : remaining === 0
+            ? 'text-muted'
+            : remaining < 1
+              ? 'text-warning'
+              : 'text-heading'
         if (!isPO) {
           return (
             <span className={cn('tabular-nums font-medium', qtyClass)}>
@@ -1235,7 +1237,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                   <p className="text-heading truncate">{r.partyName} · {r.itemName}</p>
                   <div className="flex items-center justify-between text-muted">
                     <span className="tabular-nums">
-                      {formatMt(delivered)} delivered · {formatMt(inTransit)} in transit · {formatMt(remaining)} to lift
+                      {formatMt(delivered)} delivered · {formatMt(inTransit)} in transit ·{' '}
+                      <span className={remaining < 0 ? 'text-danger font-medium' : undefined}>{formatMt(remaining)} to lift</span>
                     </span>
                     <span className="tabular-nums">{formatDate(r.date)}</span>
                   </div>
