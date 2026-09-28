@@ -685,41 +685,8 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
               />
             )
           },
-        },
-        {
-          key: 'available',
-          header: 'Avail to sell',
-          className: 'text-right',
-          sortable: true,
-          sortValue: (r: TradeOrder) => availableOnPO(poIndex, r.ref),
-          render: (r: TradeOrder) => {
-            const available = availableOnPO(poIndex, r.ref)
-            return (
-              <span className={cn('tabular-nums', availableQtyClass(available))}>
-                {formatMt(available)}
-              </span>
-            )
-          },
         }]
       : []),
-    {
-      key: 'liftedQty',
-      header: 'Delivered',
-      className: 'text-right',
-      sortable: true,
-      sortValue: (r: TradeOrder) => registerDelivered(poIndex, r),
-      render: (r: TradeOrder) => {
-        const qty = registerDelivered(poIndex, r)
-        if (!isPO) return <span className="tabular-nums">{formatMt(qty)}</span>
-        return (
-          <AllocationQtyWithTooltip
-            allocated={qty}
-            title="Delivered on"
-            lines={deliveredLinesOnPO(poIndex, r.ref)}
-          />
-        )
-      },
-    },
     {
       key: 'inTransit',
       header: 'In transit',
@@ -741,6 +708,24 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
             title="In transit on"
             lines={inTransitLinesOnPO(poIndex, r.ref)}
             className={qty > 0 ? 'text-heading font-medium' : 'text-muted'}
+          />
+        )
+      },
+    },
+    {
+      key: 'liftedQty',
+      header: 'Delivered',
+      className: 'text-right',
+      sortable: true,
+      sortValue: (r: TradeOrder) => registerDelivered(poIndex, r),
+      render: (r: TradeOrder) => {
+        const qty = registerDelivered(poIndex, r)
+        if (!isPO) return <span className="tabular-nums">{formatMt(qty)}</span>
+        return (
+          <AllocationQtyWithTooltip
+            allocated={qty}
+            title="Delivered on"
+            lines={deliveredLinesOnPO(poIndex, r.ref)}
           />
         )
       },
@@ -777,6 +762,23 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
         )
       },
     },
+    ...(isPO
+      ? [{
+          key: 'available',
+          header: 'Avail to sell',
+          className: 'text-right',
+          sortable: true,
+          sortValue: (r: TradeOrder) => availableOnPO(poIndex, r.ref),
+          render: (r: TradeOrder) => {
+            const available = availableOnPO(poIndex, r.ref)
+            return (
+              <span className={cn('tabular-nums', availableQtyClass(available))}>
+                {formatMt(available)}
+              </span>
+            )
+          },
+        }]
+      : []),
     {
       key: 'brokerName',
       header: 'Broker Name',
@@ -917,12 +919,16 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
       ...(isPO
         ? [
             { key: 'allocation' as const, header: 'Allocation' },
+            { key: 'inTransit' as const, header: 'In transit' },
+            { key: 'liftedQty' as const, header: 'Delivered' },
+            { key: 'toBeLift' as const, header: 'To Be Lift' },
             { key: 'available' as const, header: 'Avail to sell' },
           ]
-        : []),
-      { key: 'liftedQty', header: 'Delivered' },
-      { key: 'inTransit', header: 'In transit' },
-      { key: 'toBeLift', header: 'To Be Lift' },
+        : [
+            { key: 'inTransit' as const, header: 'In transit' },
+            { key: 'liftedQty' as const, header: 'Delivered' },
+            { key: 'toBeLift' as const, header: 'To Be Lift' },
+          ]),
       { key: 'broker', header: 'Broker Name' },
     ]
     exportToCSV(
