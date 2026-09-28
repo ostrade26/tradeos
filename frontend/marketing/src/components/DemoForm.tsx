@@ -30,6 +30,7 @@ export function DemoForm() {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  const [confirmedEmail, setConfirmedEmail] = useState('')
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -55,6 +56,7 @@ export function DemoForm() {
         const detail = body?.detail
         throw new Error(typeof detail === 'string' ? detail : 'Could not send the request. Try again in a moment.')
       }
+      setConfirmedEmail(values.email.trim())
       setDone(true)
     } catch (err) {
       const network = err instanceof TypeError
@@ -117,6 +119,9 @@ export function DemoForm() {
               <h3 className="mt-4 text-lg font-semibold text-heading">Request received</h3>
               <p className="mt-2 text-sm text-muted leading-relaxed">
                 Thanks — we’ll be in touch shortly to walk through Tradeal on your trades.
+                {confirmedEmail
+                  ? ` A confirmation is on its way to ${confirmedEmail}.`
+                  : ''}
               </p>
             </div>
           ) : (

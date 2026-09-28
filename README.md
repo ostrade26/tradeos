@@ -64,7 +64,7 @@ npm run dev:backend    # API on :8000 — needed for the demo form
 npm run dev:marketing   # site on :5174
 ```
 
-Open [http://localhost:5174](http://localhost:5174). Demo requests are stored in SQLite (`demo_requests`) via `POST /api/v1/demo-requests`.
+Open [http://localhost:5174](http://localhost:5174). Demo requests are stored via `POST /api/v1/demo-requests` and emailed through Resend (`DEMO_NOTIFY_EMAIL`, plus a confirmation when the visitor left an email).
 
 ```bash
 npm run build:marketing

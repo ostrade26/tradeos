@@ -848,4 +848,16 @@ def create_demo_request(body: DemoRequestBody) -> dict:
         email=email,
         message=message,
     )
+    try:
+        from .identity.email_demo_request import send_demo_request_emails
+
+        send_demo_request_emails(
+            name=name,
+            company=company,
+            phone=phone,
+            email=email,
+            message=message,
+        )
+    except Exception:
+        logger.exception("Demo request stored but email send failed (company=%s)", company)
     return {"ok": True, **result}

@@ -95,13 +95,13 @@ export function allocationTotal(allocations: LiftAllocation[]): number {
   return roundQtyMt(allocations.reduce((sum, a) => sum + a.qtyMt, 0))
 }
 
-/** Qty already committed to a PO or SO by other lifts. */
-export function qtyCommittedOnRef(lifts: Lift[], ref: string, excludeLiftId?: string): number {
+/** Lift qty on this sales order only — PO and SO numbers can collide (PO24 vs SO24). */
+export function qtyCommittedOnSo(lifts: Lift[], soRef: string, excludeLiftId?: string): number {
   return roundQtyMt(lifts
     .filter(l => l.id !== excludeLiftId && !l.deletedAt)
     .reduce((sum, l) => {
       const part = getLiftAllocations(l)
-        .filter(a => a.poRef === ref || (a.soRef && a.soRef === ref))
+        .filter(a => Boolean(a.soRef) && a.soRef === soRef)
         .reduce((s, a) => s + a.qtyMt, 0)
       return sum + part
     }, 0))
@@ -145,7 +145,7 @@ export function remainingOnOrder(
     const soDispatch = qtySoDispatchOnPo(lifts, order.ref, excludeLiftId)
     return roundQtyMt(Math.max(0, cap - Math.max(stock, soDispatch)))
   }
-  return roundQtyMt(Math.max(0, order.orderQty - qtyCommittedOnRef(lifts, order.ref, excludeLiftId)))
+  return roundQtyMt(Math.max(0, order.orderQty - qtyCommittedOnSo(lifts, order.ref, excludeLiftId)))
 }
 
 /**

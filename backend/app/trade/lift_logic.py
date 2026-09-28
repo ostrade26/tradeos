@@ -144,13 +144,14 @@ def allocation_total(allocations: list[dict]) -> float:
     return round_qty_mt(sum(a["qtyMt"] for a in allocations))
 
 
-def qty_committed_on_ref(lifts: list[dict], ref: str, exclude_lift_id: str | None = None) -> float:
+def qty_committed_on_so(lifts: list[dict], so_ref: str, exclude_lift_id: str | None = None) -> float:
+    """Lift qty on this sales order only — PO and SO numbers can collide (PO24 vs SO24)."""
     total = 0.0
     for lift in lifts:
         if lift.get("id") == exclude_lift_id or lift.get("deletedAt"):
             continue
         for a in get_lift_allocations(lift):
-            if a["poRef"] == ref or (a.get("soRef") and a["soRef"] == ref):
+            if a.get("soRef") and a["soRef"] == so_ref:
                 total += a["qtyMt"]
     return round_qty_mt(total)
 
@@ -189,7 +190,7 @@ def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | No
         return round_qty_mt(max(0, cap - max(stock, so_dispatch)))
 
     cap = float(order.get("orderQty", 0) or 0)
-    remaining = cap - qty_committed_on_ref(lifts, order["ref"], exclude_lift_id)
+    remaining = cap - qty_committed_on_so(lifts, order["ref"], exclude_lift_id)
     return round_qty_mt(max(0, remaining))
 
 

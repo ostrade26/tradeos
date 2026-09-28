@@ -119,6 +119,15 @@ html.marketing-site details[open] > summary::after {
   animation: cycle-flow-dot 7s ease-in-out infinite;
 }
 
+@keyframes chaos-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+.chaos-drift {
+  animation: chaos-drift 5.5s ease-in-out infinite;
+}
+
 .hero-grid {
   background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
@@ -166,7 +175,8 @@ html.marketing-site details[open] > summary::after {
   .hero-float,
   .marquee-track,
   .live-dot,
-  .cycle-flow-dot {
+  .cycle-flow-dot,
+  .chaos-drift {
     animation: none !important;
   }
 

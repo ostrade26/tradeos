@@ -1,6 +1,6 @@
-import deskUrl from '../../public/images/trading-desk.jpg'
 import yardUrl from '../../public/images/hero-terminal.jpg'
 import liftUrl from '../../public/images/tanker-lift.jpg'
+import { ProductPreview } from './components/ProductPreview'
 import { Access } from './components/Access'
 import { Accounting } from './components/Accounting'
 import { Audience } from './components/Audience'
@@ -38,11 +38,13 @@ export default function App() {
         <Testimonials />
         <WhatIs />
         <VisualBreak
-          src={deskUrl}
+          id="desk"
           title="On the desk"
           caption="One book for purchases, sales, inventory, and today’s work."
-          position="center 40%"
-        />
+          align="center"
+        >
+          <ProductPreview />
+        </VisualBreak>
         <Features />
         <PreviewSection />
         <Reports />
