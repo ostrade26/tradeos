@@ -24,6 +24,7 @@ function tradeDataFromStore(store: TradeStoreValue): TradeData {
     balanceSettlements: store.balanceSettlements ?? [],
     spots: store.spots,
     items: store.items,
+    itemCatalog: store.itemCatalog ?? [],
     counters: store.counters,
   }
 }

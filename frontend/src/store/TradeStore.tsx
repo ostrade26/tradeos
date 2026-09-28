@@ -553,7 +553,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const closeOrder = useCallback(
-    (id: string, input: { method: CloseOrderMethod; notes?: string; settledAt?: string }) =>
+    (id: string, input: { method: CloseOrderMethod | 'delivered'; notes?: string; settledAt?: string }) =>
       applyMutation(() => tradeApi.closeOrder(id, input as unknown as Record<string, unknown>)),
     [applyMutation],
   )

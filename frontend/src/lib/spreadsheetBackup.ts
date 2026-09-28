@@ -466,6 +466,7 @@ function emptyTradeData(): TradeData {
     balanceSettlements: [],
     spots: [],
     items: [],
+    itemCatalog: [],
     counters: { ...EMPTY_COUNTERS },
   }
 }
@@ -1113,6 +1114,7 @@ function demoDataForImportTemplate(): TradeData {
     ...seed,
     contracts: [],
     balanceSettlements: [],
+    itemCatalog: [],
   }
 }
 

@@ -1,3 +1,4 @@
+import type { Lift, TradeOrder } from '../data/mockData'
 import { partyMatches } from './assistant/partyMatch'
 import {
   filterOrdersByDate,

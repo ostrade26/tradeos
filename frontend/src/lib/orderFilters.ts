@@ -85,6 +85,7 @@ export function applyOrderFilters<T extends {
   ref: string
   partyName: string
   itemName: string
+  side: 'purchase' | 'sale'
   spot: string
   brokerName: string
   rate: number
