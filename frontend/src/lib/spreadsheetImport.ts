@@ -133,6 +133,12 @@ function salesInvoiceFromRow(row: Record<string, unknown>): string {
   return looksLikeInvoiceNo(remarks) ? remarks : ''
 }
 
+function orderStatusFromCell(row: Record<string, unknown>, fallback: OrderStatus): OrderStatus {
+  const text = str(row, 'Status').toLowerCase()
+  if (text === 'pending' || text === 'partial' || text === 'completed' || text === 'cancelled') return text
+  return fallback
+}
+
 function deriveOrderStatus(orderQty: number, liftedQty: number, committedLiftQty?: number): OrderStatus {
   if (liftedQty >= orderQty && orderQty > 0) return 'completed'
   const committed = committedLiftQty ?? liftedQty
@@ -191,14 +197,14 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
     buyerName: base?.buyerName ?? CURRENT_TRADER,
     paymentTerms: str(row, 'Payment') || base?.paymentTerms,
     remarks: str(row, 'Remarks') || base?.remarks,
-    status: base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty),
+    status: orderStatusFromCell(row, base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty)),
+    brokerContractRef: str(row, 'Contract #', 'Contract No', 'Contract') || base?.brokerContractRef,
     poRef: undefined,
     buyBacks: base?.buyBacks,
     completionType: base?.completionType,
     closedAt: base?.closedAt,
     closedNotes: base?.closedNotes,
     deleteScheduledAt: base?.deleteScheduledAt,
-    brokerContractRef: base?.brokerContractRef,
     partyCompanyId: base?.partyCompanyId,
     sellerCompanyId: base?.sellerCompanyId,
     buyerCompanyId: base?.buyerCompanyId,
@@ -220,7 +226,6 @@ function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): Trade
     ref,
     side: 'sale',
     poRef: base?.poRef ?? (linkedPo ? firstRef(linkedPo) || undefined : undefined),
-    stockPoRef: (base?.poRef || linkedPo) ? undefined : base?.stockPoRef,
     date: parseDateCell(row, 'Sale Date', 'Date') || base?.date || new Date().toISOString().slice(0, 10),
     partyName: buyerName,
     itemName: str(row, 'Item', 'Item Name') || base?.itemName || '',
@@ -242,13 +247,14 @@ function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): Trade
     buyerName: buyerName || base?.buyerName,
     paymentTerms: str(row, 'Payment') || base?.paymentTerms,
     remarks: str(row, 'Remarks') || base?.remarks,
-    status: base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty),
+    status: orderStatusFromCell(row, base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty)),
+    brokerContractRef: str(row, 'Contract #', 'Contract No', 'Contract') || base?.brokerContractRef,
+    stockPoRef: (base?.poRef || linkedPo) ? undefined : (str(row, 'Stock PO Ref#', 'Stock PO', 'Lot') || base?.stockPoRef),
     buyBacks: base?.buyBacks,
     completionType: base?.completionType,
     closedAt: base?.closedAt,
     closedNotes: base?.closedNotes,
     deleteScheduledAt: base?.deleteScheduledAt,
-    brokerContractRef: base?.brokerContractRef,
     partyCompanyId: base?.partyCompanyId,
     sellerCompanyId: base?.sellerCompanyId,
     buyerCompanyId: base?.buyerCompanyId,

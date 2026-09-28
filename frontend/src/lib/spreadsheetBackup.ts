@@ -7,6 +7,7 @@ import type {
   Delivery,
   Lift,
   Lot,
+  CatalogItem,
   Payment,
   Producer,
   Retailer,
@@ -22,6 +23,7 @@ import { refCore } from './tradeRefs'
 import {
   parseJsonCell,
   parseSalesOrderRow,
+  tryParseJsonCell,
   parseTemplatePurchaseOrders,
   readLiftsFromSheetRows,
   readTradeOrdersFromSheetRows,
@@ -50,6 +52,8 @@ const PO_EXPORT_HEADERS = [
   'Payment',
   'Remarks',
   'Spot',
+  'Contract #',
+  'Status',
   'Invoice No.,',
   'Invoice Date',
   'Invoice Amount',
@@ -76,6 +80,9 @@ const SO_EXPORT_HEADERS = [
   'Payment',
   'Remarks',
   'Spot',
+  'Contract #',
+  'Stock PO Ref#',
+  'Status',
   '_json',
 ] as const
 
@@ -111,6 +118,7 @@ const OBJECT_SHEETS = [
   'companies',
   'activities',
   'balanceSettlements',
+  'itemCatalog',
 ] as const satisfies readonly (keyof TradeData)[]
 
 type ObjectSheet = (typeof OBJECT_SHEETS)[number]
@@ -201,6 +209,8 @@ function purchaseOrderRow(order: TradeOrder, lifts: Lift[]) {
     Payment: order.paymentTerms ?? '',
     Remarks: order.remarks ?? '',
     Spot: order.spot,
+    'Contract #': order.brokerContractRef ?? '',
+    Status: order.status,
     ...delivery,
     _json: JSON.stringify(order),
   }
@@ -225,6 +235,9 @@ function salesOrderRow(order: TradeOrder) {
     Payment: order.paymentTerms ?? '',
     Remarks: order.remarks ?? '',
     Spot: order.spot,
+    'Contract #': order.brokerContractRef ?? '',
+    'Stock PO Ref#': order.stockPoRef ?? '',
+    Status: order.status,
     _json: JSON.stringify(order),
   }
 }
@@ -397,6 +410,17 @@ function activityRow(activity: Activity) {
   }, activity)
 }
 
+function itemCatalogRow(item: CatalogItem) {
+  return withJson({
+    Name: item.name,
+    Grade: item.grade ?? '',
+    Packing: item.packing ?? '',
+    HSN: item.hsn ?? '',
+    'GST %': item.gstRate ?? '',
+    Notes: item.notes ?? '',
+  }, item)
+}
+
 function settlementRow(settlement: BalanceSettlement) {
   return withJson({
     PO: settlement.poRef,
@@ -418,6 +442,7 @@ const ROW_BUILDERS: Record<Exclude<ObjectSheet, 'lifts'>, (record: never) => Rec
   deliveries: deliveryRow as (record: never) => Record<string, unknown>,
   activities: activityRow as (record: never) => Record<string, unknown>,
   balanceSettlements: settlementRow as (record: never) => Record<string, unknown>,
+  itemCatalog: itemCatalogRow as (record: never) => Record<string, unknown>,
 }
 
 function recordsToDisplayRows(key: Exclude<ObjectSheet, 'lifts'>, records: unknown[]) {
@@ -516,8 +541,33 @@ function enrichLiftsFromPoInvoiceLifts(lifts: Lift[], poInvoiceLifts: Lift[]): L
   })
 }
 
+function recordsFromAppJson<T extends { id?: string }>(rows: Record<string, unknown>[] | undefined): T[] | null {
+  const clean = (rows ?? []).filter(row => !Array.isArray(row._cells))
+  if (clean.length === 0) return []
+  const records: T[] = []
+  for (const row of clean) {
+    const parsed = tryParseJsonCell(row._json)
+    if (!parsed || typeof parsed !== 'object' || !('id' in parsed)) return null
+    records.push(parsed as T)
+  }
+  return records
+}
+
+/** A Tradeal export stores each order and lift in `_json`. Restore those records unchanged. */
+function readAppSnapshot(sheetRows: Map<string, Record<string, unknown>[]>): { orders: TradeOrder[]; lifts: Lift[] } | null {
+  const purchases = recordsFromAppJson<TradeOrder>(sheetRows.get('purchaseOrders'))
+  const sales = recordsFromAppJson<TradeOrder>(sheetRows.get('salesOrders'))
+  if (!purchases || !sales || purchases.length + sales.length === 0) return null
+  if (!purchases.every(order => order.side === 'purchase') || !sales.every(order => order.side === 'sale')) return null
+  const liftRows = sheetRows.get('lifts')
+  const lifts = liftRows?.length ? recordsFromAppJson<Lift>(liftRows) : []
+  if (!lifts) return null
+  return { orders: [...purchases, ...sales], lifts }
+}
+
 function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]>): TradeData {
   const data = emptyTradeData()
+  const snapshot = readAppSnapshot(sheetRows)
 
   const purchaseRows = sheetRows.get('purchaseOrders')
   const standardPoRows = purchaseRows?.filter(row => !Array.isArray(row._cells)) ?? []
@@ -526,9 +576,12 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
   let embeddedLifts = false
   let poInvoiceLifts: Lift[] = []
   let groupedPo = parseGroupedPoFromSheets(sheetRows)
-  const parsedPoFromTemplate = isStandardTemplate || groupedPo != null
+  const parsedPoFromTemplate = !snapshot && (isStandardTemplate || groupedPo != null)
 
-  if (isStandardTemplate) {
+  if (snapshot) {
+    data.tradeOrders = snapshot.orders
+    data.lifts = snapshot.lifts
+  } else if (isStandardTemplate) {
     const template = parseTemplatePurchaseOrders(standardPoRows)
     data.tradeOrders = template.orders
     poInvoiceLifts = template.lifts
@@ -561,6 +614,7 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
     const rows = sheetRows.get(key)
     if (!rows?.length) continue
     if (key === 'lifts') {
+      if (snapshot) continue
       const parsed = readLiftsFromSheetRows(rows)
       if (parsed.length > 0) {
         data.lifts = enrichLiftsFromPoInvoiceLifts(parsed, poInvoiceLifts)
@@ -581,6 +635,7 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
       case 'companies': data.companies = records as TradeData['companies']; break
       case 'activities': data.activities = records as TradeData['activities']; break
       case 'balanceSettlements': data.balanceSettlements = records as TradeData['balanceSettlements']; break
+      case 'itemCatalog': data.itemCatalog = records as TradeData['itemCatalog']; break
     }
   }
 
@@ -604,10 +659,12 @@ function buildDataFromSheetRows(sheetRows: Map<string, Record<string, unknown>[]
     data.counters = inferCountersFromData(data)
   }
 
-  data.tradeOrders = ensureOrdersReferencedByLifts(data.tradeOrders, data.lifts)
-  data.lifts = normalizeLiftOrderRefs(data.tradeOrders, data.lifts)
-  data.tradeOrders = inferSoPoRefsFromLifts(data.tradeOrders, data.lifts)
-  data.tradeOrders = normalizeLinkedPoRefs(data.tradeOrders)
+  if (!snapshot) {
+    data.tradeOrders = ensureOrdersReferencedByLifts(data.tradeOrders, data.lifts)
+    data.lifts = normalizeLiftOrderRefs(data.tradeOrders, data.lifts)
+    data.tradeOrders = inferSoPoRefsFromLifts(data.tradeOrders, data.lifts)
+    data.tradeOrders = normalizeLinkedPoRefs(data.tradeOrders)
+  }
   return applyLiftTotals(ensureDirectoryFromOrders(data))
 }
 
@@ -1095,6 +1152,7 @@ export async function exportTradeDataToCsv(data: TradeData) {
   }
   for (const spot of data.spots) rows.push({ _sheet: 'spots', _json: JSON.stringify(spot) })
   for (const item of data.items) rows.push({ _sheet: 'items', _json: JSON.stringify(item) })
+  for (const item of data.itemCatalog ?? []) rows.push({ _sheet: 'itemCatalog', _json: JSON.stringify(item) })
   rows.push({ _sheet: 'counters', _json: JSON.stringify(data.counters) })
 
   const XLSX = await loadXlsx()
