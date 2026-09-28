@@ -2,10 +2,8 @@ import { Link } from 'react-router-dom'
 import { Layers } from 'lucide-react'
 import type { Lift, TradeOrder } from '../../data/mockData'
 import {
-  groupLiftsBySoForPo,
+  liftGroupsForPurchase,
   liftsForSo,
-  liftsForSoOnPo,
-  stockLiftsForPo,
   type SoLiftEntry,
   type SoLiftGroup,
 } from '../../lib/orderRelatedLifts'
@@ -24,6 +22,7 @@ import {
 interface OrderRelatedSectionProps {
   order: TradeOrder
   linkedSOs: TradeOrder[]
+  orders?: TradeOrder[]
   lifts: Lift[]
   onNavigate?: () => void
 }
@@ -164,12 +163,13 @@ function StockLiftGroup({
   )
 }
 
-export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: OrderRelatedSectionProps) {
+export function OrderRelatedSection({ order, linkedSOs, orders = linkedSOs, lifts, onNavigate }: OrderRelatedSectionProps) {
   const isPO = order.side === 'purchase'
 
   if (isPO) {
-    const soGroups = groupLiftsBySoForPo(order.ref, linkedSOs, lifts)
-    const stockLifts = stockLiftsForPo(lifts, order.ref)
+    const grouped = liftGroupsForPurchase(order.ref, orders, lifts)
+    const soGroups = grouped.soGroups
+    const stockLifts = grouped.stockLifts
     const hasContent = soGroups.length > 0 || stockLifts.length > 0
 
     if (!hasContent) return null
@@ -189,9 +189,7 @@ export function OrderRelatedSection({ order, linkedSOs, lifts, onNavigate }: Ord
   const poRef = order.poRef
   const stockPoRef = order.stockPoRef && !poRef ? order.stockPoRef : undefined
   const contractPoRef = stockPoRef ? undefined : poRef
-  const soLifts = contractPoRef
-    ? liftsForSoOnPo(lifts, contractPoRef, order.ref)
-    : liftsForSo(lifts, order.ref)
+  const soLifts = liftsForSo(lifts.filter(lift => !lift.deletedAt), order.ref)
 
   if (!contractPoRef && !stockPoRef && soLifts.length === 0) return null
 

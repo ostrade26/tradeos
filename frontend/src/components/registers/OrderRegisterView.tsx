@@ -134,12 +134,7 @@ function listCanClose(
   if (order.status === 'completed' || order.status === 'cancelled') return false
   if (orderHasPendingLift(pending, order)) return false
   if (toBeLifted(order) > 0) return true
-  return listBalanceOwed(order, outstanding, index) > 0
-}
-
-function listCanMarkComplete(order: TradeOrder, pending: Set<string>): boolean {
-  if (order.status === 'completed' || order.status === 'cancelled' || order.deleteScheduledAt) return false
-  if (orderHasPendingLift(pending, order)) return false
+  if (listBalanceOwed(order, outstanding, index) > 0) return true
   return toBeLifted(order) <= 0
 }
 
@@ -506,17 +501,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
     setDeleteTargets(deletable)
   }, [shortLabel, store])
 
-  const markOrderComplete = useCallback(async (order: TradeOrder) => {
-    try {
-      await store.closeOrder(order.id, { method: 'delivered' })
-      toast.success(`${formatOrderRef(order.ref, order.side)} marked complete`)
-    } catch (err) {
-      toast.error('Could not mark complete', {
-        description: err instanceof Error ? err.message : 'Try again',
-      })
-    }
-  }, [store, toast])
-
   const openPermanentDeleteForOrders = useCallback((orders: TradeOrder[]) => {
     if (orders.length === 0) return
     setPermanentDeleteError('')
@@ -799,8 +783,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
           editHref={`${pathPrefix}/${encodeURIComponent(r.ref)}/edit`}
           canDelete={deleteBlock ? { ok: false, reason: deleteBlock } : { ok: true }}
           canClose={closable}
-          canMarkComplete={listCanMarkComplete(r, pendingLifts)}
-          onMarkComplete={() => { void markOrderComplete(r) }}
           canBuyBack={canBuyBackOrder(r, store.lifts, r.side === 'purchase' ? sosBookedOnPo(poRegisterFigures(poIndex, r.ref).linkedSos, r.ref) : [], orderHasPendingLift(pendingLifts, r)).ok}
           sellAvailableQty={isPO ? availableOnPO(poIndex, r.ref) : undefined}
           deletedTab={mode === 'deleted'}
@@ -1223,8 +1205,6 @@ export function OrderRegisterView({ side, mode, onModeChange }: OrderRegisterVie
                           editHref={`${pathPrefix}/${encodeURIComponent(r.ref)}/edit`}
                           canDelete={deleteBlock ? { ok: false, reason: deleteBlock } : { ok: true }}
                           canClose={listCanClose(r, pendingLifts, outstandingByPair, poIndex)}
-                          canMarkComplete={listCanMarkComplete(r, pendingLifts)}
-                          onMarkComplete={() => { void markOrderComplete(r) }}
                           canBuyBack={canBuyBackOrder(r, store.lifts, r.side === 'purchase' ? sosBookedOnPo(poRegisterFigures(poIndex, r.ref).linkedSos, r.ref) : [], orderHasPendingLift(pendingLifts, r)).ok}
                           sellAvailableQty={isPO ? availableOnPO(poIndex, r.ref) : undefined}
                           deletedTab={mode === 'deleted'}

@@ -24,6 +24,7 @@ from .lift_logic import (
     normalize_lift_tankers,
     po_manually_closed,
     qty_of_so_on_po,
+    qty_so_dispatch_on_po,
     qty_stock_on_po,
     resolve_lift_qty,
     sales_order_on_po,
@@ -91,7 +92,8 @@ def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | 
         else:
             sold += qty_of_so_on_po(lifts or [], po_ref, order.get("ref"))
     stocked = qty_stock_on_po(lifts or [], po_ref)
-    return round_qty_mt(effective_po_qty(po) - sold - stocked)
+    moved = qty_so_dispatch_on_po(lifts or [], po_ref) + stocked
+    return round_qty_mt(effective_po_qty(po) - max(sold + stocked, moved))
 
 
 def _producer_to_company(producer: dict) -> dict:

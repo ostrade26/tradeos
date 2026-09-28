@@ -404,9 +404,10 @@ export function buildPoRegisterIndex(
       }
       const boughtBack = (so.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
       const cap = Math.max(0, so.orderQty - boughtBack)
-      const left = roundQtyMt(cap - (soCommitted.get(soKey) ?? 0))
+      const rawLeft = roundQtyMt(cap - (soCommitted.get(soKey) ?? 0))
+      const left = roundQtyMt(Math.max(0, rawLeft))
       const transit = roundQtyMt(soTransit.get(soKey) ?? 0)
-      const deliveredQty = roundQtyMt(Math.max(0, so.orderQty - left - transit))
+      const deliveredQty = roundQtyMt(Math.max(0, so.orderQty - rawLeft - transit))
       allocation += so.orderQty
       toBeLift += left
       inTransit += transit
@@ -448,9 +449,11 @@ export function buildPoRegisterIndex(
     const boughtBack = (po?.buyBacks ?? []).reduce((sum, b) => sum + b.qtyMt, 0)
     const sellCap = Math.max(0, (po?.orderQty ?? 0) - boughtBack)
     const stockQty = roundQtyMt(stock.delivered + stock.inTransit)
+    const booked = roundQtyMt(soldQty + stockQty)
+    const moved = roundQtyMt(delivered + inTransit)
     const available = !po || closed
       ? 0
-      : roundQtyMt(sellCap - roundQtyMt(soldQty) - stockQty)
+      : roundQtyMt(sellCap - Math.max(booked, moved))
 
     index.set(poKey, {
       rollup: {
@@ -577,9 +580,10 @@ export function linkedSoLiftRollup(
       }
       continue
     }
-    const left = remainingOnOrder(so, lifts)
+    const rawLeft = remainingOnOrder(so, lifts)
+    const left = roundQtyMt(Math.max(0, rawLeft))
     const transit = inTransitQtyOnOrder(lifts, so)
-    const deliveredQty = roundQtyMt(Math.max(0, so.orderQty - left - transit))
+    const deliveredQty = roundQtyMt(Math.max(0, so.orderQty - rawLeft - transit))
     allocation += so.orderQty
     toBeLift += left
     inTransit += transit

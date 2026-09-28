@@ -3,7 +3,7 @@ import { getSOsForPO, toBeLifted } from '../data/mockData'
 import { liftTouchesRef } from './liftAllocations'
 import { getOutstandingBalance } from './liftBalance'
 
-export type CloseOrderMethod = 'cash' | 'carried_forward' | 'short_closed'
+export type CloseOrderMethod = 'cash' | 'carried_forward' | 'short_closed' | 'delivered'
 
 /** Delivery shortfall below this (MT) shows as "Short" on registers; at or above shows as "Balance". */
 export const SHORT_BALANCE_THRESHOLD_MT = 5
@@ -88,11 +88,12 @@ export function canCloseOrder(
 
   if (balanceOwed <= 0 && remaining <= 0) {
     return {
-      ok: false,
-      reason: 'Nothing to close — order is fully delivered.',
+      ok: true,
       balanceOwed: 0,
       toBeLifted: remaining,
-      availableMethods: [],
+      poRef: poRef ?? carryPair?.poRef,
+      soRef: soRef ?? carryPair?.soRef,
+      availableMethods: ['delivered'],
     }
   }
 
@@ -134,7 +135,7 @@ export function completionTypeLabel(type: TradeOrder['completionType']): string 
     case 'cash_settled': return 'Closed · cash'
     case 'carried_forward': return 'Closed · next delivery'
     case 'short_closed': return 'Closed · write-off'
-    case 'delivered': return 'Marked complete'
+    case 'delivered': return 'Closed'
     default: return null
   }
 }

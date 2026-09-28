@@ -12,13 +12,11 @@ interface OrderRowActionsProps {
   editHref: string
   canDelete: { ok: boolean; reason?: string }
   canClose?: boolean
-  canMarkComplete?: boolean
   canBuyBack?: boolean
   sellAvailableQty?: number
   /** When true, show restore + permanent delete instead of schedule delete. */
   deletedTab?: boolean
   onCloseOrder?: () => void
-  onMarkComplete?: () => void
   onBuyBack?: () => void
   onScheduleDelete: () => void
   onCancelDelete: () => void
@@ -31,12 +29,10 @@ export function OrderRowActions({
   editHref,
   canDelete,
   canClose,
-  canMarkComplete,
   canBuyBack,
   sellAvailableQty,
   deletedTab,
   onCloseOrder,
-  onMarkComplete,
   onBuyBack,
   onScheduleDelete,
   onCancelDelete,
@@ -72,9 +68,6 @@ export function OrderRowActions({
           items: [
             ...(canClose && onCloseOrder
               ? [{ type: 'button' as const, label: 'Close order…', icon: CircleCheck, onClick: onCloseOrder }]
-              : []),
-            ...(canMarkComplete && onMarkComplete
-              ? [{ type: 'button' as const, label: 'Mark complete', icon: CircleCheck, onClick: onMarkComplete }]
               : []),
             ...(canBuyBack && onBuyBack
               ? [{ type: 'button' as const, label: 'Buy back', icon: RotateCcw, onClick: onBuyBack }]
@@ -129,8 +122,6 @@ export function OrderRowActions({
   ]), [
     canBuyBack,
     canClose,
-    canMarkComplete,
-    onMarkComplete,
     canEditOrders,
     canDelete.ok,
     canDelete.reason,

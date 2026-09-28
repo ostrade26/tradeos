@@ -24,9 +24,8 @@ import { formatDate, formatQty } from '../../lib/utils'
 import { formatContractRate } from '../../lib/orderRate'
 import { formatOrderRef, findTradeOrder } from '../../lib/tradeRefs'
 import { usePermissions } from '../../hooks/useAuth'
-import { linkedSoLiftRollup, orderHasPendingLift, pendingLiftKeys, remainingOnOrder } from '../../lib/liftAllocations'
+import { linkedSoLiftRollup, remainingOnOrder } from '../../lib/liftAllocations'
 import {
-  toBeLifted,
   type TradeOrder,
   type OrderSide,
   unliftedQty,
@@ -84,16 +83,6 @@ export function OrderDetailDrawer({
     [order, store.lifts, store.balanceSettlements, store.tradeOrders],
   )
 
-  const canMarkComplete = Boolean(
-    order
-    && order.status !== 'completed'
-    && order.status !== 'cancelled'
-    && !order.deleteScheduledAt
-    && !closeCheck?.ok
-    && toBeLifted(order) <= 0
-    && !orderHasPendingLift(pendingLiftKeys(store.lifts), order),
-  )
-
   const buyBackCheck = useMemo(
     () => {
       if (!order) return { ok: false as const }
@@ -145,9 +134,6 @@ export function OrderDetailDrawer({
               ...(closeCheck?.ok
                 ? [{ type: 'button' as const, label: 'Close order…', icon: CircleCheck, onClick: () => setCloseOpen(true) }]
                 : []),
-              ...(canMarkComplete
-                ? [{ type: 'button' as const, label: 'Mark complete', icon: CircleCheck, onClick: () => { void store.closeOrder(order.id, { method: 'delivered' }) } }]
-                : []),
               ...(buyBackCheck.ok
                 ? [{ type: 'button' as const, label: 'Buy back', icon: RotateCcw, onClick: () => setBuyBackOpen(true) }]
                 : []),
@@ -180,7 +166,7 @@ export function OrderDetailDrawer({
         ],
       }] : []),
     ])
-  }, [canCreateOrders, canDeleteOrders, canEditOrders, canMarkComplete, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
+  }, [canCreateOrders, canDeleteOrders, canEditOrders, order, closeCheck?.ok, buyBackCheck.ok, onScheduleDelete, onCancelDelete, onBlockedDelete, store])
 
   if (!order) return null
 
@@ -302,6 +288,7 @@ export function OrderDetailDrawer({
       <OrderRelatedSection
         order={order}
         linkedSOs={linkedSOs}
+        orders={store.tradeOrders}
         lifts={store.lifts}
         onNavigate={onClose}
       />

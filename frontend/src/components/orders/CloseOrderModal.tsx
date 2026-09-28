@@ -33,6 +33,10 @@ const METHOD_LABELS: Record<CloseOrderMethod, { title: string; description: stri
     title: 'No further delivery',
     description: 'Write off the unlifted balance — no more lifts and no cash settlement. Ordered quantity stays as booked.',
   },
+  delivered: {
+    title: 'Close order',
+    description: 'Quantity is fully delivered. This moves the order to Completed.',
+  },
 }
 
 export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrderModalProps) {
@@ -310,7 +314,7 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
               })}
             </div>
 
-            {method !== 'short_closed' && (
+            {method !== 'short_closed' && method !== 'delivered' && (
               <DatePicker
                 label="Settlement date"
                 value={settledAt}

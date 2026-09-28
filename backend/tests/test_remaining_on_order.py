@@ -229,6 +229,13 @@ class RemainingOnOrderTests(unittest.TestCase):
         lifts = [_lift(lift_id="L1", po_ref="1", so_ref="2", qty=12.09)]
         self.assertEqual(get_remaining_sell_qty([po, so], "1", lifts), -0.09)
 
+    def test_weighment_over_order_shows_on_avail_not_as_extra_booking(self) -> None:
+        po = _po("1", 12)
+        so = _so("2", 12, po_ref="1")
+        lifts = [_lift(lift_id="L1", po_ref="1", so_ref="2", qty=12.09)]
+        self.assertEqual(get_remaining_sell_qty([po, so], "1", lifts), -0.09)
+        self.assertEqual(remaining_on_order(so, lifts), -0.09)
+
     def test_booked_so_still_counts_in_full(self) -> None:
         po = _po("1", 50)
         so = _so("9", 10, po_ref="1")
