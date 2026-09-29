@@ -59,6 +59,45 @@ export function inboxSubject(item: UserNotification): string {
   return item.title.replace(/^Tradeal\s+/i, '')
 }
 
+export type NoticeChangelogLine = {
+  category: string
+  title: string
+  detail: string
+  featureKey: string
+}
+
+/** Changelog from a notice payload. Accepts the stored JSON string or an already-parsed list. */
+export function noticeChangelog(
+  payload: { changelog?: unknown } | null | undefined,
+): NoticeChangelogLine[] {
+  if (!payload) return []
+  let parsed: unknown = payload.changelog
+  for (let i = 0; i < 2 && typeof parsed === 'string'; i += 1) {
+    const text = parsed.trim()
+    if (!text) return []
+    try {
+      parsed = JSON.parse(text) as unknown
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map(entry => {
+      if (!entry || typeof entry !== 'object') return null
+      const row = entry as Record<string, unknown>
+      const title = String(row.title || '').trim()
+      if (!title) return null
+      return {
+        category: String(row.category || '').trim(),
+        title,
+        detail: String(row.detail || '').trim(),
+        featureKey: String(row.feature_key || '').trim(),
+      }
+    })
+    .filter((row): row is NoticeChangelogLine => row != null)
+}
+
 export function notificationSubtitle(item: UserNotification): string {
   if (item.kind === 'credentials') {
     const email = item.payload.login_id || item.body

@@ -14,6 +14,7 @@ import { cn } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
 import { deployReviewActionLabel, isDeployReviewItem } from '../../lib/deployReviewNav'
 import { isOpenSeatRequest, isSeatRequestDecisionItem } from '../../lib/platformSeatRequestInbox'
+import { NoticeMessage } from '../feedback/NoticeMessage'
 import { SeatRequestInboxMessage } from './SeatRequestInboxMessage'
 
 function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
@@ -128,7 +129,7 @@ export function InboxDetailPane({
             statusAudience={platformConsole ? 'platform' : 'org'}
           />
         ) : (
-          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{body}</p>
+          <NoticeMessage payload={item.notice?.payload ?? item.send?.payload} fallback={body} />
         )}
         <div className="mt-4">
           <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => onOpen(item)}>

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { RichTextContent } from '../ui/RichTextContent'
 import { AnnouncementModalShell } from '../feedback/AnnouncementModalShell'
 import { cn } from '../../lib/utils'
+import { noticeChangelog } from '../../lib/notificationDisplay'
 import { releaseCategoryLabel } from '../../lib/releaseVersion'
 import type { UserNotification } from '../../api/platformApi'
 
@@ -22,22 +23,13 @@ function payloadText(payload: Record<string, string>, key: string): string {
 }
 
 function changelogFromNotice(item: UserNotification): { category: string; title: string; detail: string }[] {
-  const raw = payloadText(item.payload, 'changelog')
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as { category?: string; title?: string; detail?: string }[]
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed
-          .map(entry => ({
-            category: String(entry.category || ''),
-            title: String(entry.title || '').trim(),
-            detail: String(entry.detail || '').trim(),
-          }))
-          .filter(entry => entry.title)
-      }
-    } catch {
-      /* fall through */
-    }
+  const parsed = noticeChangelog(item.payload)
+  if (parsed.length) {
+    return parsed.map(entry => ({
+      category: entry.category,
+      title: entry.title,
+      detail: entry.detail,
+    }))
   }
   return updateItemsFromNotice(item).map(title => ({ category: '', title, detail: '' }))
 }

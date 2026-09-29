@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils'
-import { isReleaseRichHtml, sanitizeReleaseHtml } from '../../lib/releaseRichText'
+import { isReleaseRichHtml, sanitizeReleaseHtml, unescapeReleaseDetail } from '../../lib/releaseRichText'
 
 const richClass = [
   'text-sm leading-relaxed',
@@ -22,7 +22,7 @@ export function RichTextContent({
   value: string
   className?: string
 }) {
-  const trimmed = value.trim()
+  const trimmed = unescapeReleaseDetail(value)
   if (!trimmed) return null
   if (!isReleaseRichHtml(trimmed)) {
     return <p className={cn('whitespace-pre-wrap text-sm leading-relaxed', className)}>{trimmed}</p>
@@ -31,7 +31,7 @@ export function RichTextContent({
   if (!safe) return null
   return (
     <div
-      className={cn(richClass, className)}
+      className={cn('release-rich', richClass, className)}
       dangerouslySetInnerHTML={{ __html: safe }}
     />
   )

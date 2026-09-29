@@ -47,6 +47,19 @@ export function isReleaseRichHtml(value: string): boolean {
   return /<\/?(?:b|strong|ul|ol|li|p|div|br|span|font)\b/i.test(value)
 }
 
+/** Undo one layer of HTML escaping so stored tags can be rendered. */
+export function unescapeReleaseDetail(value: string): string {
+  const text = value.trim()
+  if (!text || /<[a-z]/i.test(text)) return text
+  if (!text.includes('&lt;') && !text.includes('&gt;')) return text
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
 /** Plain text for compact previews. Formatting tags are removed; line breaks stay. */
 export function plainTextFromReleaseDetail(value: string): string {
   const text = value.trim()

@@ -3,7 +3,9 @@ import { platformFeatureIcon as FeatureIcon } from '../../lib/platformProductIco
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
+import { noticeChangelog } from '../../lib/notificationDisplay'
 import { releaseCategoryLabel, isGatedReleaseCategory } from '../../lib/releaseVersion'
+import { RichTextContent } from '../ui/RichTextContent'
 import type { UserNotification } from '../../api/platformApi'
 
 type FeatureOption = {
@@ -19,35 +21,22 @@ function payloadText(payload: Record<string, string>, key: string): string {
 }
 
 function optionsFromNotice(item: UserNotification): FeatureOption[] {
-  const raw = payloadText(item.payload, 'changelog')
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as {
-        category?: string
-        title?: string
-        detail?: string
-        feature_key?: string
-      }[]
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter(entry => isGatedReleaseCategory(String(entry.category || '')) || entry.feature_key)
-          .map(entry => {
-            const featureKey = String(entry.feature_key || '').trim()
-            const title = String(entry.title || '').trim()
-            if (!featureKey || !title) return null
-            return {
-              featureKey,
-              title,
-              detail: String(entry.detail || '').trim(),
-              category: String(entry.category || 'feature_enhancement'),
-              pendingInterest: false,
-            }
-          })
-          .filter((row): row is FeatureOption => row != null)
-      }
-    } catch {
-      /* fall through */
-    }
+  const parsed = noticeChangelog(item.payload)
+  if (parsed.length) {
+    const fromChangelog = parsed
+      .filter(entry => isGatedReleaseCategory(entry.category) || entry.featureKey)
+      .map(entry => {
+        if (!entry.featureKey) return null
+        return {
+          featureKey: entry.featureKey,
+          title: entry.title,
+          detail: entry.detail,
+          category: entry.category || 'feature_enhancement',
+          pendingInterest: false,
+        }
+      })
+      .filter((row): row is FeatureOption => row != null)
+    if (fromChangelog.length) return fromChangelog
   }
   const keys = payloadText(item.payload, 'feature_keys').split('\n').map(k => k.trim()).filter(Boolean)
   const titles = payloadText(item.payload, 'items').split('\n').map(t => t.trim()).filter(Boolean)
@@ -141,7 +130,7 @@ export function FeatureLaunchInterestModal({
                     <p className="text-sm font-semibold text-heading">{option.title}</p>
                     <p className="text-xs text-muted mt-0.5">{releaseCategoryLabel(option.category)}</p>
                     {option.detail ? (
-                      <p className="text-sm text-muted mt-2 leading-relaxed">{option.detail}</p>
+                      <RichTextContent value={option.detail} className="mt-2 text-muted" />
                     ) : null}
                   </div>
                 </div>

@@ -23,6 +23,7 @@ import {
   isFeatureEnhancementNotice,
   isFeatureInterestNotice,
   isProductUpdateNotice,
+  noticeChangelog,
   notificationKindLabel,
 } from '../../lib/notificationDisplay'
 import { formatDateTime } from '../../lib/utils'
@@ -35,6 +36,7 @@ import {
   seatRequestInboxMessageLine,
 } from '../../lib/platformSeatRequestInbox'
 import { InboxKindGlyph } from './InboxKindGlyph'
+import { NoticeMessage } from '../feedback/NoticeMessage'
 import { SeatRequestInboxMessage } from './SeatRequestInboxMessage'
 import type { InboxStatusFilter } from './InboxFiltersBar'
 
@@ -286,9 +288,9 @@ function ReceivedDetailPanel({
             statusAudience={platformConsole ? 'platform' : 'org'}
           />
         </DetailGroup>
-      ) : replyBody ? (
+      ) : replyBody || noticeChangelog(item.notice?.payload ?? item.send?.payload).length > 0 ? (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">
-          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{replyBody}</p>
+          <NoticeMessage payload={item.notice?.payload ?? item.send?.payload} fallback={replyBody} />
         </DetailGroup>
       ) : (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">

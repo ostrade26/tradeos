@@ -18,7 +18,8 @@ import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
-import { notificationKindLabel, formatInboxDate } from '../../lib/notificationDisplay'
+import { notificationKindLabel, formatInboxDate, noticeChangelog } from '../../lib/notificationDisplay'
+import { NoticeMessage } from '../feedback/NoticeMessage'
 import { formatDateTime } from '../../lib/utils'
 import { requestRecipientLabel } from '../feedback/SendToTradealModal'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
@@ -210,9 +211,9 @@ function SentDetailPanel({ item }: { item: UnifiedInboxItem }) {
             )}
           </DetailGroup>
         </>
-      ) : message ? (
+      ) : message || noticeChangelog(item.send?.payload).length > 0 ? (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">
-          <p className="text-sm text-heading whitespace-pre-wrap leading-relaxed">{message}</p>
+          <NoticeMessage payload={item.send?.payload} fallback={message} />
         </DetailGroup>
       ) : (
         <DetailGroup title="Message" icon={MessageSquare} surface="muted">

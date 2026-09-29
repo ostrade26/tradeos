@@ -3,7 +3,9 @@ import { platformFeatureIcon as FeatureIcon } from '../../lib/platformProductIco
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
+import { noticeChangelog } from '../../lib/notificationDisplay'
 import { releaseCategoryLabel, isGatedReleaseCategory } from '../../lib/releaseVersion'
+import { RichTextContent } from '../ui/RichTextContent'
 import type { UserNotification } from '../../api/platformApi'
 
 type EnhancementOption = {
@@ -23,35 +25,22 @@ function optionsFromNotice(
   appliedKeys: string[],
 ): EnhancementOption[] {
   const applied = new Set(appliedKeys.map(k => k.toLowerCase()))
-  const raw = payloadText(item.payload, 'changelog')
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as {
-        category?: string
-        title?: string
-        detail?: string
-        feature_key?: string
-      }[]
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter(entry => isGatedReleaseCategory(String(entry.category || '')) || entry.feature_key)
-          .map(entry => {
-            const featureKey = String(entry.feature_key || '').trim()
-            const title = String(entry.title || '').trim()
-            if (!featureKey || !title) return null
-            return {
-              featureKey,
-              title,
-              detail: String(entry.detail || '').trim(),
-              category: String(entry.category || 'feature_enhancement'),
-              alreadyEnabled: applied.has(featureKey.toLowerCase()),
-            }
-          })
-          .filter((row): row is EnhancementOption => row != null)
-      }
-    } catch {
-      /* fall through */
-    }
+  const parsed = noticeChangelog(item.payload)
+  if (parsed.length) {
+    const fromChangelog = parsed
+      .filter(entry => isGatedReleaseCategory(entry.category) || entry.featureKey)
+      .map(entry => {
+        if (!entry.featureKey) return null
+        return {
+          featureKey: entry.featureKey,
+          title: entry.title,
+          detail: entry.detail,
+          category: entry.category || 'feature_enhancement',
+          alreadyEnabled: applied.has(entry.featureKey.toLowerCase()),
+        }
+      })
+      .filter((row): row is EnhancementOption => row != null)
+    if (fromChangelog.length) return fromChangelog
   }
   const keys = payloadText(item.payload, 'feature_keys')
     .split('\n')
@@ -160,7 +149,7 @@ export function FeatureEnhancementModal({
                         {disabled ? ' · Already enabled' : ''}
                       </p>
                       {option.detail ? (
-                        <p className="text-sm text-muted mt-2 leading-relaxed">{option.detail}</p>
+                        <RichTextContent value={option.detail} className="mt-2 text-muted" />
                       ) : null}
                     </div>
                   </div>
