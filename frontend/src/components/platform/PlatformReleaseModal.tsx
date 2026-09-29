@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { RichTextEditor } from '../ui/RichTextEditor'
 import { Select } from '../ui/Select'
 import {
   RELEASE_CATEGORIES,
@@ -80,10 +81,17 @@ export function PlatformReleaseModal({
   onPublish?: (payload: ReleaseFormPayload) => void
 }) {
   const [form, setForm] = useState<ReleaseFormPayload>(formFromRelease(null, nextVersion))
+  const formRef = useRef(form)
+  formRef.current = form
+
+  const replaceForm = (next: ReleaseFormPayload) => {
+    formRef.current = next
+    setForm(next)
+  }
 
   useEffect(() => {
     if (!open) return
-    setForm(formFromRelease(release, nextVersion))
+    replaceForm(formFromRelease(release, nextVersion))
   }, [open, release, nextVersion])
 
   const categories = useMemo(() => form.items.map(item => item.category), [form.items])
@@ -98,17 +106,19 @@ export function PlatformReleaseModal({
   )
 
   const setItem = (index: number, patch: Partial<ReleaseFormItem>) => {
-    setForm(current => ({
+    const current = formRef.current
+    const next = {
       ...current,
       items: current.items.map((item, i) => {
         if (i !== index) return item
-        const next = { ...item, ...patch }
+        const updated = { ...item, ...patch }
         if (patch.category != null && isGatedReleaseCategory(String(patch.category))) {
-          next.announce_timing = 'now'
+          updated.announce_timing = 'now'
         }
-        return next
+        return updated
       }),
-    }))
+    }
+    replaceForm(next)
   }
 
   return (
@@ -127,12 +137,12 @@ export function PlatformReleaseModal({
             variant="secondary"
             loading={loading}
             disabled={!valid || loading}
-            onClick={() => onSubmit(form)}
+            onClick={() => onSubmit(formRef.current)}
           >
             Save draft
           </Button>
           {canPublish ? (
-            <Button loading={loading} disabled={!valid || loading} onClick={() => onPublish?.(form)}>
+            <Button loading={loading} disabled={!valid || loading} onClick={() => onPublish?.(formRef.current)}>
               Publish
             </Button>
           ) : null}
@@ -154,7 +164,7 @@ export function PlatformReleaseModal({
         <Input
           label="Title"
           value={form.title}
-          onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+          onChange={e => replaceForm({ ...formRef.current, title: e.target.value })}
           placeholder="Short release name"
         />
       </div>
@@ -191,23 +201,24 @@ export function PlatformReleaseModal({
                   variant="ghost"
                   size="icon"
                   className="mb-0.5 h-11 w-11 shrink-0"
-                  onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }))}
+                  onClick={() => replaceForm({
+                    ...formRef.current,
+                    items: formRef.current.items.filter((_, i) => i !== index),
+                  })}
                   aria-label="Remove change"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               ) : null}
             </div>
-            <label className="flex flex-col gap-2.5 sm:col-span-2">
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Detail</span>
-              <textarea
+            <div className="sm:col-span-2">
+              <RichTextEditor
+                label="Detail"
                 value={item.detail}
-                onChange={e => setItem(index, { detail: e.target.value })}
-                rows={5}
+                onChange={detail => setItem(index, { detail })}
                 placeholder="What changed — shown to organisations under the title."
-                className="min-h-[7rem] w-full resize-y rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-card px-3 py-2.5 text-sm leading-relaxed text-heading"
               />
-            </label>
+            </div>
             {isGatedReleaseCategory(item.category) ? (
               <div className="sm:col-span-2 space-y-2">
                 <Input
@@ -262,7 +273,10 @@ export function PlatformReleaseModal({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))}
+            onClick={() => replaceForm({
+              ...formRef.current,
+              items: [...formRef.current.items, emptyItem()],
+            })}
           >
             <Plus className="h-4 w-4" aria-hidden />
             Add change

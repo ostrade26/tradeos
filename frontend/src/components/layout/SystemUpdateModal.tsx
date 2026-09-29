@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, CheckCircle2, Circle, Loader2 } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { RichTextContent } from '../ui/RichTextContent'
 import { AnnouncementModalShell } from '../feedback/AnnouncementModalShell'
 import { cn } from '../../lib/utils'
 import { releaseCategoryLabel } from '../../lib/releaseVersion'
@@ -12,6 +13,7 @@ interface UpdateStep {
   id: string
   title: string
   detail: string
+  categoryLabel?: string
   kind: 'feature' | 'apply' | 'reload'
 }
 
@@ -61,9 +63,11 @@ function buildSteps(item: UserNotification): UpdateStep[] {
   const featureSteps: UpdateStep[] = (changelog.length ? changelog : [{ category: '', title: item.title, detail: '' }]).map((entry, index) => ({
     id: `feature-${index}`,
     title: entry.title,
-    detail: [entry.category ? releaseCategoryLabel(entry.category) : '', entry.detail]
-      .filter(Boolean)
-      .join(' · ') || (item.kind === 'feature_launch' ? 'New feature for this workspace' : 'Included in this version'),
+    detail: entry.detail
+      || (entry.category
+        ? ''
+        : (item.kind === 'feature_launch' ? 'New feature for this workspace' : 'Included in this version')),
+    categoryLabel: entry.category ? releaseCategoryLabel(entry.category) : undefined,
     kind: 'feature',
   }))
   const key = item.feature_key || payloadText(item.payload, 'feature_key')
@@ -268,8 +272,13 @@ export function SystemUpdateModal({
                     <p className={cn('text-sm font-semibold text-heading', status === 'pending' && 'text-muted')}>
                       {step.title}
                     </p>
+                    {step.categoryLabel ? (
+                      <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-muted">
+                        {step.categoryLabel}
+                      </p>
+                    ) : null}
                     {step.detail ? (
-                      <p className="mt-0.5 text-sm leading-relaxed text-muted">{step.detail}</p>
+                      <RichTextContent value={step.detail} className="mt-0.5 text-muted" />
                     ) : null}
                   </div>
                 </li>

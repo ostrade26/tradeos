@@ -1,4 +1,5 @@
 import { Button } from '../ui/Button'
+import { RichTextContent } from '../ui/RichTextContent'
 import { AnnouncementModalShell } from './AnnouncementModalShell'
 import { announcementVariantFromKind } from '../../lib/announcementTheme'
 import { updateItemsFromNotice } from '../layout/SystemUpdateModal'
@@ -161,7 +162,7 @@ export function ReleaseNoticeModal({
               ) : null}
               <p className="mt-1 text-sm font-semibold text-heading leading-snug">{line.title}</p>
               {line.detail ? (
-                <p className="mt-1.5 text-sm leading-relaxed text-heading/80">{line.detail}</p>
+                <RichTextContent value={line.detail} className="mt-1.5 text-heading/80" />
               ) : null}
             </li>
           ))}

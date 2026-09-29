@@ -24,6 +24,7 @@ import type { PlatformRelease, PlatformReleaseItem } from '../../api/platformApi
 import { isAssignedReleaseVersion, releaseCategoryLabel } from '../../lib/releaseVersion'
 import { formatDateTime } from '../../lib/utils'
 import { platformReleaseIcon as ReleaseIcon } from '../../lib/platformProductIcons'
+import { RichTextContent } from '../ui/RichTextContent'
 
 const actionBtnClass = 'h-auto w-full py-2.5 text-sm'
 
@@ -210,9 +211,7 @@ export function PlatformReleaseDetailDrawer({
                     >
                       <p className="text-sm font-semibold text-heading leading-snug">{item.title}</p>
                       {item.detail?.trim() ? (
-                        <p className="text-sm text-muted mt-1.5 leading-relaxed whitespace-pre-wrap">
-                          {item.detail.trim()}
-                        </p>
+                        <RichTextContent value={item.detail} className="mt-1.5 text-muted" />
                       ) : null}
                       {!item.gated && item.announce_timing === 'later' ? (
                         <p className="text-xs text-muted mt-2">

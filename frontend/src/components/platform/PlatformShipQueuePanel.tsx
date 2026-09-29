@@ -11,6 +11,7 @@ import {
   type ShipQueueItem,
 } from '../../api/platformApi'
 import { useToast } from '../../hooks/useToast'
+import { plainTextFromReleaseDetail } from '../../lib/releaseRichText'
 import { formatDateTime } from '../../lib/utils'
 import { DataTable, TableSkeleton } from '../ui/DataTable'
 import { EmptyState } from '../ui/Tabs'
@@ -237,7 +238,7 @@ export const PlatformShipQueuePanel = forwardRef<
               </ul>
             ) : null}
             {r.kind === 'product_update' && r.detail ? (
-              <p className="text-xs text-muted line-clamp-2">{r.detail}</p>
+              <p className="text-xs text-muted line-clamp-2">{plainTextFromReleaseDetail(r.detail)}</p>
             ) : null}
           </div>
         ),

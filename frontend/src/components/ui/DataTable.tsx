@@ -276,15 +276,38 @@ export function DataTable<T extends { id?: string | number }>({
     return data.findIndex((row, i) => rowIdOf(row, i) === focusRowId)
   }, [data, focusRowId, getRowId])
 
+  const followedFocusId = useRef<string | undefined>(undefined)
+  const sortToken = `${sortKey ?? ''}\0${sortDirection ?? ''}`
+  const seenSort = useRef(sortToken)
+  const seenLength = useRef(data.length)
+
   useEffect(() => {
     if (!paginate) return
-    if (focusIndex >= 0) {
+
+    const sortChanged = seenSort.current !== sortToken
+    seenSort.current = sortToken
+    const lengthChanged = seenLength.current !== data.length
+    seenLength.current = data.length
+
+    // A new sort should show the first page of that order. Do not follow the
+    // already-open row onto the page where the sort happened to place it.
+    if (sortChanged) {
+      setPage(1)
+      if (focusRowId) followedFocusId.current = focusRowId
+      return
+    }
+
+    const focusIsNew = Boolean(focusRowId) && followedFocusId.current !== focusRowId
+    if (focusIsNew) {
+      if (focusIndex < 0) return
+      followedFocusId.current = focusRowId
       setPage(Math.floor(focusIndex / pageSize) + 1)
       return
     }
-    if (focusRowId) return
-    setPage(1)
-  }, [data.length, pageSize, paginate, focusIndex, focusRowId])
+
+    if (!focusRowId) followedFocusId.current = undefined
+    if (lengthChanged) setPage(1)
+  }, [paginate, sortToken, focusRowId, focusIndex, pageSize, data.length])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
