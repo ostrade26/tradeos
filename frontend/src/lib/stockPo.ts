@@ -10,6 +10,11 @@ export function purchaseIsClosed(po: Pick<TradeOrder, 'status' | 'completionType
     || Boolean(po.completionType && CLOSED_COMPLETION.has(po.completionType))
 }
 
+/** A lot is in the godown once stock has been received or a warehouse sale exists. */
+export function lotHasReceivedStock(lot: { remaining: number; allocated: number }): boolean {
+  return lot.remaining > 0 || lot.allocated > 0
+}
+
 /** Lot a sales order is selling from inventory, not as an open purchase booking. */
 export function inventoryStockRef(
   so: Pick<TradeOrder, 'poRef' | 'stockPoRef'> | undefined,

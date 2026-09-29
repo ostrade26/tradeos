@@ -9,6 +9,13 @@ export interface SearchableSelectOption {
   label: string
   description?: string
   keywords?: string
+  /** Used with `groups` to split the open list into tabs. */
+  group?: string
+}
+
+export interface SearchableSelectGroup {
+  id: string
+  label: string
 }
 
 interface SearchableSelectProps {
@@ -27,11 +34,15 @@ interface SearchableSelectProps {
   createLabel?: string
   searchable?: boolean
   emptyMessage?: string
+  /** When set, the open list is split into these tabs. Options use `group`. */
+  groups?: SearchableSelectGroup[]
   disabled?: boolean
   error?: string
   className?: string
   /** Shorter control for dense toolbars (e.g. table pagination). */
   compact?: boolean
+  /** Open-list height cap in pixels. Directories stay at 240. */
+  listMaxHeight?: number
 }
 
 /** Above Modal/Drawer overlay (1200) so listboxes work inside dialogs. */
@@ -66,11 +77,13 @@ export function SearchableSelect({
   onRequestCreate,
   createLabel = 'Add new',
   searchable = true,
+  groups,
   emptyMessage = 'No matches found',
   disabled = false,
   error,
   className,
   compact = false,
+  listMaxHeight = 240,
 }: SearchableSelectProps) {
   const listboxId = useId()
   const createInputId = useId()
@@ -95,14 +108,18 @@ export function SearchableSelect({
   const [creatingBusy, setCreatingBusy] = useState(false)
   const [blockAutofill, setBlockAutofill] = useState(true)
   const [blockCreateAutofill, setBlockCreateAutofill] = useState(true)
+  const [activeGroup, setActiveGroup] = useState(groups?.[0]?.id ?? '')
 
   const selectionOnly = allowCreate && !allowCustom
 
   const selected = options.find(o => o.value === value)
   const resolvedLabel = selected?.label ?? displayLabel ?? ''
-  const filtered = searchable
-    ? options.filter(o => matchesQuery(o, query))
+  const grouped = (groups?.length ?? 0) > 0
+    ? options.filter(option => (option.group ?? groups![0]!.id) === activeGroup)
     : options
+  const filtered = searchable
+    ? grouped.filter(o => matchesQuery(o, query))
+    : grouped
 
   const handleClose = useCallback((commitCustom = true) => {
     if (commitCustom && allowCustom && searchable && !selectionOnly) {
@@ -129,7 +146,7 @@ export function SearchableSelect({
     const viewportPad = 8
     const measured = panelRef.current?.offsetHeight
     /** Hard cap so long directories never fill the viewport and hide the Add CTA footer. */
-    const PANEL_CAP = 240
+    const PANEL_CAP = listMaxHeight
     // Compact page-size lists are short; fall back so first paint can flip correctly.
     const estimatedHeight = measured && measured > 0
       ? Math.min(measured, PANEL_CAP)
@@ -148,7 +165,7 @@ export function SearchableSelect({
       width: rect.width,
       maxHeight,
     })
-  }, [options.length])
+  }, [options.length, listMaxHeight])
 
   useEffect(() => {
     if (!open) {
@@ -236,6 +253,12 @@ export function SearchableSelect({
 
   const openPanel = () => {
     if (disabled) return
+    const selectedGroup = options.find(option => option.value === value)?.group
+    if (groups?.length) {
+      setActiveGroup(selectedGroup && groups.some(group => group.id === selectedGroup)
+        ? selectedGroup
+        : groups[0]!.id)
+    }
     setQuery('')
     setCreating(false)
     setCreateName('')
@@ -366,6 +389,34 @@ export function SearchableSelect({
           }}
           className="flex flex-col rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-card shadow-lg overflow-hidden"
         >
+          {groups && groups.length > 0 && (
+            <div role="tablist" aria-label="Sales order type" className="flex shrink-0 border-b border-gray-200 dark:border-gray-700">
+              {groups.map(group => {
+                const count = options.filter(option => (option.group ?? groups[0]!.id) === group.id).length
+                const selectedTab = activeGroup === group.id
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedTab}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => setActiveGroup(group.id)}
+                    className={cn(
+                      'relative flex-1 px-3 py-2 text-xs font-medium cursor-pointer',
+                      selectedTab ? 'text-heading' : 'text-muted hover:text-heading',
+                    )}
+                  >
+                    {group.label}
+                    <span className="ml-1.5 tabular-nums text-muted">{count}</span>
+                    {selectedTab && (
+                      <span className="absolute left-3 right-3 bottom-0 h-0.5 rounded-full bg-accent" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <div
             className="min-h-0 flex-1 overflow-y-auto py-1"
             onMouseLeave={() => setHighlight(-1)}

@@ -27,7 +27,7 @@ interface OrderFiltersBarProps {
   brokers: string[]
   spots: string[]
   rates: string[]
-  onExport: () => void
+  onExport?: () => void
   /** Show Unlinked-only control (sales orders). */
   showUnlinkedFilter?: boolean
 }
@@ -89,9 +89,11 @@ export function OrderFiltersBar({
           Filters{chips.length > 0 ? ` (${chips.length})` : ''}
           <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', filtersOpen && 'rotate-180')} />
         </Button>
-        <Button variant="outline" size="md" onClick={onExport}>
-          <Download className="h-4 w-4" /> Export
-        </Button>
+        {onExport ? (
+          <Button variant="outline" size="md" onClick={onExport}>
+            <Download className="h-4 w-4" /> Export
+          </Button>
+        ) : null}
       </FilterBar>
 
       <div className={cn(

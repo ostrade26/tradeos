@@ -688,11 +688,18 @@ export function applyLiftTotals<T extends { tradeOrders?: TradeOrder[]; lifts?: 
       const soRef = a.soRef ? attachOrderPrefix(a.soRef, 'sale') : ''
       if (!poRef || qty <= 0) continue
       if (soRef) {
-        add(poSoC, poRef, qty)
         add(soC, soRef, qty)
-        if (delivered) {
-          add(poSoD, poRef, qty)
-          add(soD, soRef, qty)
+        if (delivered) add(soD, soRef, qty)
+        const lotSale = linkedOrders.some(order =>
+          order.side === 'sale'
+          && order.stockPoRef
+          && !order.poRef
+          && attachOrderPrefix(order.ref, 'sale') === soRef
+          && refsMatch(order.stockPoRef, poRef, 'purchase'),
+        )
+        if (!lotSale) {
+          add(poSoC, poRef, qty)
+          if (delivered) add(poSoD, poRef, qty)
         }
       } else {
         add(poStockC, poRef, qty)

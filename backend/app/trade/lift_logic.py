@@ -159,19 +159,50 @@ def qty_committed_on_so(lifts: list[dict], so_ref: str, exclude_lift_id: str | N
     return round_qty_mt(total)
 
 
-def qty_so_dispatch_on_po(lifts: list[dict], po_ref: str, exclude_lift_id: str | None = None) -> float:
-    """SO-linked lift qty against a PO (excludes own-stock lifts)."""
+def _lot_sale_refs(orders: list[dict] | None, po_ref: str) -> set[str]:
+    """Warehouse sales draw the godown. They are not a second dispatch of the purchase."""
+    refs: set[str] = set()
+    if not orders:
+        return refs
+    for order in orders:
+        if order.get("side") != "sale" or order.get("poRef") or not order.get("stockPoRef"):
+            continue
+        if not refs_match(order.get("stockPoRef"), po_ref, "purchase"):
+            continue
+        key = attach_order_prefix(order.get("ref"), "sale")
+        if key:
+            refs.add(key)
+    return refs
+
+
+def qty_so_dispatch_on_po(
+    lifts: list[dict],
+    po_ref: str,
+    exclude_lift_id: str | None = None,
+    orders: list[dict] | None = None,
+) -> float:
+    """SO-linked lift qty against a PO (excludes own-stock lifts and godown sales)."""
+    lot_sales = _lot_sale_refs(orders, po_ref)
     total = 0.0
     for lift in lifts:
         if lift.get("id") == exclude_lift_id or lift.get("deletedAt"):
             continue
         for a in get_lift_allocations(lift):
-            if refs_match(a.get("poRef"), po_ref, "purchase") and a.get("soRef"):
-                total += a["qtyMt"]
+            if not refs_match(a.get("poRef"), po_ref, "purchase") or not a.get("soRef"):
+                continue
+            so_key = attach_order_prefix(a.get("soRef"), "sale")
+            if so_key and so_key in lot_sales:
+                continue
+            total += a["qtyMt"]
     return round_qty_mt(total)
 
 
-def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | None = None) -> float:
+def remaining_on_order(
+    order: dict,
+    lifts: list[dict],
+    exclude_lift_id: str | None = None,
+    orders: list[dict] | None = None,
+) -> float:
     from .buy_back import effective_po_qty
 
     if order.get("side") == "purchase":
@@ -187,6 +218,9 @@ def remaining_on_order(order: dict, lifts: list[dict], exclude_lift_id: str | No
                     continue
                 qty = float(a.get("qtyMt") or 0)
                 if a.get("soRef"):
+                    so_key = attach_order_prefix(a.get("soRef"), "sale")
+                    if so_key and so_key in _lot_sale_refs(orders, order["ref"]):
+                        continue
                     so_dispatch += qty
                 else:
                     stock += qty
@@ -209,14 +243,19 @@ def qty_stock_on_po(lifts: list[dict], po_ref: str, exclude_lift_id: str | None 
     return round_qty_mt(total)
 
 
-def remaining_on_po_for_dispatch(po: dict, lifts: list[dict], exclude_lift_id: str | None = None) -> float:
+def remaining_on_po_for_dispatch(
+    po: dict,
+    lifts: list[dict],
+    exclude_lift_id: str | None = None,
+    orders: list[dict] | None = None,
+) -> float:
     """PO qty available for SO dispatch. Own-stock lifts do not block dispatching that stock."""
     from .buy_back import effective_po_qty
 
     if po.get("side") != "purchase":
-        return remaining_on_order(po, lifts, exclude_lift_id)
+        return remaining_on_order(po, lifts, exclude_lift_id, orders)
     cap = effective_po_qty(po)
-    return round_qty_mt(max(0, cap - qty_so_dispatch_on_po(lifts, po["ref"], exclude_lift_id)))
+    return round_qty_mt(max(0, cap - qty_so_dispatch_on_po(lifts, po["ref"], exclude_lift_id, orders)))
 
 
 def scale_allocations(allocations: list[dict], next_total: float) -> list[dict]:
@@ -450,7 +489,7 @@ def validate_lift_allocations(
             po = find_order(orders, po_ref, "purchase")
             if not po:
                 continue
-            remaining = remaining_on_po_for_dispatch(po, lifts, exclude_lift_id)
+            remaining = remaining_on_po_for_dispatch(po, lifts, exclude_lift_id, orders)
             if qty > remaining:
                 return f"{po_ref} only has {format_qty(remaining)} left to lift"
 
@@ -483,7 +522,7 @@ def validate_stock_lift_allocations(
     if po.get("status") == "cancelled":
         return f"{a['poRef']} is cancelled"
     if enforce_capacity:
-        remaining = remaining_on_order(po, lifts, exclude_lift_id)
+        remaining = remaining_on_order(po, lifts, exclude_lift_id, orders)
         if a["qtyMt"] > remaining:
             return f"{a['poRef']} only has {format_qty(remaining)} left to lift"
     return None

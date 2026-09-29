@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Plus, Filter, AlertTriangle, LayoutGrid, Table2, Package } from 'lucide-react'
+import { Filter, AlertTriangle, LayoutGrid, Table2, Package } from 'lucide-react'
 import { PageHeader, FilterBar } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
@@ -8,14 +8,15 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
-import { ProgressBar } from '../components/ui/CommandPalette'
 import { StatGrid } from '../components/layout/PageGrid'
 import { DataTable } from '../components/ui/DataTable'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { AppliedFilterChips } from '../components/registers/DateFilterPicker'
-import { cn, formatDate, formatMt, formatQty, roundQtyMt, availableQtyClass, tableRefCellClass } from '../lib/utils'
+import { cn, formatMt, formatQty, roundQtyMt, availableQtyClass, tableRefCellClass } from '../lib/utils'
 import { loadRegisterSort, saveRegisterSort, sortRows, toggleSort } from '../lib/registerSort'
 import { formatContractRate, formatRateCell, PURCHASE_RATE_COLUMN_HEADER } from '../lib/orderRate'
+import { lotHasReceivedStock } from '../lib/stockPo'
+import { appPath } from '../lib/appShellMode'
 import { useTradeStore } from '../store/TradeStore'
 import { useLargeScreen } from '../hooks/useMediaQuery'
 import type { Lot } from '../data/mockData'
@@ -119,8 +120,8 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
       <EmptyState
         card
         icon={<Package className="h-10 w-10" />}
-        title="No lots match your filters"
-        description="Try clearing filters or record a lift to add stock."
+          title="No lots match your filters"
+          description="Try clearing filters. Stock appears after an own-stock lift is delivered."
       />
     )
   }
@@ -159,10 +160,6 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
                   </DetailInlineStatRow>
                 </div>
 
-                <div className="mt-4">
-                  <ProgressBar value={lot.remaining} max={lot.quantityPurchased} label="On hand vs PO qty" />
-                </div>
-
                 {overAllocated && (
                   <p className="text-xs text-danger mt-2">
                     Short by {formatQty(Math.abs(lot.available), lot.unit)} vs sales orders
@@ -171,16 +168,11 @@ function InventoryCards({ lots }: { lots: Lot[] }) {
               </div>
 
               <div className="border-t border-gray-200 bg-gray-100/90 px-8 py-4 dark:border-gray-700 dark:bg-gray-800/50">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                  <p className="text-sm font-semibold tabular-nums text-heading">
-                    {formatContractRate(lot.purchasePrice)}
-                  </p>
-                  <p className="text-xs text-caption tabular-nums">
-                    {formatQty(lot.quantityPurchased, lot.unit)} PO qty
-                  </p>
-                </div>
+                <p className="text-sm font-semibold tabular-nums text-heading">
+                  {formatContractRate(lot.purchasePrice)}
+                </p>
                 <p className="text-xs text-muted mt-1 truncate">
-                  {lot.producer} · {lot.broker} · {formatDate(lot.purchaseDate)}
+                  {lot.producer}{lot.broker ? ` · ${lot.broker}` : ''}
                 </p>
               </div>
             </Card>
@@ -198,7 +190,6 @@ function inventorySortValue(lot: Lot, key: string): string | number {
     case 'producer': return lot.producer
     case 'broker': return lot.broker
     case 'purchasePrice': return lot.purchasePrice
-    case 'poQty': return lot.quantityPurchased
     case 'remaining': return lot.remaining
     case 'allocated': return lot.allocated
     case 'available': return lot.available
@@ -289,16 +280,6 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
       ),
     },
     {
-      key: 'poQty',
-      header: 'PO Qty',
-      className: 'text-right whitespace-nowrap min-w-[6rem]',
-      sortable: true,
-      sortValue: (lot: Lot) => lot.quantityPurchased,
-      render: (lot: Lot) => (
-        <span className="tabular-nums">{formatMt(lot.quantityPurchased)}</span>
-      ),
-    },
-    {
       key: 'remaining',
       header: 'On hand',
       className: 'text-right whitespace-nowrap min-w-[6rem]',
@@ -332,14 +313,6 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
         </span>
       ),
     },
-    {
-      key: 'purchaseDate',
-      header: 'Purchased',
-      className: 'hidden md:table-cell whitespace-nowrap min-w-[7rem]',
-      sortable: true,
-      sortValue: (lot: Lot) => lot.purchaseDate,
-      render: (lot: Lot) => <span className="tabular-nums">{formatDate(lot.purchaseDate)}</span>,
-    },
   ], [allocationLinesForLot])
 
   return (
@@ -355,7 +328,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
         <EmptyState
           icon={<Package className="h-10 w-10" />}
           title="No lots match your filters"
-          description="Try clearing filters or create a purchase order to add inventory."
+          description="Try clearing filters. Stock appears after an own-stock lift is delivered."
         />
       }
       onRowClick={lot => navigate(`/inventory/${lot.id}`)}
@@ -382,7 +355,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
               </span>
               <span className="text-muted tabular-nums">{formatMt(lot.remaining)} on hand</span>
             </div>
-            <p className="text-xs text-muted truncate">{lot.producer} · {formatDate(lot.purchaseDate)}</p>
+            <p className="text-xs text-muted truncate">{lot.producer}</p>
           </div>
         )
       }}
@@ -391,7 +364,7 @@ function InventoryTable({ lots }: { lots: Lot[] }) {
 }
 
 export function InventoryPage() {
-  const { lots, items } = useTradeStore()
+  const { lots } = useTradeStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const isLargeScreen = useLargeScreen()
   const [search, setSearch] = useState('')
@@ -421,21 +394,23 @@ export function InventoryPage() {
     setSearchParams(params, { replace: true })
   }
 
+  const godownLots = useMemo(() => lots.filter(lotHasReceivedStock), [lots])
+
   const commodities = useMemo(
-    () => [...new Set([...items, ...lots.map(l => l.commodity)])].sort(),
-    [items, lots],
+    () => [...new Set(godownLots.map(l => l.commodity))].sort(),
+    [godownLots],
   )
 
   useEffect(() => {
     if (urlQ) setSearch(urlQ)
   }, [urlQ])
 
-  const filtered = lots.filter(l => {
+  const filtered = godownLots.filter(l => {
     const matchSearch = l.lotNumber.toLowerCase().includes(search.toLowerCase()) ||
       l.commodity.toLowerCase().includes(search.toLowerCase()) ||
       l.producer.toLowerCase().includes(search.toLowerCase())
     const matchCommodity = commodityFilter === 'all' || l.commodity === commodityFilter
-    const matchLowStock = !lowStockOnly || (l.available >= 0 && l.available < 20)
+    const matchLowStock = !lowStockOnly || (l.remaining > 0 && l.available >= 0 && l.available < 20)
     return matchSearch && matchCommodity && matchLowStock
   })
 
@@ -447,7 +422,7 @@ export function InventoryPage() {
       unit: string
     }>()
 
-    for (const lot of lots) {
+    for (const lot of godownLots) {
       const current = map.get(lot.commodity) ?? {
         remaining: 0,
         allocated: 0,
@@ -463,7 +438,7 @@ export function InventoryPage() {
     return [...map.entries()]
       .map(([commodity, stats]) => ({ commodity, ...stats }))
       .sort((a, b) => a.commodity.localeCompare(b.commodity))
-  }, [lots])
+  }, [godownLots])
 
   const filterChips = useMemo(() => {
     const chips: { id: string; prefix: string; value: string }[] = []
@@ -489,7 +464,7 @@ export function InventoryPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Inventory"
-        subtitle={`${lots.length} lots across ${itemStats.length} item${itemStats.length === 1 ? '' : 's'}`}
+        subtitle={`${godownLots.length} lot${godownLots.length === 1 ? '' : 's'} in the godown`}
         breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Inventory' }]} />}
       />
 
@@ -565,11 +540,15 @@ export function InventoryPage() {
         <EmptyState
           card
           icon={<Package className="h-10 w-10" />}
-          title="No lots match your filters"
-          description="Adjust filters or create a purchase order to add inventory."
-          action={
-            <Button to="/purchase-orders/new" size="sm"><Plus className="h-4 w-4" /> New PO</Button>
-          }
+          title={godownLots.length === 0 ? 'Nothing in the godown yet' : 'No lots match your filters'}
+          description={godownLots.length === 0
+            ? 'Deliver an own-stock lift on a purchase. That quantity shows here. Contract sales stay on the purchase.'
+            : 'Try clearing the filters.'}
+          action={godownLots.length === 0 ? (
+            <Button to={appPath('/purchase-orders')} size="sm">Open purchases</Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={handleClearFilters}>Clear filters</Button>
+          )}
         />
       ) : view === 'table' ? (
         <InventoryTable lots={filtered} />

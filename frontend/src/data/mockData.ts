@@ -394,12 +394,16 @@ export function formatDeliveryPeriod(order: Pick<TradeOrder, 'deliveryType' | 'd
   return formatDeliveryPeriodRange(order.deliveryPeriodStart, order.deliveryPeriodEnd)
 }
 
+export function isLotSale(order: Pick<TradeOrder, 'side' | 'poRef' | 'stockPoRef'>): boolean {
+  return order.side === 'sale' && Boolean(order.stockPoRef) && !order.poRef
+}
+
 export function getPOPending(orders: TradeOrder[]): TradeOrder[] {
   return orders.filter(o => o.side === 'purchase' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt)
 }
 
 export function getSOPending(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt)
+  return orders.filter(o => o.side === 'sale' && !isLotSale(o) && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt)
 }
 
 export function getPOCompleted(orders: TradeOrder[]): TradeOrder[] {
@@ -407,7 +411,7 @@ export function getPOCompleted(orders: TradeOrder[]): TradeOrder[] {
 }
 
 export function getSOCompleted(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && o.status === 'completed' && !o.deleteScheduledAt)
+  return orders.filter(o => o.side === 'sale' && !isLotSale(o) && o.status === 'completed' && !o.deleteScheduledAt)
 }
 
 export function getPODeleted(orders: TradeOrder[]): TradeOrder[] {
@@ -415,7 +419,7 @@ export function getPODeleted(orders: TradeOrder[]): TradeOrder[] {
 }
 
 export function getSODeleted(orders: TradeOrder[]): TradeOrder[] {
-  return orders.filter(o => o.side === 'sale' && Boolean(o.deleteScheduledAt))
+  return orders.filter(o => o.side === 'sale' && !isLotSale(o) && Boolean(o.deleteScheduledAt))
 }
 
 export function getPORegister(orders: TradeOrder[]): TradeOrder[] {
@@ -496,19 +500,29 @@ export function getRemainingSellQty(orders: TradeOrder[], poRef: string, lifts: 
         : [{ poRef: l.poRef, soRef: l.soRef, qtyMt: l.liftedQty }]
       return allocations
     })
-    .filter(a => refsMatch(a.poRef, poRef, 'purchase'))
+    .filter(a => {
+      if (!refsMatch(a.poRef, poRef, 'purchase')) return false
+      if (!a.soRef) return true
+      const sale = orders.find(o => o.side === 'sale' && refsMatch(o.ref, a.soRef, 'sale'))
+      return !(sale?.stockPoRef && !sale.poRef && refsMatch(sale.stockPoRef, poRef, 'purchase'))
+    })
     .reduce((sum, a) => sum + a.qtyMt, 0)
   return roundQtyMt(cap - Math.max(booked, moved))
 }
 
 /** Sales made from this godown lot. Contract SOs booked on the PO stay on the purchase. */
-export function getOrdersDrawingLot(orders: TradeOrder[], poRef: string, lifts: Lift[] = []): TradeOrder[] {
+export function getOrdersDrawingLot(
+  orders: TradeOrder[],
+  poRef: string,
+  lifts: Lift[] = [],
+  options?: { includeDeleted?: boolean },
+): TradeOrder[] {
   void lifts
   return orders.filter(
     o =>
       o.side === 'sale'
       && o.status !== 'cancelled'
-      && !o.deleteScheduledAt
+      && (options?.includeDeleted || !o.deleteScheduledAt)
       && Boolean(o.stockPoRef)
       && !o.poRef
       && refsMatch(o.stockPoRef, poRef, 'purchase'),

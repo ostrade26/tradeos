@@ -44,7 +44,10 @@ function soMatchesSellerFilter(so: TradeOrder, sellerFilter: string | undefined,
   if (!sellerFilter) return true
   const booked = findTradeOrder(orders, 'purchase', dispatchPoRef(so))
   if (booked && (booked.sellerName || booked.partyName) === sellerFilter) return true
-  if (so.stockPoRef && !so.poRef) return false
+  if (so.stockPoRef && !so.poRef) {
+    const source = findTradeOrder(orders, 'purchase', so.stockPoRef)
+    return Boolean(source && (source.sellerName || source.partyName) === sellerFilter)
+  }
   return dispatchPoolForSo(so, orders).some(po => (po.sellerName || po.partyName) === sellerFilter)
 }
 
@@ -250,22 +253,29 @@ export function LiftAllocationsForm({
                           : Math.max(0, avail.qty - qtyOnOtherRows(rows, s.ref, 'soRef', row.id))
                         const bookedPo = findTradeOrder(orders, 'purchase', s.poRef || s.stockPoRef)
                         const stock = inventoryStockRef(s, bookedPo)
-                        return orderDropdownOption(
-                          s,
-                          qty,
-                          [stock
-                            ? formatLotRef(stock)
-                            : s.poRef
-                              ? `Lot ${formatPoRef(s.poRef)}`
-                              : 'No PO linked'],
-                        )
+                        const sourceLabel = stock
+                          ? `Godown ${formatLotRef(stock)}`
+                          : s.poRef
+                            ? `Purchase ${formatPoRef(s.poRef)}`
+                            : 'Not linked'
+                        const option = orderDropdownOption(s, qty, [sourceLabel])
+                        return {
+                          ...option,
+                          group: stock ? 'godown' : 'contract',
+                          label: `${formatSoRef(s.ref)} — ${sourceLabel} · ${s.partyName}`,
+                        }
                       })
                       : [{ value: '', label: itemFilter ? `No SO for ${itemFilter}` : 'No SO available' }]}
                     value={row.soRef}
                     displayLabel={so ? undefined : (row.soRef || undefined)}
                     onChange={e => setSo(row, e.target.value)}
                     disabled={disabled}
-                    emptyMessage={itemFilter ? `No SO for ${itemFilter}` : 'No sales orders yet'}
+                    emptyMessage={itemFilter ? `No SO for ${itemFilter}` : 'No sales orders in this tab'}
+                    groups={[
+                      { id: 'contract', label: 'Contract SO' },
+                      { id: 'godown', label: 'Godown SO' },
+                    ]}
+                    listMaxHeight={420}
                   />
                   {so && (
                     <AvailableQtyCaption available={soLeft} requested={rowQty} warning={soAvail.warning} />

@@ -57,7 +57,10 @@ function soMatchesSeller(so: TradeOrder, seller: string, orders: TradeOrder[]): 
   if (!seller) return true
   const booked = findTradeOrder(orders, 'purchase', dispatchPoRef(so))
   if (booked && purchaseSellerName(booked) === seller) return true
-  if (so.stockPoRef && !so.poRef) return false
+  if (so.stockPoRef && !so.poRef) {
+    const source = findTradeOrder(orders, 'purchase', so.stockPoRef)
+    return Boolean(source && purchaseSellerName(source) === seller)
+  }
   return poolPOsForSo(so, orders).some(po => purchaseSellerName(po) === seller)
 }
 

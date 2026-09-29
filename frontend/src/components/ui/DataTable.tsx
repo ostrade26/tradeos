@@ -104,6 +104,7 @@ function DataTablePagination({
             <Select
               compact
               searchable={false}
+              disabled={totalItems < 25}
               options={pageSizeOptions.map(size => ({
                 value: String(size),
                 label: String(size),

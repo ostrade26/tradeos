@@ -48,7 +48,7 @@ import {
   resolveBrokerageTerms,
 } from '../lib/brokerBrokerage'
 import { formatDeletionDate } from '../lib/orderDeletion'
-import { findTradeOrder, formatLotRef, formatOrderRef, formatPoRef } from '../lib/tradeRefs'
+import { findTradeOrder, formatLotRef, formatOrderRef, formatPoRef, refsMatch } from '../lib/tradeRefs'
 import { uniqueSorted } from '../lib/orderFilters'
 import { collapseRepeatedPartyLocation } from '../lib/liftBalance'
 import { canonicalItemName, collectItemNames, itemMatches } from '../lib/itemResolution'
@@ -276,9 +276,20 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
   const orderBaseline = useRef('')
   const orderBaselineReady = useRef(false)
 
+  const lotPageHref = (saved?: Pick<TradeOrder, 'side' | 'poRef' | 'stockPoRef'> | null) => {
+    if (sellFromLot) return appPath(`/inventory/${sellFromLot.lotId}`)
+    if (saved?.side === 'sale' && saved.stockPoRef && !saved.poRef) {
+      const lot = store.lots.find(item =>
+        refsMatch(item.lotNumber.replace(/^LOT-/, ''), saved.stockPoRef, 'purchase'),
+      )
+      if (lot) return appPath(`/inventory/${lot.id}`)
+    }
+    return null
+  }
+
   const viewCreatedOrder = (saved: TradeOrder) => {
     setCreatedOrder(null)
-    navigate(`${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`)
+    navigate(lotPageHref(saved) ?? `${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`)
   }
 
   const applyPdfImport = (values: Record<string, string>, parsed?: import('../lib/parseContractPdf').ParsedContractPdf) => {
@@ -591,7 +602,8 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         saved = await store.addOrder(payload)
       }
       const remaining = toBeLifted(saved)
-      const registerHref = `${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`
+      const lotHref = lotPageHref(saved)
+      const registerHref = lotHref ?? `${pathPrefix}?ref=${encodeURIComponent(saved.ref)}`
       if (isEdit) {
         toast.success(`${formatOrderRef(saved.ref, saved.side)} updated`, {
           description: `${formatQty(saved.orderQty)} · ${saved.itemName}`,

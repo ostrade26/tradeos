@@ -24,6 +24,9 @@ import {
   type OrderSide,
   type DeliveryType,
   toBeLifted,
+  getSOPending as selectSOPending,
+  getSOCompleted as selectSOCompleted,
+  getSODeleted as selectSODeleted,
 } from '../data/mockData'
 import { getOutstandingBalance as calcOutstandingBalance, getSellerOutstandingBalance } from '../lib/liftBalance'
 import { dedupeDirectory, refreshPartyLocationsFromOrders } from '../lib/ensureDirectoryFromOrders'
@@ -790,7 +793,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getSOPending = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status !== 'completed' && o.status !== 'cancelled' && !o.deleteScheduledAt),
+    () => selectSOPending(data.tradeOrders),
     [data.tradeOrders],
   )
 
@@ -800,7 +803,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getSOCompleted = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale' && o.status === 'completed' && !o.deleteScheduledAt),
+    () => selectSOCompleted(data.tradeOrders),
     [data.tradeOrders],
   )
 
@@ -810,7 +813,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const getSODeleted = useCallback(
-    () => data.tradeOrders.filter(o => o.side === 'sale' && Boolean(o.deleteScheduledAt)),
+    () => selectSODeleted(data.tradeOrders),
     [data.tradeOrders],
   )
 

@@ -1,26 +1,27 @@
 import { useParams, Link } from 'react-router-dom'
-import { useMemo } from 'react'
-import { ArrowLeftRight, Package, TrendingUp } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ArrowLeftRight, Package } from 'lucide-react'
 import { PageHeader } from '../components/ui/CommandPalette'
-import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
+import { Breadcrumb, EmptyState, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
-import { Card, CardHeader, StatCard } from '../components/ui/Card'
-import { StatusBadge } from '../components/ui/Badge'
+import { Card, CardHeader } from '../components/ui/Card'
+import { CollapsibleRegisterStats } from '../components/registers/CollapsibleRegisterStats'
 import { DataTable } from '../components/ui/DataTable'
-import { ProgressBar } from '../components/ui/CommandPalette'
 import { formatCurrency, formatDate, formatMt, formatQty, cn, availableQtyClass } from '../lib/utils'
-import { formatContractRate, formatRateCell, SALE_RATE_COLUMN_HEADER } from '../lib/orderRate'
-import { formatLiftRef, formatPoRef, formatSoRef, refsMatch } from '../lib/tradeRefs'
+import { formatContractRate } from '../lib/orderRate'
+import { appPath } from '../lib/appShellMode'
+import { formatLiftRef, formatPoRef, refsMatch } from '../lib/tradeRefs'
 import { useTradeStore } from '../store/TradeStore'
 import { getOrdersDrawingLot } from '../data/mockData'
-import { purchaseIsClosed } from '../components/registers/StockPoLink'
-import { getLiftAllocations, liftTouchesRef } from '../lib/liftAllocations'
+import { LotSalesRegister } from '../components/registers/LotSalesRegister'
+import { getLiftAllocations, liftTouchesRef, remainingOnOrder } from '../lib/liftAllocations'
 
 function poRefFromLot(lotNumber: string) {
   return lotNumber.replace(/^LOT-/, '')
 }
 
 export function LotDetailsPage() {
+  const [mode, setMode] = useState<'pending' | 'completed' | 'deleted'>('pending')
   const store = useTradeStore()
   const { lots, contracts, lifts } = store
   const { lotId } = useParams()
@@ -28,25 +29,27 @@ export function LotDetailsPage() {
 
   const poRef = lot ? poRefFromLot(lot.lotNumber) : ''
 
-  const linkedSOs = useMemo(
-    () => (poRef ? getOrdersDrawingLot(store.tradeOrders, poRef, store.lifts) : []),
+  const lotSales = useMemo(
+    () => (poRef ? getOrdersDrawingLot(store.tradeOrders, poRef, store.lifts, { includeDeleted: true }) : []),
     [store.tradeOrders, store.lifts, poRef],
   )
+  const pendingSales = useMemo(
+    () => lotSales.filter(so => !so.deleteScheduledAt && so.status !== 'completed'),
+    [lotSales],
+  )
+  const completedSales = useMemo(
+    () => lotSales.filter(so => !so.deleteScheduledAt && so.status === 'completed'),
+    [lotSales],
+  )
+  const deletedSales = useMemo(
+    () => lotSales.filter(so => Boolean(so.deleteScheduledAt)),
+    [lotSales],
+  )
+  const linkedSOs = mode === 'completed' ? completedSales : mode === 'deleted' ? deletedSales : pendingSales
 
-  const allocations = useMemo(
-    () => linkedSOs.map(so => ({
-      id: so.id,
-      ref: so.ref,
-      retailer: so.partyName,
-      quantity: so.orderQty,
-      liftedQty: so.liftedQty,
-      rate: so.rate,
-      rateBasis: so.rateBasis,
-      ratePerBasis: so.ratePerBasis,
-      status: so.status,
-      date: so.date,
-    })),
-    [linkedSOs],
+  const openDispatch = useMemo(
+    () => pendingSales.filter(so => remainingOnOrder(so, store.lifts) > 0),
+    [pendingSales, store.lifts],
   )
 
   const movements = useMemo(() => {
@@ -64,14 +67,7 @@ export function LotDetailsPage() {
       balance: number
       date: string
       ref: string
-    }[] = [{
-      id: 'purchase',
-      type: 'Purchase (PO)',
-      quantity: lot.quantityPurchased,
-      balance: 0,
-      date: lot.purchaseDate,
-      ref: poRef,
-    }]
+    }[] = []
 
     for (const lift of poLifts) {
       const allocs = getLiftAllocations(lift).filter(a => refsMatch(a.poRef, poRef, 'purchase'))
@@ -134,8 +130,9 @@ export function LotDetailsPage() {
 
   const contract = contracts.find(c => c.id === lot.contractId)
   const lotValue = lot.remaining * lot.purchasePrice
-  const avgSaleRate = linkedSOs.length
-    ? linkedSOs.reduce((s, o) => s + o.rate, 0) / linkedSOs.length
+  const salePool = pendingSales.concat(completedSales)
+  const avgSaleRate = salePool.length
+    ? salePool.reduce((s, o) => s + o.rate, 0) / salePool.length
     : 0
 
   return (
@@ -150,13 +147,22 @@ export function LotDetailsPage() {
         ]} />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {lot.remaining > 0 && (
+            <Button
+              to={`/lifts/new?poRef=${encodeURIComponent(poRef)}&stock=1`}
+              size="sm"
+              variant="outline"
+            >
+              Receive stock
+            </Button>
+            {lot.remaining > 0 && openDispatch.length > 0 && (
               <Button
-                to={`/lifts/new?poRef=${encodeURIComponent(poRef)}`}
+                to={openDispatch.length === 1
+                  ? `/lifts/new?poRef=${encodeURIComponent(poRef)}&soRef=${encodeURIComponent(openDispatch[0]!.ref)}`
+                  : `/lifts/new?poRef=${encodeURIComponent(poRef)}`}
                 size="sm"
                 variant="outline"
               >
-                Dispatch from stock
+                Dispatch
               </Button>
             )}
             {lot.available > 0 && (
@@ -168,167 +174,137 @@ export function LotDetailsPage() {
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Purchase Price" value={formatContractRate(lot.purchasePrice)} />
-        <StatCard label="On hand" value={formatQty(lot.remaining, lot.unit)} change={`of ${formatQty(lot.quantityPurchased, lot.unit)} purchased`} changeType="neutral" />
-        <StatCard label="Allocated" value={formatQty(lot.allocated, lot.unit)} change={`${formatQty(lot.available, lot.unit)} available to sell`} changeType={lot.available < 0 ? 'down' : 'neutral'} />
-        <StatCard label="Lot Value" value={formatCurrency(lotValue)} icon={<TrendingUp className="h-4 w-4" />} />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-6">
-          <Card padding={false}>
-            <div className="px-5 pt-5">
-              <CardHeader
-                title="Allocations"
-                subtitle="Sales orders sold from this lot"
-              />
-            </div>
-            {allocations.length === 0 ? (
-              <div className="px-5 pb-5">
-                <EmptyState
-                  icon={<Package className="h-10 w-10" />}
-                  title="No allocations yet"
-                  description={lot.available > 0
-                    ? 'Sell quantity on hand. Sales booked on the purchase stay on the purchase order.'
-                    : lot.remaining > 0
-                      ? 'Quantity on hand is already sold from this lot.'
-                      : 'Nothing has been received into this lot yet.'}
-                  action={lot.available > 0
-                    ? <Button to={`/inventory/${lot.id}/sell`} size="sm">Sell from this lot</Button>
-                    : undefined}
-                />
-              </div>
-            ) : (
-              <DataTable
-                paginate={false}
-                qtyNote
-                columns={[
-                  { key: 'ref', header: 'SO Ref#', render: (r: typeof allocations[0]) => (
-                    <Link to={`/sales-orders?ref=${encodeURIComponent(r.ref)}`} className="text-accent hover:underline text-sm">{formatSoRef(r.ref)}</Link>
-                  )},
-                  { key: 'retailer', header: 'Buyer' },
-                  { key: 'poQty', header: 'PO Qty', render: () => <span className="tabular-nums">{formatMt(lot.quantityPurchased)}</span>, className: 'text-right' },
-                  { key: 'quantity', header: 'SO Qty', render: (r) => <span className="tabular-nums">{formatMt(r.quantity)}</span>, className: 'text-right' },
-                  { key: 'liftedQty', header: 'Lifted', render: (r) => <span className="tabular-nums">{formatMt(r.liftedQty)}</span>, className: 'text-right' },
-                  { key: 'pending', header: 'Pending', render: (r) => <span className="tabular-nums">{formatMt(Math.max(0, r.quantity - r.liftedQty))}</span>, className: 'text-right' },
-                  { key: 'rate', header: SALE_RATE_COLUMN_HEADER, render: (r) => formatRateCell(r.rate, r.rateBasis, r.ratePerBasis), className: 'text-right' },
-                  { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-                  { key: 'date', header: 'Date', render: (r) => <span className="tabular-nums">{formatDate(r.date)}</span> },
-                ]}
-                data={allocations}
-              />
-            )}
-          </Card>
-
-          <Card padding={false}>
-            <div className="px-5 pt-5">
-              <CardHeader
-                title="Stock movement"
-                subtitle="Purchase and dispatch history"
-                action={
-                  movements.length <= 1 ? (
-                    <Button to={`/lifts/new?poRef=${encodeURIComponent(poRef)}&stock=1`} size="sm" variant="outline">Record lift</Button>
-                  ) : undefined
-                }
-              />
-            </div>
-            {movements.length <= 1 ? (
-              <div className="px-5 pb-5">
-                <EmptyState
-                  icon={<ArrowLeftRight className="h-10 w-10" />}
-                  title="No dispatches yet"
-                  description="Lifts recorded against this PO will appear here."
-                  action={<Button to={`/lifts/new?poRef=${encodeURIComponent(poRef)}&stock=1`} size="sm" variant="outline">Record Lift</Button>}
-                />
-              </div>
-            ) : (
-              <DataTable
-                paginate={false}
-                qtyNote
-                columns={[
-                  { key: 'date', header: 'Date', render: (r: typeof movements[0]) => <span className="tabular-nums">{formatDate(r.date)}</span> },
-                  { key: 'type', header: 'Type', render: (r) => (
-                    <div className="flex items-center gap-2">
-                      <ArrowLeftRight className="h-3 w-3 text-muted" />
-                      {r.type}
-                    </div>
-                  )},
-                  { key: 'quantity', header: 'Change', render: (r) => (
-                    <span className={cn('tabular-nums', r.quantity > 0 ? 'text-success' : 'text-danger')}>{r.quantity > 0 ? '+' : ''}{formatMt(r.quantity)}</span>
-                  ), className: 'text-right' },
-                  { key: 'balance', header: 'Balance', render: (r) => <span className="tabular-nums">{formatMt(r.balance)}</span>, className: 'text-right' },
-                  { key: 'ref', header: 'Reference', render: (r) => <span className="">{r.ref}</span> },
-                ]}
-                data={movements}
-              />
-            )}
-          </Card>
+      <CollapsibleRegisterStats className="grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-muted leading-snug">Purchase price</p>
+          <p className="text-lg font-semibold tabular-nums">{formatContractRate(lot.purchasePrice)}</p>
         </div>
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-muted leading-snug">On hand</p>
+          <p className="text-lg font-semibold tabular-nums">{formatQty(lot.remaining, lot.unit)}</p>
+        </div>
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-muted leading-snug">Allocated</p>
+          <p className="text-lg font-semibold tabular-nums">{formatQty(lot.allocated, lot.unit)}</p>
+        </div>
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-muted leading-snug">Available to sell</p>
+          <p className={cn('text-lg font-semibold tabular-nums', availableQtyClass(lot.available))}>
+            {formatQty(lot.available, lot.unit)}
+          </p>
+        </div>
+        <div className="rounded-md bg-card shadow-[var(--shadow-card)] px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-muted leading-snug">Lot value</p>
+          <p className="text-lg font-semibold tabular-nums">{formatCurrency(lotValue)}</p>
+        </div>
+      </CollapsibleRegisterStats>
 
-        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
-          <Card>
-            <CardHeader title="Overview" subtitle="Stock level and lot details" />
-            <div className="space-y-6">
-              <ProgressBar value={lot.remaining} max={lot.quantityPurchased} label="Inventory level" />
-              {lot.allocated > 0 && (
-                <ProgressBar value={lot.allocated} max={lot.quantityPurchased} label="Allocated to sales orders" />
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Seller', value: lot.producer },
-                  { label: 'Broker', value: lot.broker },
-                  { label: 'Purchase Date', value: formatDate(lot.purchaseDate) },
-                  {
-                    label: 'PO Reference',
-                    value: purchaseIsClosed(store.getOrderByRef(poRef, 'purchase'))
-                      ? lot.lotNumber
-                      : formatPoRef(poRef),
-                  },
-                  { label: 'PO Quantity', value: formatQty(lot.quantityPurchased, lot.unit) },
-                  { label: 'Allocated', value: formatQty(lot.allocated, lot.unit) },
-                  {
-                    label: 'Avail. to sell',
-                    value: formatQty(lot.available, lot.unit),
-                    valueClassName: availableQtyClass(lot.available),
-                  },
-                  { label: 'Expiry', value: lot.expiry ? formatDate(lot.expiry) : 'N/A', className: 'col-span-2' },
-                ].map(item => (
-                  <div key={item.label} className={item.className}>
-                    <p className="text-xs text-muted">{item.label}</p>
-                    <p className={cn('text-sm font-medium mt-0.5', item.valueClassName)}>{item.value}</p>
-                  </div>
-                ))}
-              </div>
-              {contract && (
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                  <p className="text-xs text-muted mb-1">Linked Contract</p>
-                  <Link to={`/contracts/${contract.id}`} className="text-sm font-medium text-accent hover:underline">{contract.ref}</Link>
-                  <p className="text-xs text-muted mt-1">{contract.buyer} ↔ {contract.seller} · {formatContractRate(contract.rate)}</p>
+      <Tabs
+        className="mb-4"
+        tabs={[
+          { id: 'pending', label: 'Pending', count: pendingSales.length },
+          { id: 'completed', label: 'Completed', count: completedSales.length },
+          { id: 'deleted', label: 'Deleted', count: deletedSales.length },
+        ]}
+        active={mode}
+        onChange={id => setMode(id === 'completed' || id === 'deleted' ? id : 'pending')}
+      />
+
+      <LotSalesRegister
+        orders={linkedSOs}
+        lifts={lifts}
+        lotId={lot.id}
+        mode={mode}
+        pendingCount={pendingSales.length}
+        completedCount={completedSales.length}
+        onModeChange={setMode}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6 items-start">
+        <Card>
+          <CardHeader title="Overview" subtitle="What is in the godown" />
+          <div className="space-y-6">
+            <div>
+              <p className="text-xs text-muted">Seller</p>
+              <p className="text-sm font-medium mt-0.5">{lot.producer}</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {[
+                { label: 'Broker', value: lot.broker || '—' },
+                { label: 'Lot', value: lot.lotNumber },
+                { label: 'Allocated', value: formatQty(lot.allocated, lot.unit) },
+                {
+                  label: 'Avail. to sell',
+                  value: formatQty(lot.available, lot.unit),
+                  valueClassName: availableQtyClass(lot.available),
+                },
+                { label: 'Avg sale rate', value: avgSaleRate > 0 ? formatContractRate(avgSaleRate) : '—' },
+              ].map(item => (
+                <div key={item.label}>
+                  <p className="text-xs text-muted">{item.label}</p>
+                  <p className={cn('text-sm font-medium mt-0.5 tabular-nums', 'valueClassName' in item ? item.valueClassName : undefined)}>{item.value}</p>
                 </div>
-              )}
+              ))}
             </div>
-          </Card>
+            {salePool.length > 0 && (
+              <p className="text-xs text-muted">
+                Average sale rate is from {salePool.length} sales order{salePool.length === 1 ? '' : 's'} on this lot.
+              </p>
+            )}
+            <p className="text-sm">
+              <span className="text-muted">From purchase </span>
+              <Link
+                to={appPath(`/purchase-orders?ref=${encodeURIComponent(poRef)}`)}
+                className="font-medium text-accent hover:underline"
+              >
+                {formatPoRef(poRef)}
+              </Link>
+            </p>
+            {contract && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <p className="text-xs text-muted mb-1">Linked Contract</p>
+                <Link to={`/contracts/${contract.id}`} className="text-sm font-medium text-accent hover:underline">{contract.ref}</Link>
+                <p className="text-xs text-muted mt-1">{contract.buyer} ↔ {contract.seller} · {formatContractRate(contract.rate)}</p>
+              </div>
+            )}
+          </div>
+        </Card>
 
-          <Card>
-            <CardHeader title="Pricing" subtitle="Purchase vs average sale rate" />
-            <div className="space-y-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted">Purchase Rate</span>
-                <span className="font-medium">{formatContractRate(lot.purchasePrice)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted">Avg Sale Rate</span>
-                <span className="font-medium">{avgSaleRate > 0 ? formatContractRate(avgSaleRate) : '—'}</span>
-              </div>
-              {linkedSOs.length > 0 && (
-                <p className="text-xs text-muted pt-2 border-t border-gray-200 dark:border-gray-700">
-                  Based on {linkedSOs.length} linked sales order{linkedSOs.length === 1 ? '' : 's'}
-                </p>
-              )}
+        <Card padding={false}>
+          <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+            <h3 className="text-base font-semibold text-heading">Stock movement</h3>
+            <p className="text-sm text-muted mt-0.5">Receipts into the godown and dispatches from this lot</p>
+          </div>
+          {movements.length === 0 ? (
+            <div className="px-5 pb-5">
+              <EmptyState
+                icon={<ArrowLeftRight className="h-10 w-10" />}
+                title="No godown movement yet"
+                description="An own-stock delivery adds stock. Dispatching a sale from this lot removes it."
+                action={<Button to={`/lifts/new?poRef=${encodeURIComponent(poRef)}&stock=1`} size="sm" variant="outline">Receive stock</Button>}
+              />
             </div>
-          </Card>
-        </div>
+          ) : (
+            <DataTable
+              paginate={false}
+              columns={[
+                { key: 'date', header: 'Date', render: (r: typeof movements[0]) => <span className="tabular-nums">{formatDate(r.date)}</span> },
+                { key: 'type', header: 'Type', render: (r) => (
+                  <div className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-3 w-3 text-muted" />
+                    {r.type}
+                  </div>
+                )},
+                { key: 'quantity', header: 'Change', render: (r) => (
+                  <span className={cn('tabular-nums', r.quantity > 0 ? 'text-success' : 'text-danger')}>{r.quantity > 0 ? '+' : ''}{formatMt(r.quantity)}</span>
+                ), className: 'text-right' },
+                { key: 'balance', header: 'Balance', render: (r) => <span className="tabular-nums">{formatMt(r.balance)}</span>, className: 'text-right' },
+                { key: 'ref', header: 'Reference', render: (r) => <span>{r.ref}</span> },
+              ]}
+              data={movements}
+            />
+          )}
+        </Card>
       </div>
     </div>
   )

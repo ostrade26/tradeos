@@ -92,7 +92,7 @@ def get_remaining_sell_qty(orders: list[dict], po_ref: str, lifts: list[dict] | 
         else:
             sold += qty_of_so_on_po(lifts or [], po_ref, order.get("ref"))
     stocked = qty_stock_on_po(lifts or [], po_ref)
-    moved = qty_so_dispatch_on_po(lifts or [], po_ref) + stocked
+    moved = qty_so_dispatch_on_po(lifts or [], po_ref, None, orders) + stocked
     return round_qty_mt(effective_po_qty(po) - max(sold + stocked, moved))
 
 
@@ -178,6 +178,12 @@ def apply_lift_totals(data: dict) -> dict:
     po_so_delivered: dict[str, float] = {}
     so_committed: dict[str, float] = {}
     so_delivered: dict[str, float] = {}
+    lot_sale_refs = {
+        attach_order_prefix(o.get("ref"), "sale")
+        for o in (data.get("tradeOrders") or [])
+        if o.get("side") == "sale" and o.get("stockPoRef") and not o.get("poRef")
+    }
+    lot_sale_refs.discard("")
 
     for lift in data.get("lifts") or []:
         if lift.get("deletedAt"):
@@ -190,11 +196,15 @@ def apply_lift_totals(data: dict) -> dict:
             if not po_ref or qty <= 0:
                 continue
             if so_ref:
-                po_so_committed[po_ref] = po_so_committed.get(po_ref, 0) + qty
                 so_committed[so_ref] = so_committed.get(so_ref, 0) + qty
                 if delivered:
-                    po_so_delivered[po_ref] = po_so_delivered.get(po_ref, 0) + qty
                     so_delivered[so_ref] = so_delivered.get(so_ref, 0) + qty
+                # A sale from the godown already consumed the purchase when stock came in.
+                if so_ref in lot_sale_refs:
+                    continue
+                po_so_committed[po_ref] = po_so_committed.get(po_ref, 0) + qty
+                if delivered:
+                    po_so_delivered[po_ref] = po_so_delivered.get(po_ref, 0) + qty
             else:
                 po_stock_committed[po_ref] = po_stock_committed.get(po_ref, 0) + qty
                 if delivered:

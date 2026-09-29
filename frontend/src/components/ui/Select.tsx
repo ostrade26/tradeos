@@ -6,7 +6,7 @@ interface SelectProps {
   label?: string
   placeholder?: string
   searchPlaceholder?: string
-  options: { value: string; label: string; description?: string; keywords?: string }[]
+  options: { value: string; label: string; description?: string; keywords?: string; group?: string }[]
   value?: string
   /** Shown when value is not in options (e.g. legacy free-text). */
   displayLabel?: string
@@ -17,10 +17,12 @@ interface SelectProps {
   onCreate?: (name: string) => SearchableSelectOption | Promise<SearchableSelectOption>
   createLabel?: string
   emptyMessage?: string
+  groups?: { id: string; label: string }[]
   disabled?: boolean
   className?: string
   error?: string
   compact?: boolean
+  listMaxHeight?: number
 }
 
 export function Select({
@@ -37,10 +39,12 @@ export function Select({
   onCreate,
   createLabel,
   emptyMessage,
+  groups,
   disabled,
   error,
   className,
   compact,
+  listMaxHeight,
 }: SelectProps) {
   const placeholderOption = options.find(o => o.value === '')
   const listOptions: SearchableSelectOption[] = options
@@ -50,6 +54,7 @@ export function Select({
       label: o.label,
       description: o.description,
       keywords: o.keywords,
+      group: o.group,
     }))
 
   const selected = listOptions.find(o => o.value === value)
@@ -58,6 +63,7 @@ export function Select({
     <SearchableSelect
       className={className}
       compact={compact}
+      listMaxHeight={listMaxHeight}
       label={label}
       placeholder={placeholder ?? placeholderOption?.label ?? 'Select...'}
       searchPlaceholder={searchPlaceholder ?? `Search${label ? ` ${label.toLowerCase()}` : ''}...`}
@@ -70,6 +76,7 @@ export function Select({
       onCreate={onCreate}
       createLabel={createLabel}
       emptyMessage={emptyMessage ?? 'No matches found'}
+      groups={groups}
       disabled={disabled || (listOptions.length === 0 && !value && !allowCustom && !allowCreate)}
       error={error}
       onValueChange={(v, lbl) => {
