@@ -173,7 +173,7 @@ export function RichTextEditor({ label, value, onChange, placeholder }: RichText
             onBlur={publish}
             onKeyUp={syncToolbar}
             onMouseUp={syncToolbar}
-            className="min-h-[16rem] w-full px-3 py-2.5 text-sm leading-relaxed text-heading outline-none [&_b]:font-semibold [&_strong]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-0.5 [&_[data-color=red]]:text-red-600 [&_[data-color=amber]]:text-amber-700 [&_[data-color=green]]:text-emerald-700 [&_[data-color=blue]]:text-blue-700"
+            className="release-rich min-h-[16rem] w-full px-3 py-2.5 text-sm leading-relaxed text-heading outline-none"
           />
         </div>
       </div>

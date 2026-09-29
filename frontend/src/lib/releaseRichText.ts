@@ -141,9 +141,9 @@ function cleanRichNode(doc: Document, node: Element) {
     }
     if (tag === 'SPAN') {
       const style = el.getAttribute('style') || ''
-      const styleColor = style.match(/color\s*:\s*([^;]+)/)?.[1]
+      const styleColor = style.match(/(?:^|;)\s*color\s*:\s*([^;]+)/)?.[1]
       const color = releaseColorId(el.getAttribute('data-color')) || releaseColorId(styleColor)
-      const bold = /font-weight\s*:\s*(bold|[6-9]00)\b/i.test(style)
+      const bold = /(?:^|;)\s*(?:--tw-font-weight|font-weight)\s*:\s*(bold|[6-9]00|var\(\s*--font-weight-(?:semibold|bold)\s*\))/i.test(style)
       const parent = el.parentNode
       if (!parent) {
         el.remove()
@@ -159,8 +159,14 @@ function cleanRichNode(doc: Document, node: Element) {
         el.replaceWith(colored)
         cleanRichNode(doc, colored)
       } else if (!bold && !color) {
-        while (body.firstChild) parent.insertBefore(body.firstChild, el)
+        const moved: Element[] = []
+        while (body.firstChild) {
+          const next = body.firstChild
+          parent.insertBefore(next, el)
+          if (next.nodeType === Node.ELEMENT_NODE) moved.push(next as Element)
+        }
         el.remove()
+        for (const item of moved) cleanRichNode(doc, item)
       } else {
         el.replaceWith(body)
         cleanRichNode(doc, body)
