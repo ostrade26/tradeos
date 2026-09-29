@@ -115,53 +115,13 @@ export function ensureOrdersReferencedByLifts(orders: TradeOrder[], lifts: Lift[
   return stubs.length > 0 ? [...orders, ...stubs] : orders
 }
 
-/** Pick the PO with the most lifted qty for each SO. */
-function dominantPoRef(byPo: Map<string, number>): string | undefined {
-  let bestPo: string | undefined
-  let bestQty = -1
-  for (const [poRef, qty] of byPo) {
-    if (qty > bestQty) {
-      bestQty = qty
-      bestPo = poRef
-    }
-  }
-  return bestPo
-}
-
 /**
- * After spreadsheet import, set SO.poRef from lift allocations when the SO sheet
- * did not include a PO link. Skips SOs that already have poRef.
+ * A lift never books a sales order onto a purchase.
+ * The sale keeps a purchase ref only when its own sheet names one.
  */
 export function inferSoPoRefsFromLifts(orders: TradeOrder[], lifts: Lift[]): TradeOrder[] {
-  if (lifts.length === 0) return orders
-
-  const poQtyBySo = new Map<string, Map<string, number>>()
-
-  for (const lift of lifts) {
-    for (const alloc of getLiftAllocations(lift)) {
-      const soCore = alloc.soRef ? refCore(alloc.soRef) : ''
-      const poCore = alloc.poRef ? refCore(alloc.poRef) : ''
-      const { qtyMt } = alloc
-      if (!soCore || !poCore || qtyMt <= 0) continue
-
-      const resolvedPo = findOrderRef(orders, 'purchase', poCore)
-      const resolvedSo = findOrderRef(orders, 'sale', soCore)
-      if (!resolvedPo || !resolvedSo) continue
-
-      const byPo = poQtyBySo.get(resolvedSo) ?? new Map<string, number>()
-      byPo.set(resolvedPo, roundQtyMt((byPo.get(resolvedPo) ?? 0) + qtyMt))
-      poQtyBySo.set(resolvedSo, byPo)
-    }
-  }
-
-  if (poQtyBySo.size === 0) return orders
-
-  return orders.map(order => {
-    if (order.side !== 'sale' || order.poRef) return order
-    const poRef = dominantPoRef(poQtyBySo.get(order.ref) ?? new Map())
-    if (!poRef) return order
-    return { ...order, poRef }
-  })
+  void lifts
+  return orders
 }
 
 /** Point SO.poRef at the stored PO.ref when Excel used PO24 vs 24. */

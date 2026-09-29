@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Radio } from '../ui/Radio'
 import type { TradeOrder } from '../../data/mockData'
-import { canCloseOrder, type CloseOrderMethod } from '../../lib/orderClosure'
+import { canCloseOrder, type CloseOrderContext, type CloseOrderMethod } from '../../lib/orderClosure'
 import { contractRateFromOrder, formatContractRate, orderLineAmount } from '../../lib/orderRate'
 import { formatCurrency, formatDate, formatQty } from '../../lib/utils'
 import { formatOrderRef, formatPoRef, formatSoRef } from '../../lib/tradeRefs'
@@ -18,6 +18,17 @@ interface CloseOrderModalProps {
   open: boolean
   onClose: () => void
   onComplete?: () => void
+}
+
+function methodsSharedBy(rows: { context: CloseOrderContext }[]): CloseOrderMethod[] {
+  if (rows.length === 0) return []
+  return rows[0].context.availableMethods.filter(method =>
+    rows.every(row => row.context.availableMethods.includes(method)),
+  )
+}
+
+function isFullyDeliveredClose(context: CloseOrderContext): boolean {
+  return context.availableMethods.length === 1 && context.availableMethods[0] === 'delivered'
 }
 
 const METHOD_LABELS: Record<CloseOrderMethod, { title: string; description: string }> = {
@@ -59,16 +70,21 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
 
   const closable = useMemo(() => assessments.filter(a => a.context.ok), [assessments])
   const blocked = useMemo(() => assessments.filter(a => !a.context.ok), [assessments])
+  const fullyDelivered = useMemo(
+    () => closable.filter(a => isFullyDeliveredClose(a.context)),
+    [closable],
+  )
+  const needsChoice = useMemo(
+    () => closable.filter(a => !isFullyDeliveredClose(a.context)),
+    [closable],
+  )
   const isBulk = orders.length > 1
   const single = !isBulk && assessments[0] ? assessments[0] : null
 
   const availableMethods = useMemo(() => {
-    if (closable.length === 0) return [] as CloseOrderMethod[]
-    const first = new Set(closable[0].context.availableMethods)
-    return closable[0].context.availableMethods.filter(m =>
-      closable.every(a => a.context.availableMethods.includes(m) && first.has(m)),
-    )
-  }, [closable])
+    if (needsChoice.length > 0) return methodsSharedBy(needsChoice)
+    return methodsSharedBy(fullyDelivered)
+  }, [needsChoice, fullyDelivered])
 
   const bulkCloseQty = useMemo(
     () => closable.reduce((sum, a) => sum + a.context.balanceOwed + a.context.toBeLifted, 0),
@@ -96,7 +112,7 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
       setError('None of the selected orders can be closed.')
       return
     }
-    if (!availableMethods.includes(method)) {
+    if (needsChoice.length > 0 && !availableMethods.includes(method)) {
       setError('Choose a valid close method.')
       return
     }
@@ -105,12 +121,21 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
     let closed = 0
     const failures: string[] = []
     try {
-      for (const { order } of closable) {
+      for (const { order, context } of closable) {
+        const orderMethod: CloseOrderMethod | null = context.availableMethods.includes(method)
+          ? method
+          : context.availableMethods.includes('delivered')
+            ? 'delivered'
+            : null
+        if (!orderMethod) {
+          failures.push(`${formatOrderRef(order.ref, order.side)}: Choose a valid close method.`)
+          continue
+        }
         try {
           await store.closeOrder(order.id, {
-            method,
+            method: orderMethod,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
-            ...(method !== 'short_closed' ? { settledAt } : {}),
+            ...(orderMethod === 'cash' || orderMethod === 'carried_forward' ? { settledAt } : {}),
           })
           closed += 1
         } catch (err) {
@@ -146,7 +171,8 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
   }
 
   const title = isBulk ? `Close ${orders.length} ${shortLabel}s` : 'Close order'
-  const canSubmit = closable.length > 0 && availableMethods.includes(method)
+  const canSubmit = closable.length > 0
+    && (needsChoice.length === 0 || availableMethods.includes(method))
 
   return (
     <Modal
@@ -341,7 +367,13 @@ export function CloseOrderModal({ orders, open, onClose, onComplete }: CloseOrde
                 unlifted balance will be written off. Ordered quantity stays as booked.
               </p>
             )}
-            {isBulk && (
+            {isBulk && fullyDelivered.length > 0 && needsChoice.length > 0 && (
+              <p className="text-xs text-muted">
+                {fullyDelivered.length} fully delivered {shortLabel}{fullyDelivered.length === 1 ? '' : 's'} will move to Completed.
+                The method above applies to the other {needsChoice.length}.
+              </p>
+            )}
+            {isBulk && (fullyDelivered.length === 0 || needsChoice.length === 0) && (
               <p className="text-xs text-muted">
                 The same close method will be applied to each closable {shortLabel}.
               </p>

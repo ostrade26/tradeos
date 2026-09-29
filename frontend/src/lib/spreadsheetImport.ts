@@ -198,6 +198,7 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
     paymentTerms: str(row, 'Payment') || base?.paymentTerms,
     remarks: str(row, 'Remarks') || base?.remarks,
     status: orderStatusFromCell(row, base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty)),
+    // Purchase "Sauda Ref#" repeats the purchase number on legacy registers. Leave it off the contract.
     brokerContractRef: str(row, 'Contract #', 'Contract No', 'Contract') || base?.brokerContractRef,
     poRef: undefined,
     buyBacks: base?.buyBacks,
@@ -209,6 +210,16 @@ function buildPurchaseOrder(row: Record<string, unknown>, base?: TradeOrder): Tr
     sellerCompanyId: base?.sellerCompanyId,
     buyerCompanyId: base?.buyerCompanyId,
   }
+}
+
+/** Sales sauda is the broker contract. A bare copy of the sale number is not. */
+function salesContractRef(row: Record<string, unknown>, orderRef: string): string {
+  const explicit = str(row, 'Contract #', 'Contract No', 'Contract')
+  if (explicit) return explicit
+  const sauda = str(row, 'Sauda Ref.', 'Sauda Ref', 'Sauda Ref#')
+  if (!sauda) return ''
+  if (/^\d+$/.test(sauda) && refCore(sauda) === refCore(orderRef)) return ''
+  return sauda
 }
 
 function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): TradeOrder {
@@ -248,7 +259,7 @@ function buildSalesOrder(row: Record<string, unknown>, base?: TradeOrder): Trade
     paymentTerms: str(row, 'Payment') || base?.paymentTerms,
     remarks: str(row, 'Remarks') || base?.remarks,
     status: orderStatusFromCell(row, base?.status ?? deriveOrderStatus(orderQty, liftedQty, base?.committedLiftQty)),
-    brokerContractRef: str(row, 'Contract #', 'Contract No', 'Contract') || base?.brokerContractRef,
+    brokerContractRef: salesContractRef(row, ref) || base?.brokerContractRef,
     stockPoRef: (base?.poRef || linkedPo) ? undefined : (str(row, 'Stock PO Ref#', 'Stock PO', 'Lot') || base?.stockPoRef),
     buyBacks: base?.buyBacks,
     completionType: base?.completionType,
@@ -318,7 +329,9 @@ function buildTankersFromImport(tankerValue: string, liftedQty: number): LiftTan
 function buildLift(row: Record<string, unknown>, base?: Lift): Lift {
   const liftRef = parseNumber(row['Lift Ref#'] ?? row['Lift #']) ?? base?.liftRef
   const liftedQty = parseNumber(row['Lifted Qty'] ?? row.Qty) ?? base?.liftedQty ?? 0
-  const plannedFromRow = parseNumber(row['SO Qty'] ?? row['Sale Qty'])
+  // SO Qty is this lift's plan (Tradeal export). Sale Qty on a legacy register is the
+  // sales order quantity copied onto every lift row, so it is not the tanker's plan.
+  const plannedFromRow = parseNumber(row['SO Qty'] ?? row['Planned Qty'])
   const plannedQty = plannedFromRow ?? base?.plannedQtyMt ?? liftedQty
   // Only keep an explicit shortfall when the sheet provides one; otherwise don't invent
   // planned−actual balance from SO Qty vs Lifted Qty (common legacy noise).
