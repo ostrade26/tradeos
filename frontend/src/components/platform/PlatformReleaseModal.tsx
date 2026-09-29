@@ -7,6 +7,7 @@ import { RichTextEditor } from '../ui/RichTextEditor'
 import { Select } from '../ui/Select'
 import {
   RELEASE_CATEGORIES,
+  isAssignedReleaseVersion,
   isGatedReleaseCategory,
   isInformReleaseCategory,
   releaseCategorySelectOptions,
@@ -98,9 +99,8 @@ export function PlatformReleaseModal({
   const suggested = suggestNextVersion(nextVersion === form.version ? '' : nextVersion, categories)
   const canPublish = Boolean(onPublish && (!release || release.status === 'draft'))
 
+  const versionLabel = isAssignedReleaseVersion(release?.version) ? release!.version : ''
   const valid = Boolean(
-    form.version.trim() &&
-    /^\d+\.\d+\.\d+$/.test(form.version.trim()) &&
     form.title.trim() &&
     form.items.some(item => item.title.trim()),
   )
@@ -125,7 +125,7 @@ export function PlatformReleaseModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={release ? `Edit ${release.version}` : 'New release'}
+      title={release ? (versionLabel ? `Edit ${versionLabel}` : 'Edit draft') : 'New release'}
       subtitle="Customers see this copy. Version is assigned automatically. Publish sends the notice to organisations."
       size="lg"
       footer={
