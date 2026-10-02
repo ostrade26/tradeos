@@ -49,6 +49,7 @@ export function StatusBadge({ status, context }: { status: string; context?: 'li
     active: { variant: 'info', label: 'Active' },
     completed: { variant: 'success', label: 'Completed' },
     cancelled: { variant: 'danger', label: 'Cancelled' },
+    deleted: { variant: 'danger', label: 'Deleted' },
     outstanding: { variant: 'danger', label: 'Outstanding' },
     advance: { variant: 'warning', label: 'Advance Paid' },
     partial: { variant: 'info', label: 'Partial' },

@@ -103,3 +103,219 @@ def _create_tables(conn) -> None:
             ON notification_sends(created_at DESC)
         """
     )
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS broker_contract_shares (
+            id {pk},
+            sender_organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            buyer_organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            seller_organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            contract_ref TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            filename TEXT NOT NULL DEFAULT '',
+            pdf_data TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    for name, ddl in (
+        ("item_name", "TEXT NOT NULL DEFAULT ''"),
+        ("quantity", "TEXT NOT NULL DEFAULT ''"),
+        ("rate", "TEXT NOT NULL DEFAULT ''"),
+        ("brokerage", "TEXT NOT NULL DEFAULT ''"),
+        ("delivery_period", "TEXT NOT NULL DEFAULT ''"),
+        ("payment_terms", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_order_ref", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_order_ref", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_confirmed_at", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_confirmed_at", "TEXT NOT NULL DEFAULT ''"),
+        ("deleted_at", "TEXT NOT NULL DEFAULT ''"),
+        ("edited_at", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        try:
+            conn.execute(f"ALTER TABLE broker_contract_shares ADD COLUMN {name} {ddl}")
+        except Exception as exc:
+            message = str(exc).lower()
+            if "duplicate" in message or "already exists" in message:
+                continue
+            raise
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS broker_contract_share_lift_events (
+            id {pk},
+            share_id INTEGER NOT NULL REFERENCES broker_contract_shares(id) ON DELETE CASCADE,
+            organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            party_role TEXT NOT NULL,
+            lift_id TEXT NOT NULL,
+            lift_ref INTEGER NOT NULL DEFAULT 0,
+            order_ref TEXT NOT NULL DEFAULT '',
+            qty_mt REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending',
+            event_at TEXT NOT NULL DEFAULT '',
+            delivered_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT '',
+            UNIQUE (share_id, organisation_id, lift_id)
+        )
+        """
+    )
+    try:
+        conn.execute(
+            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN delivered_at TEXT NOT NULL DEFAULT ''"
+        )
+    except Exception as exc:
+        message = str(exc).lower()
+        if "duplicate" not in message and "already exists" not in message:
+            raise
+    try:
+        conn.execute(
+            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN tankers_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    except Exception as exc:
+        message = str(exc).lower()
+        if "duplicate" not in message and "already exists" not in message:
+            raise
+    try:
+        conn.execute(
+            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN broker_lift_ref INTEGER NOT NULL DEFAULT 0"
+        )
+    except Exception as exc:
+        message = str(exc).lower()
+        if "duplicate" not in message and "already exists" not in message:
+            raise
+    from datetime import datetime, timezone
+
+    seen_at = datetime.now(timezone.utc).isoformat()
+    ph = "%s" if uses_postgres() else "?"
+    for name, ddl, mark_seen in (
+        ("broker_read_at", "TEXT NOT NULL DEFAULT ''", True),
+        ("broker_completed_at", "TEXT NOT NULL DEFAULT ''", False),
+        ("tanker_changes_json", "TEXT NOT NULL DEFAULT '[]'", False),
+    ):
+        try:
+            conn.execute(
+                f"ALTER TABLE broker_contract_share_lift_events ADD COLUMN {name} {ddl}"
+            )
+        except Exception as exc:
+            message = str(exc).lower()
+            if "duplicate" in message or "already exists" in message:
+                continue
+            raise
+        if mark_seen:
+            conn.execute(
+                f"UPDATE broker_contract_share_lift_events SET broker_read_at = {ph} WHERE broker_read_at = ''",
+                (seen_at,),
+            )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_broker_share_lift_events_share
+            ON broker_contract_share_lift_events(share_id, updated_at DESC)
+        """
+    )
+    _migrate_broker_share_external_parties(conn)
+
+
+def _migrate_broker_share_external_parties(conn) -> None:
+    """External buyer/seller contacts and nullable party org ids (off-Tradeal parties)."""
+    for name, ddl in (
+        ("buyer_external_name", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_external_email", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_external_phone", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_external_name", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_external_email", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_external_phone", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_invite_token", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_invite_token", "TEXT NOT NULL DEFAULT ''"),
+        ("buyer_email_sent_at", "TEXT NOT NULL DEFAULT ''"),
+        ("seller_email_sent_at", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        try:
+            conn.execute(f"ALTER TABLE broker_contract_shares ADD COLUMN {name} {ddl}")
+        except Exception as exc:
+            message = str(exc).lower()
+            if "duplicate" in message or "already exists" in message:
+                continue
+            raise
+
+    if uses_postgres():
+        for col in ("buyer_organisation_id", "seller_organisation_id"):
+            try:
+                conn.execute(
+                    f"ALTER TABLE broker_contract_shares ALTER COLUMN {col} DROP NOT NULL"
+                )
+            except Exception:
+                pass
+        return
+
+    rows = conn.execute("PRAGMA table_info(broker_contract_shares)").fetchall()
+    by_name = {str(r[1]): r for r in rows}
+    buyer = by_name.get("buyer_organisation_id")
+    if not buyer or int(buyer[3] or 0) == 0:
+        return
+
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS broker_contract_shares__ext (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_organisation_id INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+            sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            buyer_organisation_id INTEGER REFERENCES organisations(id) ON DELETE SET NULL,
+            seller_organisation_id INTEGER REFERENCES organisations(id) ON DELETE SET NULL,
+            contract_ref TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            filename TEXT NOT NULL DEFAULT '',
+            pdf_data TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            item_name TEXT NOT NULL DEFAULT '',
+            quantity TEXT NOT NULL DEFAULT '',
+            rate TEXT NOT NULL DEFAULT '',
+            brokerage TEXT NOT NULL DEFAULT '',
+            delivery_period TEXT NOT NULL DEFAULT '',
+            payment_terms TEXT NOT NULL DEFAULT '',
+            buyer_order_ref TEXT NOT NULL DEFAULT '',
+            seller_order_ref TEXT NOT NULL DEFAULT '',
+            buyer_confirmed_at TEXT NOT NULL DEFAULT '',
+            seller_confirmed_at TEXT NOT NULL DEFAULT '',
+            deleted_at TEXT NOT NULL DEFAULT '',
+            edited_at TEXT NOT NULL DEFAULT '',
+            buyer_external_name TEXT NOT NULL DEFAULT '',
+            buyer_external_email TEXT NOT NULL DEFAULT '',
+            buyer_external_phone TEXT NOT NULL DEFAULT '',
+            seller_external_name TEXT NOT NULL DEFAULT '',
+            seller_external_email TEXT NOT NULL DEFAULT '',
+            seller_external_phone TEXT NOT NULL DEFAULT '',
+            buyer_invite_token TEXT NOT NULL DEFAULT '',
+            seller_invite_token TEXT NOT NULL DEFAULT '',
+            buyer_email_sent_at TEXT NOT NULL DEFAULT '',
+            seller_email_sent_at TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO broker_contract_shares__ext (
+            id, sender_organisation_id, sender_user_id, buyer_organisation_id, seller_organisation_id,
+            contract_ref, note, filename, pdf_data, created_at,
+            item_name, quantity, rate, brokerage, delivery_period, payment_terms,
+            buyer_order_ref, seller_order_ref, buyer_confirmed_at, seller_confirmed_at,
+            deleted_at, edited_at,
+            buyer_external_name, buyer_external_email, buyer_external_phone,
+            seller_external_name, seller_external_email, seller_external_phone,
+            buyer_invite_token, seller_invite_token, buyer_email_sent_at, seller_email_sent_at
+        )
+        SELECT
+            id, sender_organisation_id, sender_user_id, buyer_organisation_id, seller_organisation_id,
+            contract_ref, note, filename, pdf_data, created_at,
+            item_name, quantity, rate, brokerage, delivery_period, payment_terms,
+            buyer_order_ref, seller_order_ref, buyer_confirmed_at, seller_confirmed_at,
+            deleted_at, edited_at,
+            buyer_external_name, buyer_external_email, buyer_external_phone,
+            seller_external_name, seller_external_email, seller_external_phone,
+            buyer_invite_token, seller_invite_token, buyer_email_sent_at, seller_email_sent_at
+        FROM broker_contract_shares
+        """
+    )
+    conn.execute("DROP TABLE broker_contract_shares")
+    conn.execute("ALTER TABLE broker_contract_shares__ext RENAME TO broker_contract_shares")
+    conn.execute("PRAGMA foreign_keys=ON")

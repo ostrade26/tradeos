@@ -19,8 +19,16 @@ import { type Lift } from '../data/mockData'
 import { formatLiftPoRefs, formatLiftSoRefs, liftHasCrossPoAllocations } from '../lib/liftAllocations'
 import { isStockLift, STOCK_LIFT_LABEL } from '../lib/stockLift'
 import { LiftOrderRouteLinks } from '../components/registers/LiftOrderRouteLinks'
-import { formatLiftTankerSummary, getLiftTankers } from '../lib/liftTankers'
-import { getLiftBalanceQty } from '../lib/liftBalance'
+import { getLiftTankers } from '../lib/liftTankers'
+import { getLiftBalanceQty, getLiftPlannedQty } from '../lib/liftBalance'
+import { tankerQtyLinesFromLift } from '../lib/tankerQtyLines'
+import {
+  TankerActualColumn,
+  TankerBalanceColumn,
+  TankerNumberColumn,
+  TankerPlannedColumn,
+  TankerRateColumn,
+} from '../components/registers/TankerAlignedMetrics'
 import {
   applyLiftFilters,
   emptyLiftFilters,
@@ -484,16 +492,58 @@ export function LiftRegisterPage() {
       sortable: true,
       sortValue: (r: Lift) => r.rate,
       className: 'text-right whitespace-nowrap min-w-[6.5rem]',
-      render: (r: Lift) => <span className="tabular-nums">{formatRateCell(r.rate)}</span>,
+      render: (r: Lift) => {
+        const lines = tankerQtyLinesFromLift(r)
+        return <TankerRateColumn rateLabel={formatRateCell(r.rate)} lineCount={lines.length} />
+      },
     },
-    {
+    ...(mode === 'completed' ? [{
+      key: 'plannedQty',
+      header: 'Planned Qty',
+      sortable: true,
+      sortValue: (r: Lift) => getLiftPlannedQty(r),
+      className: 'text-right whitespace-nowrap min-w-[6rem]',
+      render: (r: Lift) => {
+        const lines = tankerQtyLinesFromLift(r)
+        return (
+          <TankerPlannedColumn
+            lines={lines}
+            singleFallback={<span className="tabular-nums font-medium">{formatMt(getLiftPlannedQty(r))}</span>}
+          />
+        )
+      },
+    }] : [{
       key: 'liftedQty',
-      header: mode === 'pending' ? 'Planned Qty' : 'Actual Qty',
+      header: 'Planned Qty',
       sortable: true,
       sortValue: (r: Lift) => r.liftedQty,
       className: 'text-right whitespace-nowrap min-w-[6rem]',
-      render: (r: Lift) => <span className="tabular-nums font-medium">{formatMt(r.liftedQty)}</span>,
-    },
+      render: (r: Lift) => {
+        const lines = tankerQtyLinesFromLift(r)
+        return (
+          <TankerPlannedColumn
+            lines={lines}
+            singleFallback={<span className="tabular-nums font-medium">{formatMt(r.liftedQty)}</span>}
+          />
+        )
+      },
+    }]),
+    ...(mode === 'completed' ? [{
+      key: 'actualQty',
+      header: 'Actual Qty',
+      sortable: true,
+      sortValue: (r: Lift) => r.liftedQty,
+      className: 'text-right whitespace-nowrap min-w-[6rem]',
+      render: (r: Lift) => {
+        const lines = tankerQtyLinesFromLift(r)
+        return (
+          <TankerActualColumn
+            lines={lines}
+            singleFallback={<span className="tabular-nums font-medium">{formatMt(r.liftedQty)}</span>}
+          />
+        )
+      },
+    }] : []),
     ...(mode === 'completed' ? [{
       key: 'balanceQtyMt',
       header: 'Balance',
@@ -501,17 +551,25 @@ export function LiftRegisterPage() {
       sortValue: (r: Lift) => getLiftBalanceQty(r),
       className: 'text-right whitespace-nowrap min-w-[5.5rem]',
       render: (r: Lift) => {
+        const lines = tankerQtyLinesFromLift(r)
         const balance = getLiftBalanceQty(r)
-        return balance > 0
-          ? <span className="tabular-nums font-medium text-amber-700 dark:text-amber-400">{formatMt(balance)}</span>
-          : <span className="text-gray-300">—</span>
+        return (
+          <TankerBalanceColumn
+            lines={lines}
+            singleFallback={
+              balance > 0
+                ? <span className="tabular-nums font-medium text-amber-700 dark:text-amber-400">{formatMt(balance)}</span>
+                : <span className="text-gray-300">—</span>
+            }
+          />
+        )
       },
     }] : []),
     {
       key: 'tankers',
       header: 'Tanker No.',
-      className: 'hidden xl:table-cell whitespace-nowrap min-w-[7rem]',
-      render: (r: Lift) => formatLiftTankerSummary(r),
+      className: 'hidden xl:table-cell min-w-[8rem]',
+      render: (r: Lift) => <TankerNumberColumn lines={tankerQtyLinesFromLift(r)} />,
     },
     ...(mode === 'completed' ? [{
       key: 'salesInvoiceNo',

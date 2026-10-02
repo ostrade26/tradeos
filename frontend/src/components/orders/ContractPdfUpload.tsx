@@ -64,6 +64,9 @@ function isPdfFile(file: File) {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 }
 
+/** Queue, Add PDFs, and the PDF row strip. One file at a time while false. Turning this on also means restore preview + Add PDFs + rows. */
+const ALLOW_MULTIPLE_CONTRACT_PDFS = false
+
 export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdfUploadProps>(function ContractPdfUpload({
   side,
   onParsed,
@@ -267,6 +270,12 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
       setError('Choose a PDF')
       return
     }
+    if (!ALLOW_MULTIPLE_CONTRACT_PDFS) {
+      const file = pdfs[0]
+      publishQueue([file], savedRef.current)
+      void handleFile(file)
+      return
+    }
     const starting = queueRef.current.length === 0
     const next = starting ? pdfs : [...queueRef.current, ...pdfs]
     publishQueue(next, savedRef.current)
@@ -417,7 +426,7 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
           id={addInputId}
           type="file"
           accept=".pdf,application/pdf"
-          multiple
+          multiple={ALLOW_MULTIPLE_CONTRACT_PDFS}
           className="sr-only"
           onChange={e => {
             const picked = e.target.files ? [...e.target.files] : []
@@ -467,6 +476,7 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
                 </div>
               </button>
 
+              {ALLOW_MULTIPLE_CONTRACT_PDFS && (
               <label
                 htmlFor={addInputId}
                 className={cn(
@@ -477,6 +487,7 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
               >
                 Add PDFs
               </label>
+              )}
               {queuedNames.length <= 1 && (
                 <button
                   type="button"
@@ -543,7 +554,7 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
               >
                 <FileUp className={cn('h-6 w-6', dragOver ? 'text-accent' : 'text-muted')} />
                 <p className="text-sm font-medium text-heading">
-                  {loading ? 'Reading PDF…' : dragOver ? 'Drop PDFs to import' : 'Drop PDFs here, or browse'}
+                  {loading ? 'Reading PDF…' : dragOver ? 'Drop PDF to import' : 'Drop a PDF here, or browse'}
                 </p>
                 <span
                   className={cn(
@@ -555,8 +566,10 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
                 </span>
               </label>
               <p className="text-xs text-muted max-w-sm text-pretty leading-relaxed mx-auto mt-2">
-                Each PDF becomes its own {isPO ? 'purchase order' : 'sales order'}.
-                Seller, buyer, and contract fields are mapped from the PDF.
+                {ALLOW_MULTIPLE_CONTRACT_PDFS
+                  ? `Each PDF becomes its own ${isPO ? 'purchase order' : 'sales order'}.`
+                  : `This PDF becomes one ${isPO ? 'purchase order' : 'sales order'}.`}
+                {' '}Seller, buyer, and contract fields are mapped from the PDF.
                 {' '}Open <Link to="/contracts" className="text-accent hover:underline">Contracts</Link> to file the original.
               </p>
             </div>
@@ -582,7 +595,7 @@ export const ContractPdfUpload = forwardRef<ContractPdfUploadHandle, ContractPdf
           </div>
         )}
       </div>
-      {fileTags}
+      {ALLOW_MULTIPLE_CONTRACT_PDFS ? fileTags : null}
 
       <CompanyResolutionModal
         open={resolutionOpen}

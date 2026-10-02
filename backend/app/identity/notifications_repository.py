@@ -22,6 +22,7 @@ NOTIFICATION_KINDS = frozenset(
         "release_notes",
         "maintenance",
         "announcement",
+        "contract",
         "backup_reminder",
         "product_request",
         "seat_request",

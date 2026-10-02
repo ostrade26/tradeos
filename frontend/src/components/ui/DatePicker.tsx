@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { format, isValid, parse } from 'date-fns'
+import { format } from 'date-fns'
 import { Calendar } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { parseFlexibleTypedDate } from '../../lib/parseFlexibleTypedDate'
 import { FieldError, inputErrorClassName } from './FieldError'
 import { popoverPlacementClass, useFlipPopover } from '../../hooks/useFlipPopover'
 import { onOutsideClick } from '../../lib/outsideClick'
@@ -17,60 +18,6 @@ interface DatePickerProps {
   className?: string
   placeholder?: string
   disabled?: boolean
-}
-
-/** Formats users commonly type; canonical storage stays yyyy-MM-dd. */
-const TYPED_DATE_FORMATS = [
-  'd MMM yyyy',
-  'dd MMM yyyy',
-  'd MMMM yyyy',
-  'dd MMMM yyyy',
-  'yyyy/M/d',
-  'yyyy/MM/dd',
-]
-
-function parseNumericDate(text: string): Date | null {
-  const slash = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/)
-  if (slash) {
-    const day = Number(slash[1])
-    const month = Number(slash[2])
-    let year = Number(slash[3])
-    if (slash[3]!.length === 2) year += year >= 70 ? 1900 : 2000
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null
-    const date = new Date(year, month - 1, day)
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-      return null
-    }
-    return date
-  }
-  const digits = text.replace(/\D/g, '')
-  if (digits.length === 8 || digits.length === 6) {
-    const day = Number(digits.slice(0, 2))
-    const month = Number(digits.slice(2, 4))
-    let year = Number(digits.slice(4))
-    if (digits.length === 6) year += year >= 70 ? 1900 : 2000
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null
-    const date = new Date(year, month - 1, day)
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-      return null
-    }
-    return date
-  }
-  return null
-}
-
-function parseTypedDate(raw: string): Date | null {
-  const text = raw.trim()
-  if (!text) return null
-  const iso = parsePickerDate(text)
-  if (iso) return iso
-  const numeric = parseNumericDate(text)
-  if (numeric) return numeric
-  for (const pattern of TYPED_DATE_FORMATS) {
-    const parsed = parse(text, pattern, new Date())
-    if (isValid(parsed)) return parsed
-  }
-  return null
 }
 
 function withinBounds(date: Date, min?: string, max?: string): boolean {
@@ -93,7 +40,7 @@ export function DatePicker({
   max,
   error,
   className,
-  placeholder = 'e.g. 24/09/2026',
+  placeholder = 'DD/MM/YYYY',
   disabled = false,
 }: DatePickerProps) {
   const autoId = useId()
@@ -127,9 +74,9 @@ export function DatePicker({
       if (value) onChange('')
       return
     }
-    const parsed = parseTypedDate(trimmed)
+    const parsed = parseFlexibleTypedDate(trimmed)
     if (!parsed || !withinBounds(parsed, min, max)) {
-      setLocalError(parsed ? 'Date is out of range' : 'Enter a valid date (e.g. 24/09/2026)')
+      setLocalError(parsed ? 'Date is out of range' : 'Enter a valid date')
       setText(trimmed)
       return
     }
@@ -172,6 +119,9 @@ export function DatePicker({
             setText(e.target.value)
             if (localError) setLocalError('')
           }}
+          onFocus={() => {
+            if (!disabled) setOpen(true)
+          }}
           onBlur={() => commitText(text)}
           onKeyDown={e => {
             if (e.key === 'Enter') {
@@ -210,6 +160,7 @@ export function DatePicker({
       {open && (
         <div
           ref={panelRef}
+          onMouseDown={e => e.preventDefault()}
           className={cn(
             'absolute left-0 z-50 w-[min(100vw-2rem,18.5rem)] rounded-lg border border-gray-200 bg-white p-4 shadow-lg dark:border-gray-600 dark:bg-card',
             popoverPlacementClass(placement),

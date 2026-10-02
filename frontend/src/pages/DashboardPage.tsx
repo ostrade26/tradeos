@@ -14,8 +14,17 @@ import { DashboardExceptionsSnapshot } from '../components/dashboard/DashboardEx
 import { DashboardInventorySnapshot } from '../components/dashboard/DashboardInventorySnapshot'
 import { buildActionInbox } from '../lib/actionInbox'
 import { appPath } from '../lib/appShellMode'
+import { isBrokerAccount } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
+import { BrokerDashboardPage } from './BrokerDashboardPage'
 
 export function DashboardPage() {
+  const { session } = useAuth()
+  if (isBrokerAccount(session)) return <BrokerDashboardPage />
+  return <TraderDashboard />
+}
+
+function TraderDashboard() {
   const store = useTradeStore()
   const { lots } = store
 

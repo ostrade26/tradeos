@@ -6,7 +6,14 @@ import { Breadcrumb, Tabs } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { SendToTradealModal } from '../components/feedback/SendToTradealModal'
 import { PlatformNotifyModal } from '../components/platform/PlatformNotifyModal'
-import { InboxFiltersBar, type InboxStatusFilter } from '../components/inbox/InboxFiltersBar'
+import {
+  InboxFiltersBar,
+  inboxPartyLabel,
+  matchesInboxParty,
+  matchesInboxType,
+  uniqueSorted,
+  type InboxStatusFilter,
+} from '../components/inbox/InboxFiltersBar'
 import { InboxReceivedTable } from '../components/inbox/InboxReceivedTable'
 import { InboxSentTable } from '../components/inbox/InboxSentTable'
 import { useInboxItemActions } from '../hooks/useInboxItemActions'
@@ -25,14 +32,13 @@ import {
 } from '../api/platformApi'
 import { APP_HOME, isPlatformAdminPath } from '../lib/appShellMode'
 import { orgNoticesLabels, platformActionInboxLabels } from '../lib/inboxLabels'
-import { notificationKindLabel } from '../lib/notificationDisplay'
+import { inboxTypeLabel } from '../lib/notificationDisplay'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
 
 function matchesSearch(row: UnifiedInboxItem, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  const kind =
-    row.kind === 'feature_interest' ? 'feature interest' : notificationKindLabel(row.kind).toLowerCase()
+  const kind = inboxTypeLabel(row).toLowerCase()
   return (
     row.title.toLowerCase().includes(q) ||
     row.subtitle.toLowerCase().includes(q) ||
@@ -54,6 +60,8 @@ export function InboxPage() {
   const [box, setBox] = useState<InboxBox>(boxParam === 'sent' ? 'sent' : 'received')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<InboxStatusFilter>('all')
+  const [fromFilter, setFromFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [composeOpen, setComposeOpen] = useState(searchParams.get('compose') === '1')
   const [focusSelectId, setFocusSelectId] = useState<string | null>(null)
 
@@ -100,15 +108,33 @@ export function InboxPage() {
     return `New ${String(n).padStart(2, '0')}`
   }, [badgeCount])
 
+  const statusRows = useMemo(() => {
+    if (box === 'sent' || statusFilter === 'all') return items
+    return items.filter(row =>
+      row.category === 'notice' ? row.unread : row.status === 'open',
+    )
+  }, [box, items, statusFilter])
+
+  const fromOptions = useMemo(
+    () => uniqueSorted(statusRows.map(inboxPartyLabel)),
+    [statusRows],
+  )
+  const typeOptions = useMemo(
+    () => uniqueSorted(statusRows.map(inboxTypeLabel)),
+    [statusRows],
+  )
+  const activeFrom = fromOptions.includes(fromFilter) ? fromFilter : 'all'
+  const activeType = typeOptions.includes(typeFilter) ? typeFilter : 'all'
+
   const visibleRows = useMemo(() => {
-    const byStatus =
-      box === 'sent' || statusFilter === 'all'
-        ? items
-        : items.filter(row =>
-            row.category === 'notice' ? row.unread : row.status === 'open',
-          )
-    return byStatus.filter(row => matchesSearch(row, search))
-  }, [box, items, search, statusFilter])
+    return statusRows.filter(row =>
+      matchesSearch(row, search)
+      && matchesInboxParty(row, activeFrom)
+      && matchesInboxType(row, activeType),
+    )
+  }, [activeFrom, activeType, search, statusRows])
+
+  const filtersNarrow = Boolean(search.trim() || activeFrom !== 'all' || activeType !== 'all')
 
   const focusId = searchParams.get('focus')
   const handledFocusRef = useRef<string | null>(null)
@@ -197,6 +223,8 @@ export function InboxPage() {
     setDetailPanelOpen(false)
     setBox(next)
     setSearch('')
+    setFromFilter('all')
+    setTypeFilter('all')
     setFocusSelectId(null)
     setSearchParams(prev => {
       const p = new URLSearchParams(prev)
@@ -267,13 +295,20 @@ export function InboxPage() {
         onStatusFilterChange={setStatusFilter}
         openCount={openCount}
         openFilterLabel="Unread"
+        fromFilter={activeFrom}
+        onFromFilterChange={setFromFilter}
+        fromOptions={fromOptions}
+        typeFilter={activeType}
+        onTypeFilterChange={setTypeFilter}
+        typeOptions={typeOptions}
       />
 
       {box === 'sent' ? (
         <InboxSentTable
           key="sent"
           rows={visibleRows}
-          emptyDescription={labels.sentEmpty}
+          emptyTitle={filtersNarrow ? 'No messages match these filters' : undefined}
+          emptyDescription={filtersNarrow ? 'Try a different recipient or type.' : labels.sentEmpty}
           onDeleteItems={removeItems}
         />
       ) : (
@@ -281,7 +316,8 @@ export function InboxPage() {
           key="received"
           rows={visibleRows}
           statusFilter={statusFilter}
-          emptyDescription={labels.receivedEmpty}
+          emptyTitle={filtersNarrow ? 'No messages match these filters' : undefined}
+          emptyDescription={filtersNarrow ? 'Try a different from or type.' : labels.receivedEmpty}
           platformConsole={platformConsole}
           focusId={focusSelectId}
           onOpen={handleSelect}

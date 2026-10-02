@@ -451,6 +451,14 @@ def reset(request: Request) -> dict:
     auth.require_permission(session, "organisation.edit")
     org_id = auth.resolve_organisation_id(session, request)
     state = _trade_service(request).reset()
+    from .identity.broker_shares_repository import clear_contract_shares_for_organisation
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            contract_shares_cleared = clear_contract_shares_for_organisation(conn, org_id)
+    else:
+        with _sqlite_connect() as conn:
+            contract_shares_cleared = clear_contract_shares_for_organisation(conn, org_id)
     from .identity.repository import append_audit_log
 
     append_audit_log(
@@ -460,7 +468,10 @@ def reset(request: Request) -> dict:
         entity_type="organisation",
         entity_id=str(org_id),
     )
-    return {"data": state, "result": {"reset": True}}
+    return {
+        "data": state,
+        "result": {"reset": True, "contract_shares_cleared": contract_shares_cleared},
+    }
 
 
 @app.post("/api/v1/admin/import", tags=["admin"], summary="Import full backup")
@@ -900,3 +911,18 @@ def create_demo_request(body: DemoRequestBody) -> dict:
     except Exception:
         logger.exception("Demo request stored but email send failed (company=%s)", company)
     return {"ok": True, **result}
+
+
+@app.get(
+    "/api/v1/public/contract-invites/{token}",
+    tags=["contracts"],
+    summary="View a broker contract PDF via invite link (no login)",
+)
+def public_contract_invite(token: str) -> dict:
+    from .identity.broker_shares_repository import get_public_contract_invite
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"invite": get_public_contract_invite(conn, token)}
+    with _sqlite_connect() as conn:
+        return {"invite": get_public_contract_invite(conn, token)}

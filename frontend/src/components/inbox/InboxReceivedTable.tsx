@@ -24,7 +24,7 @@ import {
   isFeatureInterestNotice,
   isProductUpdateNotice,
   noticeChangelog,
-  notificationKindLabel,
+  inboxItemKindLabel,
 } from '../../lib/notificationDisplay'
 import { formatDateTime } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
@@ -45,8 +45,7 @@ function isDeletableNotice(item: UnifiedInboxItem): boolean {
 }
 
 function kindLabel(item: UnifiedInboxItem): string {
-  if (item.kind === 'feature_interest') return 'Feature interest'
-  return notificationKindLabel(item.kind)
+  return inboxItemKindLabel(item)
 }
 
 function receivedInlineMessage(item: UnifiedInboxItem): string {
@@ -325,6 +324,7 @@ function receivedHeaderBadges(item: UnifiedInboxItem): ReactNode {
 export function InboxReceivedTable({
   rows,
   statusFilter,
+  emptyTitle,
   emptyDescription,
   platformConsole,
   focusId,
@@ -335,6 +335,7 @@ export function InboxReceivedTable({
 }: {
   rows: UnifiedInboxItem[]
   statusFilter: InboxStatusFilter
+  emptyTitle?: string
   emptyDescription: string
   platformConsole: boolean
   focusId?: string | null
@@ -633,11 +634,11 @@ export function InboxReceivedTable({
             : undefined
         }
         stickyLastColumn
-        emptyMessage={statusFilter === 'open' ? 'Nothing unread' : 'Nothing received'}
+        emptyMessage={emptyTitle ?? (statusFilter === 'open' ? 'Nothing unread' : 'Nothing received')}
         emptyState={
           <div className="py-10 text-center">
             <p className="text-sm font-medium text-heading">
-              {statusFilter === 'open' ? 'Nothing unread' : 'Nothing received'}
+              {emptyTitle ?? (statusFilter === 'open' ? 'Nothing unread' : 'Nothing received')}
             </p>
             <p className="text-xs text-muted mt-1 max-w-sm mx-auto">{emptyDescription}</p>
           </div>

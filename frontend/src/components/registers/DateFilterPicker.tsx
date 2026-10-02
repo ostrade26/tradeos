@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils'
 import { dateRangeForPreset, formatDateFilterLabel, type DatePreset } from '../../lib/orderFilters'
 import { popoverPlacementClass, useFlipPopover } from '../../hooks/useFlipPopover'
 import { GridCalendar } from '../ui/GridCalendar'
+import { DateTextInput } from '../ui/DateTextInput'
 
 type DateMode = 'single' | 'range'
 
@@ -153,14 +154,40 @@ export function DateFilterPicker({ label = 'Date', dateFrom, dateTo, onChange }:
           </div>
 
           {mode === 'single' ? (
-            <div className="mb-4">
+            <div className="mb-4 space-y-3">
+              <DateTextInput
+                label="Type date"
+                value={draftFrom || draftTo}
+                onChange={day => {
+                  setDraftFrom(day)
+                  setDraftTo(day)
+                }}
+              />
               <GridCalendar
                 value={draftFrom || draftTo}
-                onChange={day => setDraftFrom(day)}
+                onChange={day => {
+                  setDraftFrom(day)
+                  setDraftTo(day)
+                }}
               />
             </div>
           ) : (
             <div className="mb-4 space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <DateTextInput
+                  label="From"
+                  value={draftFrom}
+                  onChange={from => {
+                    setDraftFrom(from)
+                    if (!draftTo || (from && draftTo < from)) setDraftTo(from)
+                  }}
+                />
+                <DateTextInput
+                  label="To"
+                  value={draftTo}
+                  onChange={to => setDraftTo(to)}
+                />
+              </div>
               <div>
                 <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted">From</label>
                 <GridCalendar

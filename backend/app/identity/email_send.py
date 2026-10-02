@@ -127,6 +127,7 @@ def send_email(
     reply_to: str | Sequence[str] | None = None,
     cc: str | Sequence[str] | None = None,
     bcc: str | Sequence[str] | None = None,
+    attachments: list[dict[str, str]] | None = None,
 ) -> bool:
     """Send an email via Resend.
 
@@ -173,6 +174,8 @@ def send_email(
         payload["bcc"] = bcc_list
     if reply_list:
         payload["reply_to"] = reply_list if len(reply_list) > 1 else reply_list[0]
+    if attachments:
+        payload["attachments"] = attachments
 
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(

@@ -42,6 +42,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useServiceIssue } from '../hooks/ServiceIssueProvider'
 import { classifyUnknownError } from '../lib/serviceIssue'
 import { SERVICE_ISSUE_UI_ENABLED } from '../lib/serviceIssueConfig'
+import { syncBrokerShareLiftReport } from '../lib/brokerShareLiftSync'
+import { dispatchContractSharesRefresh } from '../lib/contractSharesRefresh'
 
 export interface CreateOrderInput {
   ref?: string
@@ -517,6 +519,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
 
   const resetAll = useCallback(async () => {
     await applyMutation(() => tradeApi.reset())
+    dispatchContractSharesRefresh()
   }, [applyMutation])
 
   const loadDemo = useCallback(async () => {
@@ -562,19 +565,31 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   )
 
   const addLift = useCallback(
-    (input: CreateLiftInput) => applyMutation(() => tradeApi.createLift(input as unknown as Record<string, unknown>)),
+    async (input: CreateLiftInput) => {
+      const lift = await applyMutation(() => tradeApi.createLift(input as unknown as Record<string, unknown>))
+      syncBrokerShareLiftReport(lift)
+      return lift
+    },
     [applyMutation],
   )
 
   const updateLift = useCallback(
-    (id: string, input: UpdateLiftInput) =>
-      applyMutation(() => tradeApi.updateLift(id, input as unknown as Record<string, unknown>)),
+    async (id: string, input: UpdateLiftInput) => {
+      const lift = await applyMutation(() => tradeApi.updateLift(id, input as unknown as Record<string, unknown>))
+      syncBrokerShareLiftReport(lift)
+      return lift
+    },
     [applyMutation],
   )
 
   const markLiftDelivered = useCallback(
-    (id: string, input: MarkLiftDeliveredInput) =>
-      applyMutation(() => tradeApi.markLiftDelivered(id, input as unknown as Record<string, unknown>)),
+    async (id: string, input: MarkLiftDeliveredInput) => {
+      const lift = await applyMutation(() =>
+        tradeApi.markLiftDelivered(id, input as unknown as Record<string, unknown>),
+      )
+      syncBrokerShareLiftReport(lift)
+      return lift
+    },
     [applyMutation],
   )
 

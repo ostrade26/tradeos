@@ -58,6 +58,8 @@ interface DataTableProps<T> {
   qtyNote?: boolean
   /** Stretch table to container width (default grows with column content). */
   fullWidth?: boolean
+  /** Inside a card: no outer radius or shadow of its own. */
+  embedded?: boolean
   /** Show this row's page and scroll it into view (e.g. deep link from another register). */
   focusRowId?: string
 }
@@ -235,6 +237,7 @@ export function DataTable<T extends { id?: string | number }>({
   stickyLastColumn,
   qtyNote = false,
   fullWidth = false,
+  embedded = false,
   focusRowId,
 }: DataTableProps<T>) {
   const { classes: density } = useTableDensity()
@@ -357,7 +360,13 @@ export function DataTable<T extends { id?: string | number }>({
   }
 
   return (
-    <div ref={tableRootRef} className="overflow-hidden rounded-md bg-card shadow-[var(--shadow-card)]">
+    <div
+      ref={tableRootRef}
+      className={cn(
+        'overflow-hidden bg-card',
+        embedded ? 'rounded-none shadow-none' : 'rounded-md shadow-[var(--shadow-card)]',
+      )}
+    >
       {mobileRender && (
         <div data-register-table className={cn('md:hidden divide-y divide-gray-200 dark:divide-gray-700', density.text)}>
           {visibleData.map((row, i) => {

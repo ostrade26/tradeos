@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Plus, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { usePermissions } from '../../hooks/useAuth'
+import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 
 const ALL_ACTIONS = [
@@ -17,6 +17,7 @@ function shouldHideFab(pathname: string, actions: readonly { to: string }[]) {
 }
 
 export function FloatingCreateCta() {
+  const { session } = useAuth()
   const { hasPermission } = usePermissions()
   const actions = ALL_ACTIONS.filter(a => hasPermission(a.permission))
   const [open, setOpen] = useState(false)
@@ -37,6 +38,7 @@ export function FloatingCreateCta() {
   }, [open])
 
   if (
+    session?.accountType === 'broker' ||
     isPlatformAdminPath(location.pathname) ||
     !actions.length ||
     shouldHideFab(location.pathname, actions)

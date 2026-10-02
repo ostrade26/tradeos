@@ -16,6 +16,7 @@ from ..db import (
     _sqlite_connect,
     begin_transaction,
     rollback_transaction,
+    row_dict,
     set_pg_organisation_context,
     uses_postgres,
 )
@@ -644,7 +645,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
 
                 conn.execute(
                     "UPDATE organisations SET org_code = %s WHERE id = %s",
-                    (org_code_for_id(org_id, is_test=bool(body.is_test)), org_id),
+                    (org_code_for_id(org_id, is_test=bool(body.is_test), account_type=body.account_type), org_id),
                 )
                 set_pg_organisation_context(conn, org_id)
                 conn.execute(
@@ -750,7 +751,7 @@ def create_organisation(body: OrganisationBody, request: Request) -> dict[str, A
 
             conn.execute(
                 "UPDATE organisations SET org_code = ? WHERE id = ?",
-                (org_code_for_id(org_id, is_test=bool(body.is_test)), org_id),
+                (org_code_for_id(org_id, is_test=bool(body.is_test), account_type=body.account_type), org_id),
             )
             conn.execute(
                 "INSERT OR IGNORE INTO trade_state (organisation_id, data) VALUES (?, ?)",
@@ -850,56 +851,71 @@ def update_organisation(org_id: int, body: OrganisationUpdateBody, request: Requ
         )
 
     def _sync_org_code_prefix(conn) -> None:
-        """Keep ORG- vs T-ORG- in sync when test flag changes."""
-        if "is_test" not in data:
+        """Keep TOA/TBA vs XTOA/XTBA in sync when the test flag or account type changes."""
+        if "is_test" not in data and "account_type" not in data:
             return
-        from .billing_schema import org_code_for_id
+        from .billing_schema import format_seat_label, org_code_for_id
 
-        is_test = bool(data.get("is_test"))
         row = (
-            conn.execute("SELECT org_code FROM organisations WHERE id = %s", (org_id,)).fetchone()
+            conn.execute(
+                "SELECT org_code, account_type, is_test FROM organisations WHERE id = %s",
+                (org_id,),
+            ).fetchone()
             if uses_postgres()
-            else conn.execute("SELECT org_code FROM organisations WHERE id = ?", (org_id,)).fetchone()
+            else conn.execute(
+                "SELECT org_code, account_type, is_test FROM organisations WHERE id = ?",
+                (org_id,),
+            ).fetchone()
         )
-        old_code = str((dict(row).get("org_code") if row else None) or "").strip()
-        new_code = org_code_for_id(org_id, is_test=is_test)
-        if not old_code or old_code == new_code:
-            if not old_code:
-                if uses_postgres():
-                    conn.execute(
-                        "UPDATE organisations SET org_code = %s WHERE id = %s",
-                        (new_code, org_id),
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE organisations SET org_code = ? WHERE id = ?",
-                        (new_code, org_id),
-                    )
-            return
-        expected_live = org_code_for_id(org_id, is_test=False)
-        expected_test = org_code_for_id(org_id, is_test=True)
-        if old_code not in (expected_live, expected_test):
+        stored = dict(row) if row else {}
+        account_type = str(data.get("account_type") or stored.get("account_type") or "wholesaler_retailer")
+        is_test = bool(data["is_test"]) if "is_test" in data else bool(stored.get("is_test"))
+        old_code = str(stored.get("org_code") or "").strip()
+        new_code = org_code_for_id(org_id, is_test=is_test, account_type=account_type)
+        if old_code == new_code:
             return
         if uses_postgres():
             conn.execute("UPDATE organisations SET org_code = %s WHERE id = %s", (new_code, org_id))
-            conn.execute(
+            seat_rows = conn.execute(
                 """
-                UPDATE organisation_seats
-                SET seat_label = %s || substr(seat_label, %s)
-                WHERE organisation_id = %s AND seat_label LIKE %s
+                SELECT id, seat_type FROM organisation_seats
+                WHERE organisation_id = %s
+                ORDER BY seat_type, id
                 """,
-                (new_code, len(old_code) + 1, org_id, old_code + "%"),
-            )
+                (org_id,),
+            ).fetchall()
         else:
             conn.execute("UPDATE organisations SET org_code = ? WHERE id = ?", (new_code, org_id))
-            conn.execute(
+            seat_rows = conn.execute(
                 """
-                UPDATE organisation_seats
-                SET seat_label = ? || substr(seat_label, ?)
-                WHERE organisation_id = ? AND seat_label LIKE ?
+                SELECT id, seat_type FROM organisation_seats
+                WHERE organisation_id = ?
+                ORDER BY seat_type, id
                 """,
-                (new_code, len(old_code) + 1, org_id, old_code + "%"),
+                (org_id,),
+            ).fetchall()
+        counters: dict[str, int] = {}
+        for seat in seat_rows:
+            item = dict(seat)
+            seat_type = str(item.get("seat_type") or "operator")
+            counters[seat_type] = counters.get(seat_type, 0) + 1
+            label = format_seat_label(
+                org_id,
+                seat_type,
+                counters[seat_type],
+                is_test=is_test,
+                account_type=account_type,
             )
+            if uses_postgres():
+                conn.execute(
+                    "UPDATE organisation_seats SET seat_label = %s WHERE id = %s",
+                    (label, int(item["id"])),
+                )
+            else:
+                conn.execute(
+                    "UPDATE organisation_seats SET seat_label = ? WHERE id = ?",
+                    (label, int(item["id"])),
+                )
 
     if uses_postgres():
         with _pg_connect() as conn:
@@ -1075,9 +1091,15 @@ def create_user(body: CreateUserBody, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Username and password are required")
     if uses_postgres():
         with _pg_connect() as conn:
-            org = conn.execute("SELECT id FROM organisations WHERE id = %s", (body.organisation_id,)).fetchone()
+            org = conn.execute(
+                "SELECT id, account_type FROM organisations WHERE id = %s",
+                (body.organisation_id,),
+            ).fetchone()
             if not org:
                 raise HTTPException(status_code=400, detail="Organisation not found")
+            account_type = str(dict(row_dict(org)).get("account_type") or body.account_type)
+            if account_type not in ("wholesaler_retailer", "broker"):
+                account_type = body.account_type
             user_id = create_org_user_with_seat(
                 conn,
                 username=username,
@@ -1087,7 +1109,7 @@ def create_user(body: CreateUserBody, request: Request) -> dict[str, Any]:
                 phone=body.phone.strip(),
                 organisation_id=body.organisation_id,
                 role_slug=body.role_slug,
-                account_type=body.account_type,
+                account_type=account_type,
             )
             conn.commit()
             append_audit_log(
@@ -1101,9 +1123,15 @@ def create_user(body: CreateUserBody, request: Request) -> dict[str, Any]:
             return {"id": user_id, "username": username}
 
     with _sqlite_connect() as conn:
-        org = conn.execute("SELECT id FROM organisations WHERE id = ?", (body.organisation_id,)).fetchone()
+        org = conn.execute(
+            "SELECT id, account_type FROM organisations WHERE id = ?",
+            (body.organisation_id,),
+        ).fetchone()
         if not org:
             raise HTTPException(status_code=400, detail="Organisation not found")
+        account_type = str(dict(row_dict(org)).get("account_type") or body.account_type)
+        if account_type not in ("wholesaler_retailer", "broker"):
+            account_type = body.account_type
         user_id = create_org_user_with_seat(
             conn,
             username=username,
@@ -1113,7 +1141,7 @@ def create_user(body: CreateUserBody, request: Request) -> dict[str, Any]:
             phone=body.phone.strip(),
             organisation_id=body.organisation_id,
             role_slug=body.role_slug,
-            account_type=body.account_type,
+            account_type=account_type,
         )
         conn.commit()
         append_audit_log(

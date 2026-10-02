@@ -22,6 +22,7 @@ import { lockBodyScroll, unlockBodyScroll } from '../../lib/bodyScrollLock'
 import { useAuth, usePermissions } from '../../hooks/useAuth'
 import { useAssistantEnabled } from '../../lib/assistant/useAssistantEnabled'
 import { setAssistantOpen } from '../../lib/assistant/session'
+import { isBrokerAccount } from '../../lib/auth'
 import { APP_HOME, appPath, isPlatformAdminPath } from '../../lib/appShellMode'
 import { ProductTourProvider } from '../../contexts/ProductTourContext'
 
@@ -52,6 +53,23 @@ export function AppShell() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!isBrokerAccount(session) || isPlatformAdmin) return
+    const path = location.pathname
+    const allowed =
+      path === APP_HOME
+      || path === `${APP_HOME}/`
+      || path.startsWith(`${APP_HOME}/notifications`)
+      || path.startsWith(`${APP_HOME}/contract-shares`)
+      || path === `${APP_HOME}/contracts`
+      || path === `${APP_HOME}/contracts/new`
+      || path === `${APP_HOME}/lifts`
+      || path.startsWith(`${APP_HOME}/daybook`)
+      || path.startsWith(`${APP_HOME}/profile`)
+      || path.startsWith(`${APP_HOME}/settings`)
+    if (!allowed) navigate(APP_HOME, { replace: true })
+  }, [isPlatformAdmin, location.pathname, navigate, session])
 
   const openProductTour = useCallback(() => {
     setSidebarCollapsed(false)

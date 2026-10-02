@@ -30,10 +30,13 @@ import {
   isFeatureEnhancementNotice,
   isFeatureInterestNotice,
   isProductUpdateNotice,
+  isContractNotice,
   isReleaseStyleNoticeKind,
 } from '../lib/notificationDisplay'
 import { FeatureEnhancementModal } from '../components/feedback/FeatureEnhancementModal'
 import { FeatureLaunchInterestModal } from '../components/feedback/FeatureLaunchInterestModal'
+import { ContractReceiveModal } from '../components/contracts/ContractReceiveModal'
+import { organisationApi, type BrokerContractShare } from '../api/organisationApi'
 import type { ProductRequestStatus, UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from '../lib/unifiedInbox'
 import { INBOX_REFRESH_EVENT } from './useMeInbox'
@@ -84,6 +87,9 @@ export function useInboxItemActions({
     row: NonNullable<UnifiedInboxItem['seatRequest']>
   } | null>(null)
   const [seatDecisionBusy, setSeatDecisionBusy] = useState(false)
+  const [contractShareOpen, setContractShareOpen] = useState(false)
+  const [contractShare, setContractShare] = useState<BrokerContractShare | null>(null)
+  const [contractShareLoading, setContractShareLoading] = useState(false)
 
   const applyNotice = useCallback(async (notificationId: number, featureKeys?: string[]) => {
     const { organisationApi } = await import('../api/organisationApi')
@@ -146,6 +152,25 @@ export function useInboxItemActions({
       return
     }
     if (row.notice) {
+      if (row.notice.payload?.cta === 'contract_share') {
+        const shareId = Number(row.notice.payload.share_id)
+        if (!Number.isFinite(shareId)) {
+          toast.error('Could not open contract')
+        } else {
+          setContractShare(null)
+          setContractShareOpen(true)
+          setContractShareLoading(true)
+          void organisationApi.getBrokerShare(shareId)
+            .then(res => setContractShare(res.share))
+            .catch(err => {
+              toast.error(err instanceof ApiError ? err.message : 'Could not open contract')
+              setContractShareOpen(false)
+            })
+            .finally(() => setContractShareLoading(false))
+        }
+        if (row.category === 'notice' && row.unread) void markRead(row.id)
+        return
+      }
       if (isFeatureBrowseNotice(row.notice)) {
         navigate(row.notice.href || appPath('/addons'))
         if (row.category === 'notice' && row.unread) void markRead(row.id)
@@ -271,7 +296,7 @@ export function useInboxItemActions({
 
   const modals = (
     <>
-      {readNotice && isReleaseStyleNoticeKind(readNotice.kind) ? (
+      {readNotice && isReleaseStyleNoticeKind(readNotice.kind) && !isContractNotice(readNotice) ? (
         <ReleaseNoticeModal
           open
           notice={readNotice}
@@ -340,6 +365,13 @@ export function useInboxItemActions({
             setFeatureOfferBusy(false)
           }
         }}
+      />
+
+      <ContractReceiveModal
+        open={contractShareOpen}
+        share={contractShare}
+        loading={contractShareLoading}
+        onClose={() => setContractShareOpen(false)}
       />
 
       <SystemUpdateModal

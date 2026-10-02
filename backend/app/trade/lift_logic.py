@@ -554,7 +554,9 @@ def get_outstanding_balance(
     pair_lifts = [
         l
         for l in lifts
-        if any(a["poRef"] == po_ref and a["soRef"] == so_ref for a in get_lift_allocations(l))
+        if any(
+            a.get("poRef") == po_ref and a.get("soRef") == so_ref for a in get_lift_allocations(l)
+        )
     ]
 
     def share_for_pair(lift: dict) -> float:
@@ -562,7 +564,9 @@ def get_outstanding_balance(
         total = sum(a["qtyMt"] for a in allocs)
         if total <= 0:
             return 0
-        pair_qty = sum(a["qtyMt"] for a in allocs if a["poRef"] == po_ref and a["soRef"] == so_ref)
+        pair_qty = sum(
+            a["qtyMt"] for a in allocs if a.get("poRef") == po_ref and a.get("soRef") == so_ref
+        )
         return pair_qty / total
 
     total_balance = sum(get_lift_balance_qty(l) * share_for_pair(l) for l in pair_lifts)

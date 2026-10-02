@@ -8,7 +8,7 @@ import { OrganisationLocationFields } from './OrganisationLocationFields'
 import { loginEmailError } from '../../lib/email'
 import { loginUsernameError } from '../../lib/username'
 import { DEFAULT_ORGANISATION_COUNTRY } from '../../lib/organisationLocations'
-import type { BillingCycle, SubscriptionPlan } from '../../api/platformApi'
+import type { AccountType, BillingCycle, SubscriptionPlan } from '../../api/platformApi'
 
 export const emptyOrganisationForm = () => ({
   name: '',
@@ -22,6 +22,7 @@ export const emptyOrganisationForm = () => ({
   pincode: '',
   plan_id: '',
   billing_cycle: 'annual' as BillingCycle,
+  account_type: 'wholesaler_retailer' as AccountType,
   admin_name: '',
   admin_username: '',
   admin_email: '',
@@ -171,6 +172,16 @@ export function PlatformCreateOrganisationModal({ open, onClose, plans, loading,
             ]}
             value={form.billing_cycle}
             onChange={e => setForm(f => ({ ...f, billing_cycle: e.target.value as BillingCycle }))}
+            searchable={false}
+          />
+          <Select
+            label="Account type"
+            options={[
+              { value: 'wholesaler_retailer', label: 'Wholesaler' },
+              { value: 'broker', label: 'Broker' },
+            ]}
+            value={form.account_type}
+            onChange={e => setForm(f => ({ ...f, account_type: e.target.value as AccountType }))}
             searchable={false}
           />
         </div>

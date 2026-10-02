@@ -192,6 +192,22 @@ def _next_seat_sequence(conn, organisation_id: int, seat_type: str) -> int:
     return n + 1
 
 
+def _organisation_account_type(conn, organisation_id: int) -> str:
+    if uses_postgres():
+        row = conn.execute(
+            "SELECT account_type FROM organisations WHERE id = %s",
+            (organisation_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT account_type FROM organisations WHERE id = ?",
+            (organisation_id,),
+        ).fetchone()
+    if not row:
+        return "wholesaler_retailer"
+    return str(row_get(row, "account_type") or "wholesaler_retailer")
+
+
 def _organisation_is_test(conn, organisation_id: int) -> bool:
     if uses_postgres():
         row = conn.execute(
@@ -275,6 +291,7 @@ def sync_seat_entitlements(
             seat_type,
             seq,
             is_test=_organisation_is_test(conn, organisation_id),
+            account_type=_organisation_account_type(conn, organisation_id),
         )
         if uses_postgres():
             conn.execute(
@@ -1107,7 +1124,11 @@ def create_organisation_with_primary_admin(
             ),
         ).fetchone()
         org_id = int(row["id"])
-        code = org_code_for_id(org_id, is_test=bool(is_test))
+        code = org_code_for_id(
+            org_id,
+            is_test=bool(is_test),
+            account_type=str(org.get("account_type") or "wholesaler_retailer"),
+        )
         conn.execute("UPDATE organisations SET org_code = %s WHERE id = %s", (code, org_id))
         set_pg_organisation_context(conn, org_id)
         conn.execute(
@@ -1148,7 +1169,11 @@ def create_organisation_with_primary_admin(
             ),
         )
         org_id = int(cur.lastrowid)
-        code = org_code_for_id(org_id, is_test=bool(is_test))
+        code = org_code_for_id(
+            org_id,
+            is_test=bool(is_test),
+            account_type=str(org.get("account_type") or "wholesaler_retailer"),
+        )
         conn.execute("UPDATE organisations SET org_code = ? WHERE id = ?", (code, org_id))
         conn.execute(
             "INSERT OR IGNORE INTO trade_state (organisation_id, data) VALUES (?, ?)",

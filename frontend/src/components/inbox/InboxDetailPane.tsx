@@ -8,7 +8,7 @@ import {
   isFeatureEnhancementNotice,
   isFeatureInterestNotice,
   isProductUpdateNotice,
-  notificationKindLabel,
+  inboxItemKindLabel,
 } from '../../lib/notificationDisplay'
 import { cn } from '../../lib/utils'
 import type { UnifiedInboxItem } from '../../lib/unifiedInbox'
@@ -47,8 +47,7 @@ function actionLabel(item: UnifiedInboxItem, platformConsole: boolean): string {
 }
 
 function kindLabel(item: UnifiedInboxItem): string {
-  if (item.kind === 'feature_interest') return 'Feature interest'
-  return notificationKindLabel(item.kind)
+  return inboxItemKindLabel(item)
 }
 
 export function InboxDetailPane({

@@ -63,6 +63,7 @@ export type SettingsSectionHandlers = {
   setDensity: ReturnType<typeof useTableDensity>['setDensity']
   canImport: boolean
   canClearTradeData: boolean
+  isBrokerDesk?: boolean
   canUseDemoTools: boolean
   canRequestSeats: boolean
   canManageTeam: boolean
@@ -390,7 +391,11 @@ export function SettingsSectionContent({
               <SettingRow
                 icon={Trash2}
                 title="Clear all data"
-                description="Remove all orders, lifts, inventory, and directory entries"
+                description={
+                  h.isBrokerDesk
+                    ? 'Remove all sent contracts and linked movement from your desk'
+                    : 'Remove orders, lifts, inventory, directory, and linked broker contracts'
+                }
                 action={
                   <Button variant="outlineDanger" size="sm" onClick={h.onConfirmClear}>
                     Clear

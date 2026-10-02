@@ -18,7 +18,8 @@ import { useDetailPanelSlot } from '../layout/DetailPanelSlot'
 import { useLargeScreen } from '../../hooks/useMediaQuery'
 import { useTableDensity } from '../../hooks/useTableDensity'
 import { loadOrderPanelDocked, saveOrderPanelDocked } from '../../lib/orderPanelDock'
-import { notificationKindLabel, formatInboxDate, noticeChangelog } from '../../lib/notificationDisplay'
+import { inboxTypeLabel, formatInboxDate, noticeChangelog } from '../../lib/notificationDisplay'
+import { inboxPartyLabel } from './InboxFiltersBar'
 import { NoticeMessage } from '../feedback/NoticeMessage'
 import { formatDateTime } from '../../lib/utils'
 import { requestRecipientLabel } from '../feedback/SendToTradealModal'
@@ -37,8 +38,7 @@ function isDeletableSent(item: UnifiedInboxItem): boolean {
 }
 
 function sentTypeLabel(item: UnifiedInboxItem): string {
-  if (isSentToTradeal(item)) return 'Request'
-  return notificationKindLabel(item.kind)
+  return inboxTypeLabel(item)
 }
 
 function sourceLabel(source: string | undefined): string {
@@ -86,13 +86,7 @@ function sentStatusBadge(item: UnifiedInboxItem): ReactNode {
 }
 
 function sentToLabel(row: UnifiedInboxItem): string {
-  if (isSentToTradeal(row)) return requestRecipientLabel('tradeal')
-  if (row.send && row.kind === 'product_request' && row.productRequest?.organisation_name) {
-    return row.productRequest.organisation_name
-  }
-  const n = row.send?.sent_count
-  if (n == null) return '—'
-  return `${n} ${n === 1 ? 'person' : 'people'}`
+  return inboxPartyLabel(row)
 }
 
 function buildSentMenuItems({
@@ -238,10 +232,12 @@ function sentHeaderBadges(item: UnifiedInboxItem): ReactNode {
 
 export function InboxSentTable({
   rows,
+  emptyTitle,
   emptyDescription,
   onDeleteItems,
 }: {
   rows: UnifiedInboxItem[]
+  emptyTitle?: string
   emptyDescription: string
   onDeleteItems: (ids: string[]) => Promise<number>
 }) {
@@ -495,10 +491,10 @@ export function InboxSentTable({
         onSelectAllVisible={handleSelectAllVisible}
         onRowClick={row => setSelectedId(row.id)}
         stickyLastColumn
-        emptyMessage="Nothing sent"
+        emptyMessage={emptyTitle ?? 'Nothing sent'}
         emptyState={
           <div className="py-10 text-center">
-            <p className="text-sm font-medium text-heading">Nothing sent</p>
+            <p className="text-sm font-medium text-heading">{emptyTitle ?? 'Nothing sent'}</p>
             <p className="text-xs text-muted mt-1 max-w-sm mx-auto">{emptyDescription}</p>
           </div>
         }

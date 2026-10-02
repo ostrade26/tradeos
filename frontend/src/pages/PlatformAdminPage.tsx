@@ -1172,6 +1172,7 @@ function PlatformAdminSectionView({ section }: { section: PlatformSection }) {
         pincode: form.pincode.trim(),
         plan_id: form.plan_id ? Number(form.plan_id) : undefined,
         billing_cycle: form.billing_cycle,
+        account_type: form.account_type,
         primary_admin: {
           name: form.admin_name.trim(),
           username: form.admin_username.trim(),

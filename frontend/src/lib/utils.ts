@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from 'clsx'
+import { parseFlexibleTypedDateToIso } from './parseFlexibleTypedDate'
 
 /** Browser / password-manager autofill off. Chrome ignores `off` on Name/Address labels, so callers should also lock until focus. */
 export const noAutofill = {
@@ -180,6 +181,9 @@ export function normalizeDateToIso(value: unknown, opts?: { preferMonthFirst?: b
 
   const dmy = parseDayMonthYearText(text, opts?.preferMonthFirst === true)
   if (dmy) return dmy
+
+  const flexible = parseFlexibleTypedDateToIso(text)
+  if (flexible) return flexible
 
   const named = parseNamedMonthDateText(text)
   if (named) return named

@@ -18,7 +18,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
   const store = useTradeStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isPlatformAdmin } = useAuth()
+  const { isPlatformAdmin, session } = useAuth()
   const { hasPermission } = usePermissions()
   const assistantEnabled = useAssistantEnabled()
   const platformAdminMode = isPlatformAdmin && isPlatformAdminPath(location.pathname)
@@ -64,6 +64,17 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       ]
     }
 
+    if (session?.accountType === 'broker') {
+      return [
+        { id: 'dash', label: 'Go to Dashboard', group: 'Navigation', action: () => navigate(APP_HOME) },
+        { id: 'contracts', label: 'Contracts', group: 'Navigation', action: () => navigate(appPath('/contracts')) },
+        { id: 'lifts', label: 'Lift Register', group: 'Navigation', action: () => navigate(appPath('/lifts')) },
+        { id: 'daybook', label: 'Daybook', group: 'Navigation', action: () => navigate(appPath('/daybook')) },
+        { id: 'inbox', label: 'Inbox', group: 'Navigation', action: () => navigate(appPath('/notifications')) },
+        { id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate(appPath('/contracts/new')) },
+      ]
+    }
+
     const nav = [
       { id: 'dash', label: 'Go to Dashboard', group: 'Navigation', action: () => navigate(APP_HOME) },
       { id: 'po', label: 'Purchase Orders', group: 'Navigation', action: () => navigate(appPath('/purchase-orders')) },
@@ -74,6 +85,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
       { id: 'reports', label: 'Reports', group: 'Navigation', action: () => navigate(appPath('/reports')) },
       { id: 'analytics', label: 'Analytics', group: 'Navigation', action: () => navigate(appPath('/analytics')) },
       { id: 'activity', label: 'Activity', group: 'Navigation', action: () => navigate(appPath('/activity')) },
+      { id: 'daybook', label: 'Daybook', group: 'Navigation', action: () => navigate(appPath('/daybook')) },
       ...(hasPermission('organisation.subscription.view') && !isPlatformAdmin
         ? [{ id: 'addons', label: 'Add-ons', group: 'Navigation', action: () => navigate(appPath('/addons')) }]
         : []),
@@ -86,9 +98,6 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
         : []),
       ...(hasPermission('lifts.create')
         ? [{ id: 'new-lift', label: 'Record Lift', description: 'F5', group: 'Actions', action: () => navigate(appPath('/lifts/new')) }]
-        : []),
-      ...(hasPermission('contracts.create')
-        ? [{ id: 'new-contract', label: 'New Contract', group: 'Actions', action: () => navigate(appPath('/contracts/new')) }]
         : []),
       ...(assistantEnabled
         ? [{ id: 'assistant', label: 'Ask Tradeal AI', description: '⌘J', group: 'Actions', action: onOpenAssistant }]
@@ -105,7 +114,7 @@ export function GlobalCommandPalette({ open, onClose, onOpenAssistant }: GlobalC
     }))
 
     return [...nav, ...searchHits]
-  }, [assistantEnabled, hasPermission, store, navigate, onOpenAssistant, platformAdminMode, isPlatformAdmin])
+  }, [assistantEnabled, hasPermission, store, navigate, onOpenAssistant, platformAdminMode, isPlatformAdmin, session?.accountType])
 
   return <CommandPalette open={open} onClose={onClose} items={items} />
 }

@@ -5,6 +5,7 @@ import {
   ArrowDownToLine, ArrowUpFromLine, Scale, X, ClipboardList,
   Building2, Users, CreditCard, ScrollText, KeyRound, Wallet, ShieldCheck, Bell,
   CalendarClock,
+  BookOpen,
 } from 'lucide-react'
 import {
   platformFeaturesAccessNavIcon,
@@ -38,11 +39,13 @@ const tradingNav = [
   { to: appPath('/lifts'), icon: Scale, label: 'Lift Register', clearSearch: true },
   { to: appPath('/inventory'), icon: Package, label: 'Inventory' },
   { to: appPath('/contracts'), icon: FileText, label: 'Contracts' },
+  { to: appPath('/daybook'), icon: BookOpen, label: 'Daybook' },
 ]
 
 const platformNavBase = [
   { to: appPath('/directory'), icon: BookUser, label: 'Directory' },
   { to: appPath('/reports'), icon: ClipboardList, label: 'Reports' },
+  { to: appPath('/daybook'), icon: BookOpen, label: 'Daybook' },
   { to: appPath('/analytics'), icon: BarChart3, label: 'Analytics' },
   { to: appPath('/activity'), icon: Activity, label: 'Activity' },
   { to: appPath('/addons'), icon: platformFeaturesAccessNavIcon, label: 'Add-ons', featuresNav: true as const },
@@ -91,7 +94,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
   const platformAdminMode = isPlatformAdminPath(location.pathname)
   const platformSettingsMode = platformAdminMode && isPlatformSettingsAreaPath(location.pathname)
   const settingsMode = !platformAdminMode && isSettingsAreaPath(location.pathname)
-  const { isPlatformAdmin, organisationIsTest } = useAuth()
+  const { isPlatformAdmin, organisationIsTest, session } = useAuth()
+  const brokerDesk = session?.accountType === 'broker' && !platformAdminMode
   const { hasPermission } = usePermissions()
   const canManageOrganisation = hasPermission('organisation.edit')
   const showPlanInSettings =
@@ -329,6 +333,34 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen = false, onMob
                 </div>
               ))}
             </div>
+          ) : brokerDesk ? (
+            <>
+              {showLabels && (
+                <p className={sectionLabelClass}>Broker</p>
+              )}
+              <div className="space-y-0.5 mb-3">
+                <NavLink to={APP_HOME} end title={iconOnly ? 'Dashboard' : undefined} className={navClass} onClick={onMobileClose}>
+                  <LayoutDashboard className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Dashboard'}
+                </NavLink>
+                <NavLink to={appPath('/contracts')} title={iconOnly ? 'Contracts' : undefined} className={navClass} onClick={onMobileClose}>
+                  <FileText className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Contracts'}
+                </NavLink>
+                <NavLink to={registerNavTo(appPath('/lifts'))} title={iconOnly ? 'Lift Register' : undefined} className={navClass} onClick={onMobileClose}>
+                  <Scale className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Lift Register'}
+                </NavLink>
+                <NavLink to={appPath('/daybook')} title={iconOnly ? 'Daybook' : undefined} className={navClass} onClick={onMobileClose}>
+                  <BookOpen className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Daybook'}
+                </NavLink>
+                <NavLink to={appPath('/notifications')} title={iconOnly ? 'Inbox' : undefined} className={navClass} onClick={onMobileClose}>
+                  <Bell className="h-5 w-5 shrink-0" />
+                  {showLabels && 'Inbox'}
+                </NavLink>
+              </div>
+            </>
           ) : (
             <>
               {showLabels && (

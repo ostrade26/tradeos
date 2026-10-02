@@ -172,6 +172,10 @@ export function roleLabel(session: AuthSession | null): string {
   return session.role === 'admin' ? 'Admin' : session.role === 'view_only' ? 'View Only' : 'Operator'
 }
 
+export function isBrokerAccount(session: AuthSession | null): boolean {
+  return session?.accountType === 'broker'
+}
+
 export function canEditOrders(session: AuthSession | null): boolean {
   return (
     hasPermission(session, 'purchase.edit') || hasPermission(session, 'sales.edit')

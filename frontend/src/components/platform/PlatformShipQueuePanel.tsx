@@ -18,7 +18,7 @@ import { EmptyState } from '../ui/Tabs'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Modal } from '../ui/Drawer'
-import { Input } from '../ui/Input'
+import { DatePicker } from '../ui/DatePicker'
 import { Checkbox } from '../ui/Checkbox'
 import { PlatformPublishReleaseModal } from './PlatformPublishReleaseModal'
 
@@ -409,11 +409,10 @@ export const PlatformShipQueuePanel = forwardRef<
               </p>
             </div>
             <div className="space-y-1.5">
-              <Input
+              <DatePicker
                 label="Target ship date"
-                type="date"
                 value={planning.target_ship_date}
-                onChange={e => setPlanning({ ...planning, target_ship_date: e.target.value })}
+                onChange={target_ship_date => setPlanning({ ...planning, target_ship_date })}
               />
               <p className="text-xs text-muted">Optional — you still act manually.</p>
             </div>

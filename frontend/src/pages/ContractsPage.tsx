@@ -1,41 +1,102 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Download, MoreHorizontal, FileText } from 'lucide-react'
+import { Download, MoreHorizontal, FileText } from 'lucide-react'
 import { PageHeader, FilterBar } from '../components/ui/CommandPalette'
 import { Breadcrumb, EmptyState } from '../components/ui/Tabs'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { DataTable } from '../components/ui/DataTable'
-import { StatusBadge } from '../components/ui/Badge'
-import { Drawer } from '../components/ui/Drawer'
-import { formatCurrency, formatDate, formatMt, formatQty } from '../lib/utils'
-import { formatContractRate, contractRateFromOrder, formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
+import { Badge, StatusBadge } from '../components/ui/Badge'
+import { formatCurrency, formatDate, formatMt } from '../lib/utils'
+import { formatRateCell, RATE_COLUMN_HEADER } from '../lib/orderRate'
 import { exportToCSV } from '../lib/export'
 import { type Contract } from '../data/mockData'
-import { useTradeStore } from '../store/TradeStore'
 import { useToast } from '../hooks/useToast'
+import { organisationApi, type BrokerContractShare } from '../api/organisationApi'
+import { parseIndianAmount } from '../lib/indianAmount'
+import { orderLineAmount, ratePerMtFrom10Kg } from '../lib/orderRate'
+import { CONTRACT_SHARES_REFRESH_EVENT } from '../lib/contractSharesRefresh'
+import { brokerContractStatus } from '../lib/brokerContractStatus'
+import { appPath } from '../lib/appShellMode'
+
+function shareAsContract(share: BrokerContractShare): Contract & { edited?: boolean } {
+  const quantity = parseFloat(share.quantity) || 0
+  const ratePer10 = parseIndianAmount(share.rate)
+  const deliveryDate = share.delivery_period.split(' · ')[0] || ''
+  const status = brokerContractStatus(share)
+  return {
+    id: `share-${share.id}`,
+    ref: share.contract_ref,
+    status: status === 'deleted' ? 'cancelled' : status,
+    buyer: share.buyer_name,
+    seller: share.seller_name,
+    commodity: share.item_name,
+    quantity,
+    unit: 'MT',
+    rate: ratePerMtFrom10Kg(ratePer10),
+    value: orderLineAmount(quantity, ratePer10),
+    broker: share.sender_name,
+    deliveryDate,
+    paymentStatus: 'outstanding',
+    createdAt: share.created_at,
+    location: share.delivery_period,
+    edited: share.edited,
+  }
+}
 
 export function ContractsPage() {
-  const { contracts } = useTradeStore()
   const navigate = useNavigate()
   const toast = useToast()
   const [searchParams] = useSearchParams()
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [selected, setSelected] = useState<Contract | null>(null)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
+  const [received, setReceived] = useState<BrokerContractShare[]>([])
+  const [receivedReloadKey, setReceivedReloadKey] = useState(0)
 
   useEffect(() => {
     const q = searchParams.get('q')
     if (q) setSearch(q)
   }, [searchParams])
 
-  const filtered = contracts.filter(c => {
+  useEffect(() => {
+    const refresh = () => setReceivedReloadKey(key => key + 1)
+    window.addEventListener(CONTRACT_SHARES_REFRESH_EVENT, refresh)
+    window.addEventListener('broker-shares-refresh', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.removeEventListener(CONTRACT_SHARES_REFRESH_EVENT, refresh)
+      window.removeEventListener('broker-shares-refresh', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    organisationApi.listReceivedShares()
+      .then(res => {
+        if (!cancelled) setReceived(res.shares ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setReceived([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [receivedReloadKey])
+
+  const allContracts = received.map(shareAsContract)
+  const openRow = (row: Contract) => {
+    navigate(appPath(`/contract-shares/${row.id.slice('share-'.length)}`))
+  }
+
+  const filtered = allContracts.filter(c => {
     const matchSearch = c.ref.toLowerCase().includes(search.toLowerCase()) ||
       c.buyer.toLowerCase().includes(search.toLowerCase()) ||
       c.seller.toLowerCase().includes(search.toLowerCase()) ||
-      c.commodity.toLowerCase().includes(search.toLowerCase())
+      c.commodity.toLowerCase().includes(search.toLowerCase()) ||
+      c.broker.toLowerCase().includes(search.toLowerCase())
     const matchStatus = statusFilter === 'all' || c.status === statusFilter
     return matchSearch && matchStatus
   })
@@ -50,7 +111,7 @@ export function ContractsPage() {
     seller: c.seller,
     commodity: c.commodity,
     quantity: c.quantity,
-    rate: contractRateFromOrder(c.rate),
+    rate: c.rate,
     value: c.value,
     broker: c.broker,
     deliveryDate: c.deliveryDate,
@@ -78,7 +139,13 @@ export function ContractsPage() {
     { key: 'ref', header: 'Contract Ref', render: (r: Contract) => (
       <span className="font-medium text-heading">{r.ref}</span>
     )},
-    { key: 'status', header: 'Status', render: (r: Contract) => <StatusBadge status={r.status} /> },
+    { key: 'status', header: 'Status', render: (r: Contract & { edited?: boolean }) => (
+      <span className="inline-flex items-center gap-1.5">
+        <StatusBadge status={r.status} />
+        {r.edited ? <Badge variant="warning">Edited</Badge> : null}
+      </span>
+    ) },
+    { key: 'broker', header: 'Broker' },
     { key: 'buyer', header: 'Buyer' },
     { key: 'seller', header: 'Seller' },
     { key: 'commodity', header: 'Commodity', render: (r: Contract) => (
@@ -88,14 +155,13 @@ export function ContractsPage() {
     { key: 'value', header: 'Value', render: (r: Contract) => (
       <span className="font-medium">{formatCurrency(r.value)}</span>
     ), className: 'text-right' },
-    { key: 'broker', header: 'Broker' },
     { key: 'deliveryDate', header: 'Delivery', render: (r: Contract) => <span className="tabular-nums">{formatDate(r.deliveryDate)}</span> },
     { key: 'paymentStatus', header: 'Payment', render: (r: Contract) => <StatusBadge status={r.paymentStatus} /> },
     { key: 'actions', header: '', render: (r: Contract) => (
       <button
         type="button"
         aria-label={`More actions for ${r.ref}`}
-        onClick={e => { e.stopPropagation(); setSelected(r) }}
+        onClick={e => { e.stopPropagation(); openRow(r) }}
         className="inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
       >
         <MoreHorizontal className="h-4 w-4 text-muted" />
@@ -107,13 +173,12 @@ export function ContractsPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Contract Confirmations"
-        subtitle={`${filtered.length} contracts`}
-        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: '/' }, { label: 'Contracts' }]} />}
+        subtitle={`${filtered.length} from brokers`}
+        breadcrumb={<Breadcrumb items={[{ label: 'Tradeal', href: appPath('/') }, { label: 'Contracts' }]} />}
         actions={
-          <>
-            <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4" /> Export</Button>
-            <Button to="/contracts/new" size="sm"><Plus className="h-4 w-4" /> New Contract</Button>
-          </>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4" /> Export
+          </Button>
         }
       />
 
@@ -124,7 +189,6 @@ export function ContractsPage() {
         <Select
           options={[
             { value: 'all', label: 'All Statuses' },
-            { value: 'draft', label: 'Draft' },
             { value: 'pending', label: 'Pending' },
             { value: 'confirmed', label: 'Confirmed' },
             { value: 'active', label: 'Active' },
@@ -147,22 +211,20 @@ export function ContractsPage() {
         emptyState={
           <EmptyState
             icon={<FileText className="h-10 w-10" />}
-            title={search.trim() || statusFilter !== 'all' ? 'No contracts match your filters' : 'No contracts yet'}
+            title={search.trim() || statusFilter !== 'all' ? 'No contracts match your filters' : 'No broker contracts yet'}
             description={search.trim() || statusFilter !== 'all'
               ? 'Try adjusting your search or filters.'
-              : 'Create a contract confirmation to get started.'}
+              : 'When a broker sends you a contract confirmation, it will appear here.'}
             action={
               search.trim() || statusFilter !== 'all' ? (
                 <Button variant="outline" size="sm" onClick={() => { setSearch(''); setStatusFilter('all') }}>
                   Clear filters
                 </Button>
-              ) : (
-                <Button to="/contracts/new" size="sm"><Plus className="h-4 w-4" /> New Contract</Button>
-              )
+              ) : undefined
             }
           />
         }
-        onRowClick={r => navigate(`/contracts/${r.id}`)}
+        onRowClick={openRow}
         selectedRows={selectedRows}
         onSelectRow={id => setSelectedRows(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
         onSelectAllVisible={(select, ids) => {
@@ -172,29 +234,6 @@ export function ContractsPage() {
         }}
         getRowId={r => r.id}
       />
-
-      <Drawer
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected?.ref || ''}
-        subtitle={selected ? `${selected.commodity} · ${formatQty(selected.quantity, selected.unit)}` : ''}
-      >
-        {selected && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-xs text-muted">Buyer</p><p className="text-sm font-medium">{selected.buyer}</p></div>
-              <div><p className="text-xs text-muted">Seller</p><p className="text-sm font-medium">{selected.seller}</p></div>
-              <div><p className="text-xs text-muted">Rate</p><p className="text-sm font-medium">{formatContractRate(selected.rate)}</p></div>
-              <div><p className="text-xs text-muted">Value</p><p className="text-sm font-medium">{formatCurrency(selected.value)}</p></div>
-              <div><p className="text-xs text-muted">Broker</p><p className="text-sm font-medium">{selected.broker}</p></div>
-              <div><p className="text-xs text-muted">Delivery</p><p className="text-sm font-medium">{formatDate(selected.deliveryDate)}</p></div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button className="flex-1" onClick={() => { navigate(`/contracts/${selected.id}`); setSelected(null) }}>View Details</Button>
-            </div>
-          </div>
-        )}
-      </Drawer>
     </div>
   )
 }

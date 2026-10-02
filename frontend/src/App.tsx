@@ -26,9 +26,11 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { APP_HOME, appPath, isAppPath } from './lib/appShellMode'
 import { MarketingPage } from './pages/MarketingPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ContractSharePage } from './pages/ContractSharePage'
+import { ContractInvitePage } from './pages/ContractInvitePage'
 import { InboxPage } from './pages/InboxPage'
-import { ContractsPage } from './pages/ContractsPage'
-import { CreateContractPage } from './pages/CreateContractPage'
+import { ContractsRoute } from './pages/ContractsRoute'
+import { CreateContractPage, EditBrokerContractPage } from './pages/CreateContractPage'
 import { ContractDetailsPage } from './pages/ContractDetailsPage'
 import { InventoryPage } from './pages/InventoryPage'
 import { LotDetailsPage } from './pages/LotDetailsPage'
@@ -38,13 +40,14 @@ import { ReportsDashboardPage } from './pages/ReportsDashboardPage'
 import { ReportViewPage } from './pages/ReportViewPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ActivityPage } from './pages/ActivityPage'
+import { DaybookPage } from './pages/DaybookPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { SettingsHubPage, SettingsLayout, SettingsSectionPage } from './pages/SettingsPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { AddOnDetailPage } from './pages/AddOnDetailPage'
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
 import { SalesOrdersPage } from './pages/SalesOrdersPage'
-import { LiftRegisterPage } from './pages/LiftRegisterPage'
+import { LiftsRoute } from './pages/LiftsRoute'
 import { PartyPage } from './pages/PartyPage'
 import { OrderFlowPage, OrderTimelinePage } from './pages/OrderTimelinePage'
 
@@ -110,6 +113,7 @@ const router = createBrowserRouter([
       { path: '/', element: <MarketingPage /> },
       { path: '/website', element: <MarketingPage preview /> },
       { path: '/login', element: <LoginPage /> },
+      { path: '/contract-invite/:token', element: <ContractInvitePage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
       {
@@ -145,6 +149,8 @@ const router = createBrowserRouter([
                 element: <ShellLayout />,
                 children: [
                   { index: true, element: <DashboardPage /> },
+                  { path: 'contract-shares/:id/edit', element: <EditBrokerContractPage /> },
+                  { path: 'contract-shares/:id', element: <ContractSharePage /> },
                   { path: 'purchase-orders', element: <PurchaseOrdersPage /> },
                   { path: 'purchase-orders/pending', element: <Navigate to={appPath('/purchase-orders')} replace /> },
                   { path: 'purchase-orders/register', element: <Navigate to={appPath('/purchase-orders?view=completed')} replace /> },
@@ -165,11 +171,11 @@ const router = createBrowserRouter([
                     path: 'sales-orders/:ref/edit',
                     element: withSuspense(<RequireEditOrders><SOEditPage /></RequireEditOrders>),
                   },
-                  { path: 'lifts', element: <LiftRegisterPage /> },
+                  { path: 'lifts', element: <LiftsRoute /> },
                   { path: 'lifts/register', element: <Navigate to={appPath('/lifts?view=completed')} replace /> },
                   { path: 'lifts/new', element: withSuspense(<LiftEntryPage />) },
                   { path: 'lifts/:liftRef/edit', element: withSuspense(<LiftEditPage />) },
-                  { path: 'contracts', element: <ContractsPage /> },
+                  { path: 'contracts', element: <ContractsRoute /> },
                   { path: 'contracts/new', element: <CreateContractPage /> },
                   { path: 'contracts/:id', element: <ContractDetailsPage /> },
                   { path: 'inventory', element: <InventoryPage /> },
@@ -187,6 +193,7 @@ const router = createBrowserRouter([
                   { path: 'analytics', element: <AnalyticsPage /> },
                   { path: 'market-news', element: <Navigate to={APP_HOME} replace /> },
                   { path: 'activity', element: <ActivityPage /> },
+                  { path: 'daybook', element: <DaybookPage /> },
                   { path: 'notifications', element: <InboxPage /> },
                   { path: 'addons', element: <FeaturesPage /> },
                   { path: 'addons/:featureKey', element: <AddOnDetailPage /> },

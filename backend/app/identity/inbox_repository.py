@@ -171,6 +171,7 @@ def _notice_items(conn, user_id: int, limit: int, organisation_id: int | None = 
             "release_notes",
             "product_update",
             "announcement",
+            "contract",
         ) or kind in WORKFLOW_NOTICE_KINDS:
             status = "open" if unread else "done"
         else:

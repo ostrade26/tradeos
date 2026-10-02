@@ -231,6 +231,18 @@ def _create_member_with_welcome(
 
     email = body.email.strip()
     name = body.name.strip() or email
+    ph = "%s" if uses_postgres() else "?"
+    org_row = conn.execute(
+        f"SELECT account_type FROM organisations WHERE id = {ph}",
+        (organisation_id,),
+    ).fetchone()
+    account_type = body.account_type
+    if org_row:
+        from ..db import row_dict
+
+        stored = str(dict(row_dict(org_row)).get("account_type") or "").strip()
+        if stored in ("wholesaler_retailer", "broker"):
+            account_type = stored
     user_id = create_organisation_member(
         conn,
         organisation_id=organisation_id,
@@ -239,7 +251,7 @@ def _create_member_with_welcome(
         password=password,
         role_slug=body.role_slug,
         phone=body.phone,
-        account_type=body.account_type,
+        account_type=account_type,
         actor_user_id=actor_user_id,
     )
     conn.commit()
@@ -540,6 +552,328 @@ def mark_my_notification_read(notification_id: int, request: Request) -> dict[st
         item = mark_notification_read(conn, notification_id, session.user.id)
         conn.commit()
         return {"notification": item}
+
+
+class BrokerContractShareBody(BaseModel):
+    buyer_org_code: str = ""
+    seller_org_code: str = ""
+    buyer_external_name: str = ""
+    buyer_external_email: str = ""
+    buyer_external_phone: str = ""
+    seller_external_name: str = ""
+    seller_external_email: str = ""
+    seller_external_phone: str = ""
+    contract_ref: str = ""
+    note: str = ""
+    filename: str = ""
+    pdf_data: str = ""
+    item_name: str = ""
+    quantity: str = ""
+    rate: str = ""
+    brokerage: str = ""
+    delivery_period: str = ""
+    payment_terms: str = ""
+
+
+class BookBrokerContractBody(BaseModel):
+    order_ref: str = ""
+
+
+class ReportLiftTankerBody(BaseModel):
+    tanker_no: str = ""
+    transport_name: str = ""
+    driver_mobile: str = ""
+    lr_no: str = ""
+    qty_mt: float = 0
+    sales_invoice_no: str = ""
+    po_invoice_no: str = ""
+
+
+class ReportBrokerShareLiftBody(BaseModel):
+    lift_id: str = ""
+    lift_ref: int = 0
+    order_ref: str = ""
+    qty_mt: float = 0
+    status: str = "pending"
+    event_at: str = ""
+    tankers: list[ReportLiftTankerBody] = []
+
+
+class CreateBrokerRecordedLiftBody(BaseModel):
+    party_role: str = ""
+    qty_mt: float = 0
+    status: str = "pending"
+    event_at: str = ""
+    tanker_no: str = ""
+    transport_name: str = ""
+    driver_mobile: str = ""
+    lr_no: str = ""
+
+
+def _require_broker(session: auth.Session) -> int:
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    if session.user.account_type != "broker":
+        raise HTTPException(status_code=403, detail="Broker account required")
+    return int(org_id)
+
+
+@router.get("/contract-shares", summary="Contracts sent to this organisation")
+def list_received_contract_shares(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .broker_shares_repository import list_shares_for_organisation
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"shares": list_shares_for_organisation(conn, int(org_id))}
+    with _sqlite_connect() as conn:
+        return {"shares": list_shares_for_organisation(conn, int(org_id))}
+
+
+@router.get("/broker/organisations", summary="Look up a buyer or seller by organisation code")
+def lookup_broker_organisation(request: Request, code: str = "") -> dict[str, Any]:
+    session = _session(request)
+    _require_broker(session)
+    from .broker_shares_repository import lookup_organisation_by_code
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"organisation": lookup_organisation_by_code(conn, code)}
+    with _sqlite_connect() as conn:
+        return {"organisation": lookup_organisation_by_code(conn, code)}
+
+
+@router.get("/broker/shares", summary="Contracts this broker firm has sent")
+def list_broker_contract_shares(request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import list_shares_for_broker
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"shares": list_shares_for_broker(conn, org_id)}
+    with _sqlite_connect() as conn:
+        return {"shares": list_shares_for_broker(conn, org_id)}
+
+
+@router.post("/broker/shares", summary="Send a contract PDF to the buyer and the seller")
+def create_broker_contract_share(body: BrokerContractShareBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import share_contract
+
+    kwargs = dict(
+        sender_organisation_id=org_id,
+        sender_user_id=int(session.user.id),
+        sender_org_name=session.user.organisation_name or "",
+        buyer_org_code=body.buyer_org_code,
+        seller_org_code=body.seller_org_code,
+        buyer_external_name=body.buyer_external_name,
+        buyer_external_email=body.buyer_external_email,
+        buyer_external_phone=body.buyer_external_phone,
+        seller_external_name=body.seller_external_name,
+        seller_external_email=body.seller_external_email,
+        seller_external_phone=body.seller_external_phone,
+        contract_ref=body.contract_ref,
+        note=body.note,
+        filename=body.filename,
+        pdf_data_url=body.pdf_data,
+        item_name=body.item_name,
+        quantity=body.quantity,
+        rate=body.rate,
+        brokerage=body.brokerage,
+        delivery_period=body.delivery_period,
+        payment_terms=body.payment_terms,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return share_contract(conn, **kwargs)
+    with _sqlite_connect() as conn:
+        return share_contract(conn, **kwargs)
+
+
+@router.patch("/broker/shares/{share_id}", summary="Update a contract this broker sent")
+def update_broker_contract_share(share_id: int, body: BrokerContractShareBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import update_share
+
+    kwargs = dict(
+        share_id=share_id,
+        sender_organisation_id=org_id,
+        sender_user_id=int(session.user.id),
+        sender_org_name=session.user.organisation_name or "",
+        buyer_org_code=body.buyer_org_code,
+        seller_org_code=body.seller_org_code,
+        note=body.note,
+        item_name=body.item_name,
+        quantity=body.quantity,
+        rate=body.rate,
+        brokerage=body.brokerage,
+        delivery_period=body.delivery_period,
+        payment_terms=body.payment_terms,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": update_share(conn, **kwargs)}
+    with _sqlite_connect() as conn:
+        return {"share": update_share(conn, **kwargs)}
+
+
+@router.delete("/broker/shares/{share_id}", summary="Delete a contract this broker sent")
+def delete_broker_contract_share(share_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import delete_share
+
+    kwargs = dict(
+        share_id=share_id,
+        sender_organisation_id=org_id,
+        sender_user_id=int(session.user.id),
+        sender_org_name=session.user.organisation_name or "",
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": delete_share(conn, **kwargs)}
+    with _sqlite_connect() as conn:
+        return {"share": delete_share(conn, **kwargs)}
+
+
+@router.post("/broker/lift-events/{event_id}/read", summary="Mark a broker lift as read")
+def read_broker_lift_event(event_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import mark_broker_lift_read
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return mark_broker_lift_read(conn, event_id, org_id)
+    with _sqlite_connect() as conn:
+        return mark_broker_lift_read(conn, event_id, org_id)
+
+
+@router.post("/broker/shares/{share_id}/lifts", summary="Record a lift on a broker contract")
+def create_broker_recorded_lift(share_id: int, body: CreateBrokerRecordedLiftBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import create_broker_recorded_lift as create_lift
+
+    tankers: list[dict[str, str | float]] = []
+    if body.tanker_no.strip() or body.transport_name.strip() or body.lr_no.strip():
+        tankers.append({
+            "tanker_no": body.tanker_no.strip(),
+            "transport_name": body.transport_name.strip(),
+            "driver_mobile": body.driver_mobile.strip(),
+            "lr_no": body.lr_no.strip(),
+            "qty_mt": body.qty_mt,
+            "sales_invoice_no": "",
+            "po_invoice_no": "",
+        })
+    kwargs = dict(
+        share_id=share_id,
+        sender_organisation_id=org_id,
+        actor_user_id=int(session.user.id),
+        party_role=body.party_role,
+        qty_mt=body.qty_mt,
+        status=body.status,
+        event_at=body.event_at,
+        tankers=tankers,
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": create_lift(conn, **kwargs)}
+    with _sqlite_connect() as conn:
+        return {"share": create_lift(conn, **kwargs)}
+
+
+@router.post("/broker/lift-events/{event_id}/complete", summary="Mark a broker lift complete")
+def complete_broker_lift_event(event_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = _require_broker(session)
+    from .broker_shares_repository import complete_broker_lift
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return complete_broker_lift(conn, event_id, org_id)
+    with _sqlite_connect() as conn:
+        return complete_broker_lift(conn, event_id, org_id)
+
+
+@router.get("/broker/shares/{share_id}", summary="A contract shared with this organisation")
+def read_broker_contract_share(share_id: int, request: Request, file: bool = False) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .broker_shares_repository import get_share
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": get_share(conn, share_id, int(org_id), include_pdf=file)}
+    with _sqlite_connect() as conn:
+        return {"share": get_share(conn, share_id, int(org_id), include_pdf=file)}
+
+
+@router.post("/broker/shares/{share_id}/confirm", summary="Buyer or seller confirms a broker contract")
+def confirm_broker_contract_share(share_id: int, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .broker_shares_repository import confirm_share
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": confirm_share(conn, share_id, int(org_id), int(session.user.id))}
+    with _sqlite_connect() as conn:
+        return {"share": confirm_share(conn, share_id, int(org_id), int(session.user.id))}
+
+
+@router.post("/broker/shares/{share_id}/book", summary="Record this organisation's order for a broker contract")
+def book_broker_contract_share(share_id: int, body: BookBrokerContractBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    from .broker_shares_repository import book_share
+
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return {"share": book_share(conn, share_id, int(org_id), body.order_ref)}
+    with _sqlite_connect() as conn:
+        return {"share": book_share(conn, share_id, int(org_id), body.order_ref)}
+
+
+@router.post("/contract-shares/report-lift", summary="Report a lift against a booked broker contract order")
+def report_contract_share_lift(body: ReportBrokerShareLiftBody, request: Request) -> dict[str, Any]:
+    session = _session(request)
+    org_id = session.user.organisation_id
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Organisation context required")
+    if session.user.account_type == "broker":
+        raise HTTPException(status_code=403, detail="Buyer or seller organisation required")
+    from .broker_shares_repository import report_share_lift
+
+    kwargs = dict(
+        organisation_id=int(org_id),
+        actor_user_id=int(session.user.id),
+        lift_id=body.lift_id,
+        lift_ref=body.lift_ref,
+        order_ref=body.order_ref,
+        qty_mt=body.qty_mt,
+        status=body.status,
+        event_at=body.event_at,
+        tankers=[tanker.model_dump() for tanker in body.tankers],
+    )
+    if uses_postgres():
+        with _pg_connect() as conn:
+            return report_share_lift(conn, **kwargs)
+    with _sqlite_connect() as conn:
+        return report_share_lift(conn, **kwargs)
 
 
 @router.post("/notifications/{notification_id}/apply", summary="Apply a product update from a notice")

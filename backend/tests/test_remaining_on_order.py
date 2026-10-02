@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.trade.helpers import refs_match  # noqa: E402
-from app.trade.lift_logic import remaining_on_order, remaining_on_po_for_dispatch  # noqa: E402
+from app.trade.lift_logic import (  # noqa: E402
+    get_outstanding_balance,
+    remaining_on_order,
+    remaining_on_po_for_dispatch,
+)
 from app.trade.loader import (  # noqa: E402
     apply_lift_totals,
     get_remaining_sell_qty,
@@ -259,6 +263,21 @@ class RemainingOnOrderTests(unittest.TestCase):
         so["buyBacks"] = [{"qtyMt": 15}]
         lifts = [_lift(lift_id="L1", po_ref="1", so_ref="24", qty=10)]
         self.assertEqual(remaining_on_order(so, lifts), 75.0)
+
+    def test_outstanding_balance_with_mixed_stock_and_so_allocations(self) -> None:
+        """Closing an SO must not KeyError when the same lift has own-stock rows without soRef."""
+        lift = {
+            "id": "L1",
+            "poRef": "PO1",
+            "liftedQty": 50,
+            "status": "delivered",
+            "balanceQtyMt": 5,
+            "allocations": [
+                {"poRef": "PO1", "qtyMt": 30},
+                {"poRef": "PO1", "soRef": "SO2", "qtyMt": 20},
+            ],
+        }
+        self.assertEqual(get_outstanding_balance([lift], "PO1", "SO2", []), 2.0)
 
 
 if __name__ == "__main__":

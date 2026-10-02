@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   ClipboardCheck,
   DatabaseBackup,
+  FileText,
   KeyRound,
   Megaphone,
   MessageSquare,
@@ -17,7 +18,7 @@ import { formatDateTime } from './utils'
 import type { UserNotification } from '../api/platformApi'
 import type { UnifiedInboxItem } from './unifiedInbox'
 
-export type InboxIconTone = 'success' | 'danger' | 'warning' | 'accent' | 'violet' | 'orange' | 'teal' | 'muted'
+export type InboxIconTone = 'success' | 'danger' | 'warning' | 'accent' | 'violet' | 'orange' | 'teal' | 'indigo' | 'muted'
 
 export const notificationKindIcon: Record<string, LucideIcon> = {
   seat_request: UserPlus,
@@ -28,6 +29,7 @@ export const notificationKindIcon: Record<string, LucideIcon> = {
   release_notes: platformReleaseIcon,
   maintenance: Wrench,
   announcement: Megaphone,
+  contract: FileText,
   backup_reminder: DatabaseBackup,
   product_request: MessageSquare,
   deploy_review: ClipboardCheck,
@@ -43,6 +45,7 @@ export function notificationKindLabel(kind: string): string {
   if (kind === 'release_notes') return 'Product update'
   if (kind === 'maintenance') return 'Maintenance'
   if (kind === 'announcement') return 'Announcement'
+  if (kind === 'contract') return 'Contract'
   if (kind === 'backup_reminder') return 'Backup'
   if (kind === 'deploy_review') return 'Deploy'
   if (kind === 'product_request') return 'Tradeal reply'
@@ -145,7 +148,45 @@ export function isProductUpdateNotice(item: UserNotification): boolean {
   return cta === 'update' || (!cta && (item.kind === 'product_update' || item.kind === 'feature_launch'))
 }
 
+export function isContractNotice(item: {
+  kind?: string
+  payload?: UserNotification['payload']
+  notice?: { kind?: string; payload?: UserNotification['payload'] } | null
+  send?: { kind?: string; payload?: unknown } | null
+}): boolean {
+  const kind = item.notice?.kind || item.send?.kind || item.kind
+  const payload = item.notice?.payload
+    ?? item.payload
+    ?? (item.send?.payload as UserNotification['payload'] | undefined)
+  if (kind === 'contract') return true
+  if (payload?.cta === 'contract_share') return true
+  return payload?.source === 'broker' && Boolean(payload.share_id)
+}
+
+export function inboxItemKindLabel(item: {
+  kind: string
+  notice?: { kind?: string; payload?: UserNotification['payload'] } | null
+  send?: { kind?: string; payload?: unknown } | null
+}): string {
+  if (isContractNotice(item)) return 'Contract'
+  if (item.kind === 'feature_interest') return 'Feature interest'
+  return notificationKindLabel(item.kind)
+}
+
+/** Type label shown in the inbox table and the Type filter. */
+export function inboxTypeLabel(item: {
+  kind: string
+  category?: string
+  productRequest?: unknown
+  send?: { kind?: string; payload?: unknown } | null
+  notice?: { kind?: string; payload?: UserNotification['payload'] } | null
+}): string {
+  if (item.category === 'sent' && item.productRequest && !item.send) return 'Request'
+  return inboxItemKindLabel(item)
+}
+
 export function notificationIcon(kind: string, payload?: UserNotification['payload']): LucideIcon {
+  if (isContractNotice({ kind, payload })) return FileText
   if (payload?.cta === 'review_interest') return platformAccessIcon
   if (kind === 'seat_request') {
     const decision = String(payload?.decision || payload?.status || '').toLowerCase()
@@ -189,6 +230,7 @@ export function inboxItemVisual(item: Pick<UnifiedInboxItem, 'kind' | 'notice' |
   if (item.kind === 'product_update' || item.kind === 'release_notes') {
     return { Icon: notificationIcon(item.kind, payload), tone: 'orange' }
   }
+  if (isContractNotice(item)) return { Icon: FileText, tone: 'indigo' }
   if (item.kind === 'announcement') {
     return { Icon: Megaphone, tone: 'teal' }
   }
@@ -223,6 +265,8 @@ export function inboxIconToneClass(tone: InboxIconTone): string {
       return 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
     case 'teal':
       return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
+    case 'indigo':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
     case 'muted':
     default:
       return 'bg-gray-100 text-muted dark:bg-zinc-800'

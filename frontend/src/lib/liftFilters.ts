@@ -23,6 +23,7 @@ export interface LiftFilterState {
   brokers: string[]
   spots: string[]
   rates: string[]
+  contracts: string[]
   selfLiftOnly: boolean
 }
 
@@ -36,6 +37,7 @@ export const emptyLiftFilters: LiftFilterState = {
   brokers: [],
   spots: [],
   rates: [],
+  contracts: [],
   selfLiftOnly: false,
 }
 
@@ -51,6 +53,7 @@ export function hasActiveLiftFilters(filters: LiftFilterState, search = '') {
     || filters.brokers.length
     || filters.spots.length
     || filters.rates.length
+    || filters.contracts.length
     || filters.selfLiftOnly,
   )
 }
@@ -166,6 +169,7 @@ export function getLiftFilterChips(filters: LiftFilterState, search: string): Ap
   for (const broker of filters.brokers) chips.push({ id: `brokers:${broker}`, prefix: 'Broker', value: broker })
   for (const spot of filters.spots) chips.push({ id: `spots:${spot}`, prefix: 'Spot', value: spot })
   for (const rate of filters.rates) chips.push({ id: `rates:${rate}`, prefix: 'Rate', value: rate })
+  for (const contract of filters.contracts) chips.push({ id: `contracts:${contract}`, prefix: 'Contract', value: contract })
   if (filters.selfLiftOnly) chips.push({ id: 'selfLift', prefix: 'Lift type', value: 'Self lift' })
   if (search.trim()) chips.push({ id: 'search', prefix: 'Search', value: search.trim() })
   return chips
@@ -179,9 +183,9 @@ export function clearLiftFilterField(
   if (id === 'deliveryPeriod') return { ...filters, deliveryPeriodFrom: '', deliveryPeriodTo: '' }
   if (id === 'selfLift') return { ...filters, selfLiftOnly: false }
 
-  const multiMatch = id.match(/^(items|parties|brokers|spots|rates):(.+)$/)
+  const multiMatch = id.match(/^(items|parties|brokers|spots|rates|contracts):(.+)$/)
   if (multiMatch) {
-    const field = multiMatch[1] as keyof Pick<LiftFilterState, 'items' | 'parties' | 'brokers' | 'spots' | 'rates'>
+    const field = multiMatch[1] as keyof Pick<LiftFilterState, 'items' | 'parties' | 'brokers' | 'spots' | 'rates' | 'contracts'>
     const value = multiMatch[2]
     return { ...filters, [field]: filters[field].filter(v => v !== value) }
   }

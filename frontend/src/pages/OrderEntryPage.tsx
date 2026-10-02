@@ -174,7 +174,14 @@ interface OrderEntryPageProps {
     broker?: string
     party?: string
     item?: string
+    contractRef?: string
+    payment?: string
+    remarks?: string
+    deliveryType?: string
+    deliveryFrom?: string
+    deliveryTo?: string
   }
+  contractShareId?: string
   sellFromLot?: {
     lotId: string
     lotNumber: string
@@ -183,7 +190,7 @@ interface OrderEntryPageProps {
   }
 }
 
-export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLot }: OrderEntryPageProps) {
+export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLot, contractShareId }: OrderEntryPageProps) {
   const navigate = useNavigate()
   const store = useTradeStore()
   const toast = useToast()
@@ -410,6 +417,14 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       ...(prefill.rate ? { rate: prefill.rate } : {}),
       ...(prefill.broker ? { brokerName: prefill.broker } : {}),
       ...(prefill.item ? { itemName: prefill.item } : {}),
+      ...(prefill.contractRef ? { brokerContractRef: prefill.contractRef } : {}),
+      ...(prefill.payment ? { paymentTerms: prefill.payment } : {}),
+      ...(prefill.remarks && !contractShareId ? { remarks: prefill.remarks } : { remarks: '' }),
+      ...(prefill.deliveryType === 'ready' || prefill.deliveryType === 'period'
+        ? { deliveryType: prefill.deliveryType }
+        : {}),
+      ...(prefill.deliveryFrom ? { deliveryPeriodStart: prefill.deliveryFrom } : {}),
+      ...(prefill.deliveryTo ? { deliveryPeriodEnd: prefill.deliveryTo } : {}),
       ...(matched
         ? isPO
           ? {
@@ -431,7 +446,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
           : {}),
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, prefill?.qty, prefill?.rate, prefill?.buyer, prefill?.broker, prefill?.party, prefill?.item])
+  }, [isEdit, contractShareId, prefill?.qty, prefill?.rate, prefill?.buyer, prefill?.broker, prefill?.party, prefill?.item, prefill?.contractRef, prefill?.payment, prefill?.remarks, prefill?.deliveryType, prefill?.deliveryFrom, prefill?.deliveryTo])
 
   const selectedPO = useMemo(
     () => findTradeOrder(store.tradeOrders, 'purchase', form.poRef),
@@ -599,7 +614,23 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
       if (isEdit && editingOrder) {
         saved = await store.updateOrder(editingOrder.id, payload)
       } else {
+        if (contractShareId) {
+          const { organisationApi } = await import('../api/organisationApi')
+          const existing = await organisationApi.getBrokerShare(Number(contractShareId))
+          if (!existing.share.buyer_confirmed || !existing.share.seller_confirmed) {
+            toast.error('Both parties must confirm the contract before you can create this order.')
+            return
+          }
+        }
         saved = await store.addOrder(payload)
+        if (contractShareId) {
+          const { organisationApi } = await import('../api/organisationApi')
+          try {
+            await organisationApi.bookBrokerShare(Number(contractShareId), saved.ref)
+          } catch {
+            toast.error('Order saved. The broker contract was not marked as booked.')
+          }
+        }
       }
       const remaining = toBeLifted(saved)
       const lotHref = lotPageHref(saved)
@@ -789,6 +820,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
         editingOrder={editingOrder}
         sellFromLot={sellFromLot}
         saveLoading={saving}
+        contractLocked={Boolean(contractShareId)}
       />
       {createdModal}
       {unsavedDialog}
@@ -851,6 +883,7 @@ export function OrderEntryPage({ side, linkedPoRef, editRef, prefill, sellFromLo
             spots={store.spots}
             brokers={store.brokers}
             isEdit={isEdit}
+            contractLocked={Boolean(contractShareId)}
             fieldErrors={fieldErrors}
             onFieldEdit={clearFieldError}
           />
@@ -935,6 +968,7 @@ function SOEntryForm({
   editingOrder,
   sellFromLot,
   saveLoading = false,
+  contractLocked = false,
 }: {
   store: ReturnType<typeof useTradeStore>
   form: FormApi
@@ -960,6 +994,7 @@ function SOEntryForm({
   editingOrder?: TradeOrder
   sellFromLot?: OrderEntryPageProps['sellFromLot']
   saveLoading?: boolean
+  contractLocked?: boolean
 }) {
   const [poLinkItem, setPoLinkItem] = useState('')
   const [poLinkSeller, setPoLinkSeller] = useState('')
@@ -1209,6 +1244,7 @@ function SOEntryForm({
             spots={store.spots}
             brokers={store.brokers}
             isEdit={isEdit}
+            contractLocked={contractLocked}
             poFieldsLocked={!!selectedPO}
             fieldErrors={fieldErrors}
             onFieldEdit={onFieldEdit}
@@ -1314,6 +1350,7 @@ function OrderFormFields({
   maxQty,
   maxQtyMessage,
   poFieldsLocked = false,
+  contractLocked = false,
 }: {
   isPO: boolean
   shortLabel: string
@@ -1324,6 +1361,7 @@ function OrderFormFields({
   brokers: { name: string }[]
   isEdit?: boolean
   poFieldsLocked?: boolean
+  contractLocked?: boolean
   fieldErrors?: OrderFieldErrors
   onFieldEdit?: (key: keyof OrderFieldErrors) => void
   maxQty?: number
@@ -1393,6 +1431,12 @@ function OrderFormFields({
           </FormFieldGroup>
 
           <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
+            {contractLocked ? (
+              <>
+                <Input label="Seller" value={isPO ? form.partyName : form.sellerName} readOnly />
+                <Input label="Buyer" value={isPO ? form.buyerName : form.partyName} readOnly />
+              </>
+            ) : (
             <SearchableSelect
               label={`${isPO ? 'Seller' : 'Buyer'} Name`}
               placeholder={isPO ? 'Select seller...' : 'Select buyer...'}
@@ -1413,6 +1457,7 @@ function OrderFormFields({
                 applyPartySelection(form, isPO, id, label)
               }}
             />
+            )}
             <SearchableSelect
               label="Item / Material"
               placeholder="Select item..."
@@ -1529,10 +1574,11 @@ function OrderFormFields({
 
           <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
             <div>
-              <Select
-                searchable={false}
-                label="Delivery Type"
-                options={[
+            <Select
+              searchable={false}
+              label="Delivery Type"
+              disabled={contractLocked}
+              options={[
                   { value: 'period', label: 'Period' },
                   { value: 'ready', label: 'Ready' },
                 ]}
@@ -1549,6 +1595,7 @@ function OrderFormFields({
               <DatePicker
                 label="Delivery Start"
                 value={form.deliveryPeriodStart}
+                disabled={contractLocked}
                 error={fieldErrors.deliveryPeriodStart}
                 onChange={start => {
                   onFieldEdit?.('deliveryPeriodStart')
@@ -1564,6 +1611,7 @@ function OrderFormFields({
                 label="Delivery End"
                 value={form.deliveryPeriodEnd}
                 min={minDeliveryEnd}
+                disabled={contractLocked}
                 error={fieldErrors.deliveryPeriodEnd}
                 onChange={end => {
                   onFieldEdit?.('deliveryPeriodEnd')
@@ -1574,6 +1622,9 @@ function OrderFormFields({
           </FormFieldGroup>
 
           <FormFieldGroup columns="grid-cols-1 sm:grid-cols-3">
+            {contractLocked ? (
+              <Input label="Broker Name" value={form.brokerName} readOnly />
+            ) : (
             <Select
               label="Broker Name"
               placeholder="Select broker..."
@@ -1600,6 +1651,7 @@ function OrderFormFields({
               }}
               emptyMessage="No brokers in directory — add one below"
             />
+            )}
             <BrokerageInput
               mode={form.brokerageType === 'percent' ? 'percent' : 'perTon'}
               value={form.brokerageType === 'percent' ? form.brokeragePct : form.brokeragePerTon}
@@ -1833,9 +1885,21 @@ export function POEntryPage() {
     party: searchParams.get('party') ?? undefined,
     item: searchParams.get('item') ?? undefined,
     broker: searchParams.get('broker') ?? undefined,
+    contractRef: searchParams.get('contract') ?? undefined,
+    payment: searchParams.get('payment') ?? undefined,
+    remarks: searchParams.get('remarks') ?? undefined,
+    deliveryType: searchParams.get('delivery') ?? undefined,
+    deliveryFrom: searchParams.get('deliveryFrom') ?? undefined,
+    deliveryTo: searchParams.get('deliveryTo') ?? undefined,
   }
   const hasPrefill = Object.values(prefill).some(Boolean)
-  return <OrderEntryPage side="purchase" prefill={hasPrefill ? prefill : undefined} />
+  return (
+    <OrderEntryPage
+      side="purchase"
+      prefill={hasPrefill ? prefill : undefined}
+      contractShareId={searchParams.get('share') ?? undefined}
+    />
+  )
 }
 
 export function POEditPage() {
@@ -1852,8 +1916,21 @@ export function SOEntryPage() {
     buyer: searchParams.get('buyer') ?? searchParams.get('party') ?? undefined,
     broker: searchParams.get('broker') ?? undefined,
     item: searchParams.get('item') ?? undefined,
+    contractRef: searchParams.get('contract') ?? undefined,
+    payment: searchParams.get('payment') ?? undefined,
+    remarks: searchParams.get('remarks') ?? undefined,
+    deliveryType: searchParams.get('delivery') ?? undefined,
+    deliveryFrom: searchParams.get('deliveryFrom') ?? undefined,
+    deliveryTo: searchParams.get('deliveryTo') ?? undefined,
   }
-  return <OrderEntryPage side="sale" linkedPoRef={poRef} prefill={prefill} />
+  return (
+    <OrderEntryPage
+      side="sale"
+      linkedPoRef={poRef}
+      prefill={prefill}
+      contractShareId={searchParams.get('share') ?? undefined}
+    />
+  )
 }
 
 export function SOEditPage() {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal } from '../ui/Drawer'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { DatePicker } from '../ui/DatePicker'
 import { Select } from '../ui/Select'
 import type {
   OrganisationPayment,
@@ -155,11 +156,10 @@ export function PlatformRecordPaymentModal({
           value={amountRupees}
           onChange={e => setAmountRupees(e.target.value)}
         />
-        <Input
-          type="date"
+        <DatePicker
           label="Payment date"
           value={paymentDate}
-          onChange={e => setPaymentDate(e.target.value)}
+          onChange={setPaymentDate}
         />
         <div className="sm:col-span-2">
           <Input

@@ -25,7 +25,9 @@ interface LiftFiltersBarProps {
   brokers: string[]
   spots: string[]
   rates: string[]
+  contracts?: string[]
   onExport: () => void
+  audience?: 'org' | 'broker'
 }
 
 export function LiftFiltersBar({
@@ -38,7 +40,9 @@ export function LiftFiltersBar({
   brokers,
   spots,
   rates,
+  contracts = [],
   onExport,
+  audience = 'org',
 }: LiftFiltersBarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
@@ -67,7 +71,7 @@ export function LiftFiltersBar({
         <div className="w-full sm:w-64">
           <Input
             icon
-            placeholder="Search lifts, PO/SO, tanker..."
+            placeholder={audience === 'broker' ? 'Search lifts, contracts, tankers...' : 'Search lifts, PO/SO, tanker...'}
             value={search}
             onChange={e => onSearchChange(e.target.value)}
           />
@@ -91,7 +95,10 @@ export function LiftFiltersBar({
         'rounded-md border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-card',
         !filtersOpen && 'hidden lg:block',
       )}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
+        <div className={cn(
+          'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3',
+          audience === 'broker' ? 'xl:grid-cols-6' : 'xl:grid-cols-7',
+        )}>
           <DateFilterPicker
             label="Created date"
             dateFrom={filters.dateFrom}
@@ -116,15 +123,27 @@ export function LiftFiltersBar({
             onChange={values => setFilter('parties', values)}
             emptyMessage="No parties in list"
           />
-          <MultiSelect
-            label="Broker"
-            placeholder="All brokers"
-            searchPlaceholder="Search brokers..."
-            options={brokers.map(broker => ({ value: broker, label: broker }))}
-            values={filters.brokers}
-            onChange={values => setFilter('brokers', values)}
-            emptyMessage="No brokers in list"
-          />
+          {audience === 'broker' ? (
+            <MultiSelect
+              label="Contract"
+              placeholder="All contracts"
+              searchPlaceholder="Search contracts..."
+              options={contracts.map(contract => ({ value: contract, label: contract }))}
+              values={filters.contracts}
+              onChange={values => setFilter('contracts', values)}
+              emptyMessage="No contracts in list"
+            />
+          ) : (
+            <MultiSelect
+              label="Broker"
+              placeholder="All brokers"
+              searchPlaceholder="Search brokers..."
+              options={brokers.map(broker => ({ value: broker, label: broker }))}
+              values={filters.brokers}
+              onChange={values => setFilter('brokers', values)}
+              emptyMessage="No brokers in list"
+            />
+          )}
           <MultiSelect
             label="Spot / location"
             placeholder="All spots"
@@ -143,17 +162,19 @@ export function LiftFiltersBar({
             onChange={values => setFilter('rates', values)}
             emptyMessage="No rates in list"
           />
-          <Select
-            label="Lift type"
-            placeholder="All lifts"
-            searchable={false}
-            options={[
-              { value: 'all', label: 'All lifts' },
-              { value: 'self', label: 'Self lift' },
-            ]}
-            value={filters.selfLiftOnly ? 'self' : 'all'}
-            onChange={e => setFilter('selfLiftOnly', e.target.value === 'self')}
-          />
+          {audience === 'org' ? (
+            <Select
+              label="Lift type"
+              placeholder="All lifts"
+              searchable={false}
+              options={[
+                { value: 'all', label: 'All lifts' },
+                { value: 'self', label: 'Self lift' },
+              ]}
+              value={filters.selfLiftOnly ? 'self' : 'all'}
+              onChange={e => setFilter('selfLiftOnly', e.target.value === 'self')}
+            />
+          ) : null}
         </div>
 
         <AppliedFilterChips chips={chips} onRemove={handleRemoveChip} onClearAll={handleClearAll} />

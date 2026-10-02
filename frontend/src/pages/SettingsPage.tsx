@@ -33,13 +33,13 @@ import {
   type SettingsSectionId,
 } from '../lib/settingsSections'
 import { APP_HOME, appPath } from '../lib/appShellMode'
+import { isBrokerAccount } from '../lib/auth'
 import {
   SettingsSectionContent,
   type SettingsSectionHandlers,
 } from '../components/settings/SettingsSectionContent'
 import { SettingsTeamPanel } from '../components/settings/SettingsTeamPanel'
 import { SettingsSubscriptionPanelContent } from '../components/settings/SettingsSubscriptionSidePanel'
-
 function ImportConfirmDetails({ data }: { data: TradeData }) {
   const preview = describeImportResult(data)
   return (
@@ -75,7 +75,8 @@ function useSettingsBilling(canViewSubscription: boolean) {
 
 /** Shared state + dialogs for all settings routes */
 export function SettingsLayout() {
-  const { isPlatformAdmin } = useAuth()
+  const { isPlatformAdmin, session } = useAuth()
+  const isBroker = isBrokerAccount(session)
   const { hasPermission, organisationSandboxTools } = usePermissions()
   const productTour = useProductTour()
   const canImport = hasPermission('organisation.edit')
@@ -199,6 +200,7 @@ export function SettingsLayout() {
       setDensity,
       canImport,
       canClearTradeData,
+      isBrokerDesk: isBroker,
       canUseDemoTools,
       canRequestSeats,
       canManageTeam,
@@ -229,6 +231,7 @@ export function SettingsLayout() {
       setDensity,
       canImport,
       canClearTradeData,
+      isBroker,
       canUseDemoTools,
       canRequestSeats,
       canManageTeam,
@@ -320,7 +323,7 @@ export function SettingsLayout() {
         onConfirm={async () => {
           try {
             await store.resetAll()
-            toast.success('All data cleared')
+            toast.success(isBroker ? 'Contracts and desk data cleared' : 'All data cleared')
           } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Could not clear data')
             throw err
@@ -332,8 +335,9 @@ export function SettingsLayout() {
         slideLabel="Slide to clear"
       >
         <p className="text-sm text-gray-600 dark:text-muted">
-          This removes all orders, lifts, inventory, and directory entries for your organisation.
-          Users, seats, and your licence are kept. This cannot be undone.
+          {isBroker
+            ? 'This removes every contract you sent, linked lift updates, and any trade directory data for your firm. Users, seats, and your licence are kept. Buyer and seller organisations may still have their own PO/SO books. This cannot be undone.'
+            : 'This removes all orders, lifts, inventory, directory entries, and broker contracts linked to your organisation. Users, seats, and your licence are kept. This cannot be undone.'}
         </p>
       </ConfirmDialog>
     </>

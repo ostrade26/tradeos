@@ -120,11 +120,9 @@ export function primaryTankerNo(lift: Pick<Lift, 'tankers' | 'tankerNo'>): strin
 }
 
 export function formatLiftTankerSummary(lift: Pick<Lift, 'tankers' | 'tankerNo'>): string {
-  const tankers = getLiftTankers(lift).filter(t => t.tankerNo.trim())
+  const tankers = getLiftTankers(lift).map(tanker => formatTankerNo(tanker.tankerNo)).filter(Boolean)
   if (tankers.length === 0) return '—'
-  const first = formatTankerNo(tankers[0].tankerNo)
-  if (tankers.length === 1) return first
-  return `${first} +${tankers.length - 1}`
+  return tankers.join(', ')
 }
 
 export function normalizeLiftTankers(tankers: LiftTanker[]): LiftTanker[] {

@@ -119,7 +119,7 @@ export function CommandPalette({ open, onClose, items }: CommandPaletteProps) {
 }
 
 export function PageHeader({ title, subtitle, breadcrumb, actions, hideActionsOnMobile, actionsAlign = 'start' }: {
-  title: string
+  title: ReactNode
   subtitle?: ReactNode
   breadcrumb?: ReactNode
   actions?: ReactNode
