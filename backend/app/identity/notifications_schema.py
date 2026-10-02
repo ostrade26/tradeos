@@ -5,6 +5,32 @@ from __future__ import annotations
 from ..db import _pg_connect, _sqlite_connect, uses_postgres
 
 
+def _add_column(conn, table: str, name: str, ddl: str) -> bool:
+    """Add a column. Returns True when the column was newly created.
+
+    Postgres stays in a failed transaction after a duplicate-column error even if
+    Python catches it. Use IF NOT EXISTS so startup migrations do not abort the
+    connection and crash-loop the API against Railway Postgres.
+    """
+    if uses_postgres():
+        existed = conn.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s
+            """,
+            (table, name),
+        ).fetchone()
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {ddl}")
+        return existed is None
+
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    names = {str(r[1]) for r in rows}
+    if name in names:
+        return False
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+    return True
+
+
 def init_notifications_schema() -> None:
     if uses_postgres():
         with _pg_connect() as conn:
@@ -41,19 +67,8 @@ def _create_tables(conn) -> None:
             ON user_notifications(recipient_user_id, created_at DESC)
         """
     )
-    if uses_postgres():
-        conn.execute(
-            "ALTER TABLE user_notifications ADD COLUMN IF NOT EXISTS applied_at TEXT"
-        )
-        conn.execute(
-            "ALTER TABLE user_notifications ADD COLUMN IF NOT EXISTS feature_key TEXT NOT NULL DEFAULT ''"
-        )
-    else:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(user_notifications)").fetchall()}
-        if "applied_at" not in cols:
-            conn.execute("ALTER TABLE user_notifications ADD COLUMN applied_at TEXT")
-        if "feature_key" not in cols:
-            conn.execute("ALTER TABLE user_notifications ADD COLUMN feature_key TEXT NOT NULL DEFAULT ''")
+    _add_column(conn, "user_notifications", "applied_at", "TEXT")
+    _add_column(conn, "user_notifications", "feature_key", "TEXT NOT NULL DEFAULT ''")
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS user_applied_updates (
@@ -133,13 +148,7 @@ def _create_tables(conn) -> None:
         ("deleted_at", "TEXT NOT NULL DEFAULT ''"),
         ("edited_at", "TEXT NOT NULL DEFAULT ''"),
     ):
-        try:
-            conn.execute(f"ALTER TABLE broker_contract_shares ADD COLUMN {name} {ddl}")
-        except Exception as exc:
-            message = str(exc).lower()
-            if "duplicate" in message or "already exists" in message:
-                continue
-            raise
+        _add_column(conn, "broker_contract_shares", name, ddl)
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS broker_contract_share_lift_events (
@@ -159,30 +168,9 @@ def _create_tables(conn) -> None:
         )
         """
     )
-    try:
-        conn.execute(
-            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN delivered_at TEXT NOT NULL DEFAULT ''"
-        )
-    except Exception as exc:
-        message = str(exc).lower()
-        if "duplicate" not in message and "already exists" not in message:
-            raise
-    try:
-        conn.execute(
-            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN tankers_json TEXT NOT NULL DEFAULT '[]'"
-        )
-    except Exception as exc:
-        message = str(exc).lower()
-        if "duplicate" not in message and "already exists" not in message:
-            raise
-    try:
-        conn.execute(
-            "ALTER TABLE broker_contract_share_lift_events ADD COLUMN broker_lift_ref INTEGER NOT NULL DEFAULT 0"
-        )
-    except Exception as exc:
-        message = str(exc).lower()
-        if "duplicate" not in message and "already exists" not in message:
-            raise
+    _add_column(conn, "broker_contract_share_lift_events", "delivered_at", "TEXT NOT NULL DEFAULT ''")
+    _add_column(conn, "broker_contract_share_lift_events", "tankers_json", "TEXT NOT NULL DEFAULT '[]'")
+    _add_column(conn, "broker_contract_share_lift_events", "broker_lift_ref", "INTEGER NOT NULL DEFAULT 0")
     from datetime import datetime, timezone
 
     seen_at = datetime.now(timezone.utc).isoformat()
@@ -192,16 +180,8 @@ def _create_tables(conn) -> None:
         ("broker_completed_at", "TEXT NOT NULL DEFAULT ''", False),
         ("tanker_changes_json", "TEXT NOT NULL DEFAULT '[]'", False),
     ):
-        try:
-            conn.execute(
-                f"ALTER TABLE broker_contract_share_lift_events ADD COLUMN {name} {ddl}"
-            )
-        except Exception as exc:
-            message = str(exc).lower()
-            if "duplicate" in message or "already exists" in message:
-                continue
-            raise
-        if mark_seen:
+        created = _add_column(conn, "broker_contract_share_lift_events", name, ddl)
+        if created and mark_seen:
             conn.execute(
                 f"UPDATE broker_contract_share_lift_events SET broker_read_at = {ph} WHERE broker_read_at = ''",
                 (seen_at,),
@@ -229,22 +209,18 @@ def _migrate_broker_share_external_parties(conn) -> None:
         ("buyer_email_sent_at", "TEXT NOT NULL DEFAULT ''"),
         ("seller_email_sent_at", "TEXT NOT NULL DEFAULT ''"),
     ):
-        try:
-            conn.execute(f"ALTER TABLE broker_contract_shares ADD COLUMN {name} {ddl}")
-        except Exception as exc:
-            message = str(exc).lower()
-            if "duplicate" in message or "already exists" in message:
-                continue
-            raise
+        _add_column(conn, "broker_contract_shares", name, ddl)
 
     if uses_postgres():
         for col in ("buyer_organisation_id", "seller_organisation_id"):
             try:
+                conn.execute("SAVEPOINT drop_not_null")
                 conn.execute(
                     f"ALTER TABLE broker_contract_shares ALTER COLUMN {col} DROP NOT NULL"
                 )
+                conn.execute("RELEASE SAVEPOINT drop_not_null")
             except Exception:
-                pass
+                conn.execute("ROLLBACK TO SAVEPOINT drop_not_null")
         return
 
     rows = conn.execute("PRAGMA table_info(broker_contract_shares)").fetchall()
